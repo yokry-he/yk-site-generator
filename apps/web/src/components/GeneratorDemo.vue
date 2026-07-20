@@ -15,6 +15,7 @@ import {
   Info,
   Wand2,
   FileArchive,
+  History,
   Square,
   MonitorSmartphone,
   Smartphone,
@@ -29,12 +30,22 @@ import AppSelect from './AppSelect.vue'
 import SectionHeading from './SectionHeading.vue'
 import MockSite from './MockSite.vue'
 import TemplateGen from './TemplateGen.vue'
+import HistoryPanel from './HistoryPanel.vue'
 import { SITE_TYPES, TYPE_GROUPS, typeById } from '../data/siteTypes'
 import { useModelConfig } from '../composables/useModelConfig'
 import { useModelDialog } from '../composables/useModelDialog'
 import { useToast } from '../composables/useToast'
 import { useGenerateStream, GENERATE_STAGES } from '../composables/useGenerateStream'
 import { extractPartialHtml } from '../lib/generate'
+import {
+  isQuotaError,
+  newSessionId,
+  recordToSession,
+  sessionToRecord,
+  titleFromRequirement,
+  upsertSession,
+  type StoredSession,
+} from '../lib/historyStore'
 import {
   addRound,
   backToRound,
@@ -142,7 +153,10 @@ function startDemo() {
 
 /* ============ 真实生成(SSE) ============ */
 const phase = computed<'idle' | 'generating' | 'done' | 'error'>(() => {
-  if (isDemo.value) return demoPhase.value
+  if (isDemo.value) {
+    // 演示模式下从历史恢复的会话也可查看产物
+    return session.value.rounds.length > 0 ? 'done' : demoPhase.value
+  }
   switch (stream.phase.value) {
     case 'connecting':
     case 'streaming':
@@ -153,7 +167,8 @@ const phase = computed<'idle' | 'generating' | 'done' | 'error'>(() => {
     case 'error':
       return 'error'
     default:
-      return 'idle'
+      // 流空闲但有会话轮次(从历史恢复)→ 预览态
+      return session.value.rounds.length > 0 ? 'done' : 'idle'
   }
 })
 
@@ -197,7 +212,7 @@ const finalHtml = computed(() => {
 
 /** 预览框实际渲染内容:生成中→增量 HTML;完成→查看轮的产物(初次则刚解析的产物) */
 const previewHtml = computed(() => {
-  if (isDemo.value) return null
+  if (isDemo.value && session.value.rounds.length === 0) return null
   if (phase.value === 'generating') return partialHtml.value
   return viewing.value?.html ?? finalHtml.value ?? partialHtml.value
 })
@@ -212,11 +227,55 @@ const parseFailed = computed(
     session.value.rounds.length === 0,
 )
 
-/* ============ 迭代会话(SF-1-6) ============ */
+/* ============ 迭代会话(SF-1-6)与历史持久化(SF-1-7) ============ */
 const session = ref<IterationSession>(createSession())
 const instructionInput = ref('')
 /** 当前这次流式生成对应的指令(初生成=需求,迭代=修改意见) */
 let pendingInstruction = ''
+const historyOpen = ref(false)
+/** 当前会话的持久化标识(首轮落库时创建) */
+const currentSessionId = ref<string | null>(null)
+const sessionCreatedAt = ref<string | null>(null)
+
+/** 生成/迭代完成后自动保存(upsert 当前会话) */
+async function persistSession() {
+  if (isDemo.value || session.value.rounds.length === 0) return
+  try {
+    if (!currentSessionId.value) {
+      currentSessionId.value = newSessionId()
+      sessionCreatedAt.value = new Date().toISOString()
+    }
+    const rec = sessionToRecord(
+      {
+        id: currentSessionId.value,
+        title: titleFromRequirement(session.value.rounds[0].instruction),
+        siteType: typeId.value,
+        requirement: props.prompt,
+        provider: activeProvider.value?.id,
+        model: activeConnection.value?.model,
+        createdAt: sessionCreatedAt.value ?? new Date().toISOString(),
+      },
+      session.value,
+    )
+    await upsertSession(rec)
+  } catch (err) {
+    if (isQuotaError(err)) {
+      toast.error('存储空间不足', '历史会话未能保存:浏览器本地存储已满,请在「生成历史」中清理后重试。')
+    }
+  }
+}
+
+/** 从历史面板恢复完整会话(含全部轮次与基底轮) */
+function restoreSession(rec: StoredSession) {
+  historyOpen.value = false
+  typeId.value = rec.siteType
+  emit('update:prompt', rec.requirement)
+  session.value = recordToSession(rec)
+  currentSessionId.value = rec.id
+  sessionCreatedAt.value = rec.createdAt
+  stream.reset()
+  toast.success('已恢复会话', `「${rec.title}」共 ${rec.rounds.length} 轮,可继续迭代。`)
+}
 
 const viewing = computed(() => viewingRound(session.value))
 const base = computed(() => currentRound(session.value))
@@ -246,6 +305,7 @@ watch(
           fileCount: stream.parseSummary.value?.fileCount,
           stopped: stream.stopped.value || undefined,
         })
+        void persistSession()
       } else if (session.value.rounds.length > 0) {
         toast.error('迭代解析失败', '已保留上一版产物,可调整指令后重新发送。')
       }
@@ -301,11 +361,16 @@ function start() {
     return
   }
   if (isDemo.value) {
+    session.value = createSession()
+    currentSessionId.value = null
+    sessionCreatedAt.value = null
     startDemo()
     return
   }
   clearTimers()
   session.value = createSession() // 初次生成 = 全新会话
+  currentSessionId.value = null
+  sessionCreatedAt.value = null
   pendingInstruction = props.prompt.trim()
   const conn = activeConnection.value!
   void stream.start({
@@ -378,7 +443,7 @@ onBeforeUnmount(() => {
       />
 
       <!-- Tab 切换 -->
-      <div class="mt-10 flex justify-center">
+      <div class="mt-10 flex items-center justify-center">
         <div class="flex h-11 items-center rounded-full border border-line/10 bg-ink/[0.05] p-1">
           <button
             class="flex h-full items-center rounded-full px-5 text-sm transition-all"
@@ -397,6 +462,14 @@ onBeforeUnmount(() => {
             模板生成
           </button>
         </div>
+        <button
+          class="ml-3 flex h-11 items-center gap-1.5 rounded-full border border-line/10 bg-ink/[0.05] px-4 text-sm text-mut transition-colors hover:text-ink"
+          title="查看生成历史(本地保存)"
+          @click="historyOpen = true"
+        >
+          <History class="h-4 w-4" />
+          历史
+        </button>
       </div>
 
       <!-- ============ AI 生成 ============ -->
@@ -601,8 +674,8 @@ onBeforeUnmount(() => {
               <!-- 完成/预览态 -->
               <div v-else class="animate-fade-in flex h-full flex-col">
                 <div class="min-h-0 flex-1 p-3">
-                  <!-- 演示模式:静态 CSS mock 降级保留 -->
-                  <div v-if="isDemo" class="h-full overflow-hidden rounded-lg border border-line/15 shadow-2xl shadow-black/20">
+                  <!-- 演示模式:静态 CSS mock 降级保留(恢复的历史会话除外,直接看产物) -->
+                  <div v-if="isDemo && session.rounds.length === 0" class="h-full overflow-hidden rounded-lg border border-line/15 shadow-2xl shadow-black/20">
                     <MockSite :type="typeId" />
                   </div>
                   <!-- 真实模式:解析失败 → 原始输出 + 重试 -->
@@ -693,7 +766,8 @@ onBeforeUnmount(() => {
                   </div>
                   <p v-else class="flex items-center gap-1.5 text-xs text-emerald-500">
                     <CheckCircle2 class="h-3.5 w-3.5" />
-                    <template v-if="isDemo">{{ typeName }} · 生成完成(演示)</template>
+                    <template v-if="isDemo && session.rounds.length > 0">已恢复的历史会话(接入模型后可继续迭代)</template>
+                    <template v-else-if="isDemo">{{ typeName }} · 生成完成(演示)</template>
                     <template v-else-if="stream.stopped.value">已停止 · 渲染了已生成部分</template>
                     <template v-else-if="stream.parseSummary.value?.ok">
                       {{ typeName }} · 生成完成({{ stream.parseSummary.value.fileCount }} 个文件)
@@ -736,6 +810,9 @@ onBeforeUnmount(() => {
       <div v-show="tab === 'template'" class="mt-8">
         <TemplateGen />
       </div>
+
+      <!-- 生成历史抽屉(SF-1-7) -->
+      <HistoryPanel v-if="historyOpen" @close="historyOpen = false" @open-session="restoreSession" />
     </div>
   </section>
 </template>
