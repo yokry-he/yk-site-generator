@@ -8,7 +8,7 @@
     "build": "pnpm -r run build",
     "lint": "pnpm -r --if-present run lint",
     "typecheck": "pnpm -r --if-present run typecheck",
-    "test": "pnpm --filter server test"
+    "test": "pnpm -r --if-present run test"
   },
   "engines": {
     "node": ">=20",
