@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="SiteForge · 智能网站生成平台:一句话描述需求,AI 帮你生成完整网站——个人主页、企业官网、文档站、数据大屏等。" />
+    <title>SiteForge · 智能网站生成平台</title>
+    <script>
+      // 首帧前应用已保存的主题,避免闪烁
+      ;(function () {
+        try {
+          var saved = localStorage.getItem('siteforge.theme')
+          var valid = ['dark', 'light', 'paper', 'mint', 'sky', 'sakura']
+          document.documentElement.dataset.theme =
+            saved && valid.indexOf(saved) !== -1 ? saved : 'dark'
+        } catch (e) {
+          document.documentElement.dataset.theme = 'dark'
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
