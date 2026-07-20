@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "e2e": "tsx scripts/e2e-generate.ts",
+    "e2e:iterate": "tsx scripts/e2e-iterate.ts",
     "typecheck": "vue-tsc -b"
   },
   "dependencies": {

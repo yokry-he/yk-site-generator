@@ -35,6 +35,21 @@ import { useModelDialog } from '../composables/useModelDialog'
 import { useToast } from '../composables/useToast'
 import { useGenerateStream, GENERATE_STAGES } from '../composables/useGenerateStream'
 import { extractPartialHtml } from '../lib/generate'
+import {
+  addRound,
+  backToRound,
+  canViewNext,
+  canViewPrev,
+  createSession,
+  currentRound,
+  isLargeArtifact,
+  isViewingCurrent,
+  nextRoundNumber,
+  viewNext,
+  viewPrev,
+  viewingRound,
+  type IterationSession,
+} from '../lib/iterationSession'
 
 const props = defineProps<{ prompt: string }>()
 const emit = defineEmits<{ (e: 'update:prompt', v: string): void }>()
@@ -180,17 +195,105 @@ const finalHtml = computed(() => {
   }
 })
 
-/** 预览框实际渲染内容:完成→产物本体;生成中→增量 HTML */
-const previewHtml = computed(() => finalHtml.value ?? partialHtml.value)
+/** 预览框实际渲染内容:生成中→增量 HTML;完成→查看轮的产物(初次则刚解析的产物) */
+const previewHtml = computed(() => {
+  if (isDemo.value) return null
+  if (phase.value === 'generating') return partialHtml.value
+  return viewing.value?.html ?? finalHtml.value ?? partialHtml.value
+})
 
-/** 解析失败:有完整输出但无法解析为产物 */
+/** 解析失败(仅初次生成):有完整输出但无法解析为产物;迭代失败走 toast 并保留上一版 */
 const parseFailed = computed(
   () =>
     !isDemo.value &&
     (stream.phase.value === 'done' || stream.stopped.value) &&
     stream.text.value.length > 0 &&
-    !finalHtml.value,
+    !finalHtml.value &&
+    session.value.rounds.length === 0,
 )
+
+/* ============ 迭代会话(SF-1-6) ============ */
+const session = ref<IterationSession>(createSession())
+const instructionInput = ref('')
+/** 当前这次流式生成对应的指令(初生成=需求,迭代=修改意见) */
+let pendingInstruction = ''
+
+const viewing = computed(() => viewingRound(session.value))
+const base = computed(() => currentRound(session.value))
+const viewPrevDisabled = computed(() => !canViewPrev(session.value))
+const viewNextDisabled = computed(() => !canViewNext(session.value))
+const viewingIsBase = computed(() => isViewingCurrent(session.value))
+const baseIsLarge = computed(() => (base.value ? isLargeArtifact(base.value.html) : false))
+
+function fmtTime(iso: string): string {
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
+}
+
+/** 流结束时把产物落为一轮(解析失败:初次→原始输出 UI;迭代→toast 并保留上一版) */
+watch(
+  () => stream.phase.value,
+  (p) => {
+    if (isDemo.value) return
+    if (p === 'done' || (p === 'parsing' && stream.stopped.value)) {
+      const html = finalHtml.value
+      if (html) {
+        session.value = addRound(session.value, {
+          instruction: pendingInstruction || props.prompt,
+          html,
+          time: new Date().toISOString(),
+          model: activeConnection.value?.model ?? '',
+          fileCount: stream.parseSummary.value?.fileCount,
+          stopped: stream.stopped.value || undefined,
+        })
+      } else if (session.value.rounds.length > 0) {
+        toast.error('迭代解析失败', '已保留上一版产物,可调整指令后重新发送。')
+      }
+    }
+  },
+)
+
+function sendIteration() {
+  const instruction = instructionInput.value.trim()
+  const b = base.value
+  if (!instruction || !b || stream.isActive.value) return
+  if (isLargeArtifact(b.html)) {
+    toast.info('产物较大', '当前产物接近 maxTokens 上限,迭代输出可能被截断;建议分步修改。')
+  }
+  pendingInstruction = instruction
+  instructionInput.value = ''
+  const conn = activeConnection.value!
+  void stream.start({
+    provider: activeProvider.value!.id,
+    model: conn.model,
+    apiKey: conn.apiKey,
+    baseUrl: conn.baseUrl || undefined,
+    siteType: SITE_TYPE_MAP[typeId.value] ?? typeId.value,
+    requirement: props.prompt.trim(),
+    history: [{ instruction, artifact: b.html, round: nextRoundNumber(session.value) }],
+  })
+}
+
+/** 「基于此轮重新生成」:同指令重发(第 1 轮则按初始需求重发) */
+function regenerateFromBase() {
+  const b = base.value
+  if (!b || stream.isActive.value) return
+  if (b.round === 1) {
+    regenerate()
+    return
+  }
+  pendingInstruction = b.instruction
+  const conn = activeConnection.value!
+  void stream.start({
+    provider: activeProvider.value!.id,
+    model: conn.model,
+    apiKey: conn.apiKey,
+    baseUrl: conn.baseUrl || undefined,
+    siteType: SITE_TYPE_MAP[typeId.value] ?? typeId.value,
+    requirement: props.prompt.trim(),
+    history: [{ instruction: b.instruction, artifact: b.html, round: nextRoundNumber(session.value) }],
+  })
+}
 
 function start() {
   if (!props.prompt.trim()) {
@@ -202,6 +305,8 @@ function start() {
     return
   }
   clearTimers()
+  session.value = createSession() // 初次生成 = 全新会话
+  pendingInstruction = props.prompt.trim()
   const conn = activeConnection.value!
   void stream.start({
     provider: activeProvider.value!.id,
@@ -418,7 +523,10 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <div class="relative h-[380px] sm:h-[420px]">
+            <div
+              class="relative"
+              :class="phase === 'done' && !isDemo && session.rounds.length > 0 ? 'h-[480px] sm:h-[560px]' : 'h-[380px] sm:h-[420px]'"
+            >
               <!-- 待机态 -->
               <div v-if="phase === 'idle'" class="flex h-full flex-col items-center justify-center gap-3 text-center">
                 <div class="flex h-14 w-14 items-center justify-center rounded-2xl border border-dashed border-line/20 bg-ink/[0.03]">
@@ -525,8 +633,65 @@ onBeforeUnmount(() => {
                     <p class="text-xs text-faint">等待 HTML 内容……</p>
                   </div>
                 </div>
-                <div class="flex items-center justify-between gap-3 border-t border-line/10 bg-app/50 px-4 py-3">
-                  <p class="flex items-center gap-1.5 text-xs text-emerald-500">
+                <!-- 迭代面板:修改意见输入 + 轮次信息(真实模式且已有轮次) -->
+                <div v-if="!isDemo && session.rounds.length > 0" class="border-t border-line/10 bg-app/60 px-4 py-2.5">
+                  <div class="flex items-center gap-2">
+                    <input
+                      v-model="instructionInput"
+                      type="text"
+                      placeholder="修改意见,如:把配色改成暖色系,首页加一个 FAQ 区块"
+                      class="min-w-0 flex-1 rounded-lg border border-line/12 bg-app/80 px-3 py-2 text-xs text-ink outline-none placeholder:text-faint focus:border-brand1/50"
+                      @keyup.enter="sendIteration"
+                    />
+                    <button
+                      :disabled="!instructionInput.trim() || stream.isActive.value"
+                      class="bg-brand-gradient flex shrink-0 items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                      @click="sendIteration"
+                    >
+                      <Wand2 class="h-3.5 w-3.5" />
+                      发送
+                    </button>
+                  </div>
+                  <p v-if="baseIsLarge" class="mt-1.5 flex items-center gap-1 text-[10px] text-amber-600">
+                    <AlertTriangle class="h-3 w-3" />
+                    当前产物较大,迭代输出可能接近 maxTokens 上限被截断,建议分步修改
+                  </p>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-3 border-t border-line/10 bg-app/50 px-4 py-3">
+                  <!-- 轮次导航与信息 -->
+                  <div v-if="!isDemo && viewing" class="flex flex-wrap items-center gap-2 text-xs text-mut">
+                    <div class="flex items-center gap-1">
+                      <button
+                        :disabled="viewPrevDisabled"
+                        class="rounded-md border border-line/12 px-1.5 py-1 text-faint transition-colors hover:bg-ink/5 hover:text-ink disabled:opacity-40"
+                        title="上一轮"
+                        @click="session = viewPrev(session)"
+                      >
+                        ◀
+                      </button>
+                      <span class="px-1 font-medium text-ink">第 {{ viewing.round }}/{{ session.rounds.length }} 轮</span>
+                      <button
+                        :disabled="viewNextDisabled"
+                        class="rounded-md border border-line/12 px-1.5 py-1 text-faint transition-colors hover:bg-ink/5 hover:text-ink disabled:opacity-40"
+                        title="下一轮"
+                        @click="session = viewNext(session)"
+                      >
+                        ▶
+                      </button>
+                    </div>
+                    <span class="max-w-56 truncate" :title="viewing.instruction">「{{ viewing.instruction }}」</span>
+                    <span class="text-faint">{{ fmtTime(viewing.time) }} · {{ viewing.model }}</span>
+                    <button
+                      v-if="!viewingIsBase"
+                      class="rounded-md bg-brand1/10 px-2 py-1 font-medium text-brand1 transition-colors hover:bg-brand1/20"
+                      title="以该轮为基底继续迭代"
+                      @click="session = backToRound(session)"
+                    >
+                      回到此轮
+                    </button>
+                  </div>
+                  <p v-else class="flex items-center gap-1.5 text-xs text-emerald-500">
                     <CheckCircle2 class="h-3.5 w-3.5" />
                     <template v-if="isDemo">{{ typeName }} · 生成完成(演示)</template>
                     <template v-else-if="stream.stopped.value">已停止 · 渲染了已生成部分</template>
@@ -535,7 +700,16 @@ onBeforeUnmount(() => {
                     </template>
                     <template v-else>{{ typeName }} · 生成结束</template>
                   </p>
-                  <div class="flex gap-2">
+                  <div class="flex flex-wrap gap-2">
+                    <button
+                      v-if="!isDemo && viewing"
+                      class="flex items-center gap-1.5 rounded-lg border border-line/12 bg-ink/5 px-3.5 py-2 text-xs font-medium text-sub transition-colors hover:bg-ink/10 hover:text-ink"
+                      title="以当前基底轮的指令重新生成"
+                      @click="regenerateFromBase"
+                    >
+                      <RotateCcw class="h-3.5 w-3.5" />
+                      基于此轮重新生成
+                    </button>
                     <button
                       class="flex items-center gap-1.5 rounded-lg border border-line/12 bg-ink/5 px-3.5 py-2 text-xs font-medium text-sub transition-colors hover:bg-ink/10 hover:text-ink"
                       @click="regenerate"

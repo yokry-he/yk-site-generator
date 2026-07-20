@@ -10,7 +10,8 @@ export interface GenerateRequest {
   baseUrl?: string
   siteType: string
   requirement: string
-  history?: { artifactHtml?: string; feedback: string }[]
+  /** 迭代历史(SF-1-6):artifact 为当前产物单 HTML,instruction 为本轮修改指令 */
+  history?: { instruction: string; artifact?: string; round?: number }[]
   maxTokens?: number
 }
 

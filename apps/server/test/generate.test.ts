@@ -188,6 +188,44 @@ describe('POST /api/generate', () => {
     expect(JSON.parse(done!.data).parse.ok).toBe(true)
   })
 
+  it('history 非空走迭代提示词:请求体含产物与修改指令', async () => {
+    const artifact = '<!DOCTYPE html><html><body><h1>旧版</h1></body></html>'
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      sseResponse([openaiChunk('```html\n' + artifact + '\n```'), '[DONE]']),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const res = await app.request('/api/generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ...validBody,
+        history: [{ instruction: '把配色改成暖色系', artifact, round: 2 }],
+      }),
+    })
+    const events = await readEvents(res)
+    expect(events.some((e) => e.event === 'done')).toBe(true)
+    // 验证发往厂商的 messages 是迭代提示词
+    const sentBody = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    const userMsg = sentBody.messages.find((m: { role: string }) => m.role === 'user')
+    expect(userMsg.content).toContain('【当前产物(第 1 轮)】')
+    expect(userMsg.content).toContain(artifact)
+    expect(userMsg.content).toContain('【修改指令(第 2 轮)】')
+    expect(userMsg.content).toContain('把配色改成暖色系')
+  })
+
+  it('请求体超过 2MB 返回 400', async () => {
+    const res = await app.request('/api/generate', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'content-length': String(2 * 1024 * 1024 + 1),
+      },
+      body: JSON.stringify(validBody),
+    })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error.message).toContain('2MB')
+  })
+
   it('参数校验失败返回 400 BAD_REQUEST', async () => {
     const res = await app.request('/api/generate', {
       method: 'POST',

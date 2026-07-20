@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { z } from 'zod'
-import { buildGenerationPrompt } from 'prompts'
+import { buildGenerationPrompt, buildIterationPrompt } from 'prompts'
 import { parseModelOutput } from 'shared'
 import { connectTimeoutMs, totalTimeoutMs } from '../lib/config'
 import { takeToken } from '../lib/rate-limit'
@@ -14,9 +14,14 @@ import {
 } from '../providers'
 import { errorBody } from '../types'
 
+/** 请求体上限:迭代历史需装下单 HTML 产物,放宽到 2MB */
+const MAX_BODY_BYTES = 2 * 1024 * 1024
+
+/** 迭代历史元素(SF-1-6):artifact 为当前产物单 HTML(可选截断),instruction 为本轮修改指令 */
 const historyItemSchema = z.object({
-  artifactHtml: z.string().optional(),
-  feedback: z.string().min(1),
+  instruction: z.string().min(1),
+  artifact: z.string().optional(),
+  round: z.number().int().positive().optional(),
 })
 
 const bodySchema = z.object({
@@ -44,6 +49,12 @@ generate.post('/', async (c) => {
     return c.json(errorBody('PROVIDER_RATE_LIMIT', '请求过于频繁,请每分钟不超过 10 次'), 429)
   }
 
+  // 请求体上限(content-length 预检,迭代历史含完整产物,上限 2MB)
+  const contentLength = Number(c.req.header('content-length') ?? 0)
+  if (contentLength > MAX_BODY_BYTES) {
+    return c.json(errorBody('BAD_REQUEST', '请求体超过 2MB 上限,请缩短迭代历史中的产物内容'), 400)
+  }
+
   // 参数校验
   let body: z.infer<typeof bodySchema>
   try {
@@ -53,17 +64,25 @@ generate.post('/', async (c) => {
     return c.json(errorBody('BAD_REQUEST', `参数校验失败:${msg}`), 400)
   }
 
-  // 组装提示词(siteType 未知时 buildGenerationPrompt 抛错 → 400)
+  // 组装提示词:history 非空 → 迭代提示词(SF-1-6);否则初次生成提示词
   let messages: { role: 'system' | 'user'; content: string }[]
   try {
-    const { system, user } = buildGenerationPrompt({
-      siteType: body.siteType,
-      requirement: body.requirement,
-      history: body.history,
-    })
+    const lastHistory = body.history?.[body.history.length - 1]
+    const built = lastHistory?.artifact
+      ? buildIterationPrompt({
+          siteType: body.siteType,
+          currentArtifact: lastHistory.artifact,
+          instruction: lastHistory.instruction,
+          round: lastHistory.round ?? 2,
+        })
+      : buildGenerationPrompt({
+          siteType: body.siteType,
+          requirement: body.requirement,
+          history: body.history?.map((h) => ({ feedback: h.instruction, artifactHtml: h.artifact })),
+        })
     messages = [
-      { role: 'system', content: system },
-      { role: 'user', content: user },
+      { role: 'system', content: built.system },
+      { role: 'user', content: built.user },
     ]
   } catch (err) {
     return c.json(

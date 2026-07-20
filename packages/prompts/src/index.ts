@@ -3,6 +3,8 @@ import { SYSTEM_PROMPT } from './system'
 import type { SiteTypeProfile } from './profiles'
 
 export { SITE_TYPE_PROFILES, getProfile, SYSTEM_PROMPT }
+export { buildIterationPrompt } from './iterate'
+export type { BuildIterationInput, BuiltIterationPrompt } from './iterate'
 export type { SiteTypeProfile }
 
 /** 一次迭代修改意见(SF-1-6 迭代会话将消费此结构) */
