@@ -16,6 +16,12 @@ importers:
       hono:
         specifier: ^4.12.2
         version: 4.12.31
+      prompts:
+        specifier: workspace:*
+        version: link:../../packages/prompts
+      shared:
+        specifier: workspace:*
+        version: link:../../packages/shared
       zod:
         specifier: ^4.3.5
         version: 4.4.3

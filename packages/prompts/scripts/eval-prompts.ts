@@ -224,6 +224,7 @@ async function callModel(profile: SiteTypeProfile, requirement: string): Promise
         { role: 'user', content: user },
       ],
       temperature: 0.7,
+      max_tokens: 8192,
     }),
   })
   if (!res.ok) throw new Error(`模型请求失败:${res.status} ${await res.text()}`)
@@ -251,22 +252,57 @@ async function main() {
       : `🚀 真实跑分:模型 ${process.env.EVAL_MODEL} @ ${process.env.EVAL_BASE_URL}\n`,
   )
 
+  // --only type1,type2:只跑指定类型(用于不达标类型的迭代重跑)
+  const onlyIdx = process.argv.indexOf('--only')
+  const only =
+    onlyIdx >= 0 ? (process.argv[onlyIdx + 1] ?? '').split(',').filter(Boolean) : null
+  const concurrency = Math.max(1, Number(process.env.EVAL_CONCURRENCY ?? 5) || 5)
+
+  interface Task {
+    profile: SiteTypeProfile
+    req: string
+  }
+  const tasks: Task[] = []
+  for (const profile of SITE_TYPE_PROFILES) {
+    if (only && !only.includes(profile.id)) continue
+    for (const req of EVAL_CASES[profile.id] ?? []) tasks.push({ profile, req })
+  }
+  if (only) console.log(`🎯 只跑类型:${only.join(', ')}\n`)
+
+  // 有界并发执行(控制 token 消耗速率,避免触发厂商限流)
+  const scoreMap = new Map<string, number[]>()
+  let cursor = 0
+  async function worker() {
+    while (cursor < tasks.length) {
+      const t = tasks[cursor++]
+      try {
+        const output = dryRun ? makeSample(t.profile, t.req) : await callModel(t.profile, t.req)
+        const s = scoreOutput(t.profile, output)
+        const arr = scoreMap.get(t.profile.id) ?? []
+        arr.push(s.total)
+        scoreMap.set(t.profile.id, arr)
+        const flag = s.total >= 0.8 ? '✅' : '⚠️ '
+        console.log(
+          `  ${flag} [${t.profile.id}] ${t.req.slice(0, 24)}…  解析${s.parseable} 关键词${(s.keywordHit * 100).toFixed(0)}% 槽位${s.headSlots} HTML${s.htmlSane} → ${(s.total * 100).toFixed(0)}%`,
+        )
+      } catch (err) {
+        const arr = scoreMap.get(t.profile.id) ?? []
+        arr.push(0)
+        scoreMap.set(t.profile.id, arr)
+        console.log(
+          `  ❌ [${t.profile.id}] ${t.req.slice(0, 24)}…  调用失败:${err instanceof Error ? err.message : err} → 0%`,
+        )
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: concurrency }, () => worker()))
+
   const rows: { type: string; name: string; avg: number; cases: number }[] = []
   let allScores: number[] = []
-
   for (const profile of SITE_TYPE_PROFILES) {
-    const requirements = EVAL_CASES[profile.id] ?? []
-    const scores: number[] = []
-    for (const req of requirements) {
-      const output = dryRun ? makeSample(profile, req) : await callModel(profile, req)
-      const s = scoreOutput(profile, output)
-      scores.push(s.total)
-      const flag = s.total >= 0.8 ? '✅' : '⚠️ '
-      console.log(
-        `  ${flag} [${profile.id}] ${req.slice(0, 24)}…  解析${s.parseable} 关键词${(s.keywordHit * 100).toFixed(0)}% 槽位${s.headSlots} HTML${s.htmlSane} → ${(s.total * 100).toFixed(0)}%`,
-      )
-    }
-    const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0
+    const scores = scoreMap.get(profile.id)
+    if (!scores) continue
+    const avg = scores.reduce((a, b) => a + b, 0) / scores.length
     rows.push({ type: profile.id, name: profile.name, avg, cases: scores.length })
     allScores = allScores.concat(scores)
   }

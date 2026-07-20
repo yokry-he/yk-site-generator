@@ -33,11 +33,20 @@ const LANG_FALLBACK_PATH: Record<string, string> = {
   javascript: 'main.js',
 }
 
-function extractFencedBlocks(text: string): FencedBlock[] {
+function extractFencedBlocks(text: string, warnings?: string[]): FencedBlock[] {
   const blocks: FencedBlock[] = []
   const re = /```([^\n`]*)\n([\s\S]*?)```/g
+  let lastEnd = 0
   for (const m of text.matchAll(re)) {
     blocks.push({ info: m[1].trim(), body: m[2] })
+    lastEnd = (m.index ?? 0) + m[0].length
+  }
+  // 容错:模型输出被 max_tokens 截断时,最后一个 fence 未闭合——按 EOF 闭合抢救
+  const tail = text.slice(lastEnd)
+  const open = tail.match(/```([^\n`]*)\n([\s\S]+)$/)
+  if (open && open[2].trim()) {
+    blocks.push({ info: (open[1] ?? '').trim(), body: open[2] })
+    warnings?.push('最后一个代码块未闭合(疑似输出截断),已按 EOF 抢救')
   }
   return blocks
 }
@@ -87,7 +96,7 @@ function langOf(info: string): string {
  */
 export function parseModelOutput(text: string): ParseResult | null {
   const warnings: string[] = []
-  const blocks = extractFencedBlocks(text)
+  const blocks = extractFencedBlocks(text, warnings)
 
   if (blocks.length === 0) {
     if (/<html[\s>]/i.test(text)) {

@@ -24,6 +24,7 @@ const apiKey = ref('')
 const baseUrl = ref('')
 const model = ref('')
 const test = ref<'idle' | 'testing' | 'ok' | 'fail'>('idle')
+const testMsg = ref('')
 
 const provider = computed(() => providerById(selectedId.value) ?? MODEL_PROVIDERS[0])
 const saved = computed(() => connections.value[provider.value.id])
@@ -40,6 +41,7 @@ watch(selectedId, (id) => {
   baseUrl.value = conn?.baseUrl ?? p.defaultBaseUrl
   model.value = conn?.model ?? p.defaultModel
   test.value = 'idle'
+  testMsg.value = ''
 })
 
 // Dialog 打开时定位到当前使用中的厂商
@@ -47,13 +49,43 @@ watch(open, (v) => {
   if (v && activeId.value) selectedId.value = activeId.value
 })
 
-function runTest() {
+/** 真实测试连接:走服务端 /api/providers/test(SF-1-4),失败时给出降级提示 */
+async function runTest() {
   if (!apiKey.value.trim() || apiKey.value.trim().length < provider.value.keyMinLength) {
     test.value = 'fail'
+    testMsg.value = `Key 格式似乎不正确:${provider.value.keyHint},长度至少 ${provider.value.keyMinLength} 位`
     return
   }
   test.value = 'testing'
-  window.setTimeout(() => (test.value = 'ok'), 1200)
+  testMsg.value = ''
+  try {
+    const res = await fetch('/api/providers/test', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        provider: provider.value.id,
+        apiKey: apiKey.value.trim(),
+        baseUrl: baseUrl.value.trim() || undefined,
+        model: model.value || undefined,
+      }),
+    })
+    const json = (await res.json()) as {
+      ok?: boolean
+      latencyMs?: number
+      error?: { code: string; message: string }
+    }
+    if (res.ok && json.ok) {
+      test.value = 'ok'
+      testMsg.value = `连接成功,延迟 ${json.latencyMs ?? '-'} ms`
+    } else {
+      test.value = 'fail'
+      testMsg.value = json.error?.message ?? `服务返回异常(HTTP ${res.status})`
+    }
+  } catch {
+    // 服务端不可达(未启动/跨域/断网)时的降级提示
+    test.value = 'fail'
+    testMsg.value = '无法连接生成服务,请确认本地服务端已启动(pnpm --filter server dev)或稍后再试'
+  }
 }
 
 function handleSave() {
@@ -166,14 +198,14 @@ function handleSave() {
           class="mt-4 flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-500"
         >
           <CheckCircle2 class="h-3.5 w-3.5" />
-          连接成功(演示环境,未发起真实请求)
+          {{ testMsg || '连接成功' }}
         </p>
         <p
           v-if="test === 'fail'"
           class="mt-4 flex items-center gap-1.5 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-500"
         >
           <XCircle class="h-3.5 w-3.5" />
-          Key 格式似乎不正确:{{ provider.keyHint }},长度至少 {{ provider.keyMinLength }} 位
+          {{ testMsg }}
         </p>
 
         <div class="mt-5 flex flex-wrap items-center gap-2">
@@ -206,7 +238,7 @@ function handleSave() {
 
         <p class="mt-5 flex items-start gap-1.5 rounded-lg bg-ink/[0.04] px-3 py-2.5 text-xs leading-relaxed text-faint">
           <ShieldCheck class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          密钥仅保存在本地浏览器(localStorage),不会上传到任何服务器。清除浏览器数据会同时删除已保存的密钥。
+          密钥仅保存在本地浏览器(localStorage),服务端只在转发给厂商的请求周期内使用,不存储、不记录。测试连接与生成时密钥会经服务端转发,部署环境请务必使用 HTTPS(本地开发 http 除外)。清除浏览器数据会同时删除已保存的密钥。
         </p>
       </div>
     </div>

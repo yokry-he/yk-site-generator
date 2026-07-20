@@ -124,4 +124,22 @@ describe('parseModelOutput：畸形输入', () => {
     const paths = result.tree.files.map((f) => f.path).sort()
     expect(paths).toEqual(['styles-2.css', 'styles.css'])
   })
+
+  it('末尾 fence 未闭合(输出截断)时按 EOF 抢救', () => {
+    const output = [
+      '```json',
+      JSON.stringify({ files: [{ path: 'index.html' }] }),
+      '```',
+      '',
+      '```html path="index.html"',
+      sampleHtml,
+      '<p>被截断的内容',
+    ].join('\n')
+    const result = parseModelOutput(output)
+    expect(result).not.toBeNull()
+    expect(result!.manifest).toBeDefined()
+    expect(result!.tree.entry).toBe('index.html')
+    expect(result!.tree.files[0].content).toContain('被截断的内容')
+    expect(result!.warnings.some((w) => w.includes('未闭合'))).toBe(true)
+  })
 })
