@@ -7,11 +7,14 @@
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
+    "test": "vitest run",
+    "e2e": "tsx scripts/e2e-generate.ts",
     "typecheck": "vue-tsc -b"
   },
   "dependencies": {
     "jszip": "^3.10.1",
     "lucide-vue-next": "^1.0.0",
+    "shared": "workspace:*",
     "vue": "^3.5.39",
     "vue-router": "^4.6.4"
   },
@@ -22,8 +25,10 @@
     "autoprefixer": "^10.5.4",
     "postcss": "^8.5.20",
     "tailwindcss": "^3.4.19",
+    "tsx": "^4.23.1",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
+    "vitest": "^4.0.18",
     "vue-tsc": "^3.3.5"
   }
 }
