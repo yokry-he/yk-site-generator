@@ -119,8 +119,45 @@ export interface SystemEventRecord {
   createdAt: string
 }
 
+export type FeedbackSentiment = 'positive' | 'negative'
+export type FeedbackStatus = 'open' | 'reviewed' | 'resolved' | 'dismissed'
+
+export interface FeedbackRecord {
+  id: string
+  userId: string
+  projectId: string
+  versionId: string
+  sentiment: FeedbackSentiment
+  categories: string[]
+  message?: string
+  siteType: string
+  model?: string
+  promptVersion?: string
+  metadata?: Record<string, unknown>
+  status: FeedbackStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export interface OnboardingContext {
+  goal?: 'personal' | 'business' | 'content' | 'data'
+  siteType?: string
+  starter?: 'template' | 'ai'
+  brandIntent?: 'create' | 'later'
+}
+
+export interface OnboardingProgressRecord {
+  userId: string
+  currentStep: 'welcome' | 'goal' | 'starter' | 'brand' | 'ready'
+  completedSteps: string[]
+  context: OnboardingContext
+  completedAt?: string
+  dismissedAt?: string
+  updatedAt: string
+}
+
 export interface AppData {
-  schemaVersion: 3
+  schemaVersion: 4
   users: UserRecord[]
   verificationCodes: VerificationCodeRecord[]
   sessions: SessionRecord[]
@@ -131,10 +168,12 @@ export interface AppData {
   brandKits: BrandKitRecord[]
   auditLogs: AuditLogRecord[]
   systemEvents: SystemEventRecord[]
+  feedback: FeedbackRecord[]
+  onboardingProgress: OnboardingProgressRecord[]
 }
 
 const emptyData = (): AppData => ({
-  schemaVersion: 3,
+  schemaVersion: 4,
   users: [],
   verificationCodes: [],
   sessions: [],
@@ -145,6 +184,8 @@ const emptyData = (): AppData => ({
   brandKits: [],
   auditLogs: [],
   systemEvents: [],
+  feedback: [],
+  onboardingProgress: [],
 })
 
 let memoryData: AppData = emptyData()
@@ -177,10 +218,12 @@ async function readFromDisk(): Promise<AppData> {
       brandKits?: BrandKitRecord[]
       auditLogs?: AuditLogRecord[]
       systemEvents?: SystemEventRecord[]
+      feedback?: FeedbackRecord[]
+      onboardingProgress?: OnboardingProgressRecord[]
     }
-    if (![1, 2, 3].includes(parsed.schemaVersion ?? 0)) throw new Error('UNSUPPORTED_DATA_SCHEMA')
+    if (![1, 2, 3, 4].includes(parsed.schemaVersion ?? 0)) throw new Error('UNSUPPORTED_DATA_SCHEMA')
     return {
-      schemaVersion: 3,
+      schemaVersion: 4,
       users: normalizeUsers(parsed.users ?? []),
       verificationCodes: parsed.verificationCodes ?? [],
       sessions: parsed.sessions ?? [],
@@ -191,6 +234,8 @@ async function readFromDisk(): Promise<AppData> {
       brandKits: parsed.brandKits ?? [],
       auditLogs: parsed.auditLogs ?? [],
       systemEvents: parsed.systemEvents ?? [],
+      feedback: parsed.feedback ?? [],
+      onboardingProgress: parsed.onboardingProgress ?? [],
     }
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return emptyData()
@@ -232,7 +277,7 @@ export function resetDataStoreForTest(seed?: Partial<AppData>): void {
     ...emptyData(),
     ...seed,
     users: normalizeUsers(seed?.users ?? []),
-    schemaVersion: 3,
+    schemaVersion: 4,
   }
   queue = Promise.resolve()
 }
