@@ -1,0 +1,52 @@
+name: Agent Brand 2.1 Cleanup
+on:
+  push:
+    branches: [agent/continue-development-20260723]
+    paths: ['.github/workflows/agent-brand-2-1-cleanup.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/continue-development-20260723
+          fetch-depth: 0
+      - name: Patch brand update semantics and MySQL assertions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('apps/server/src/routes/brand-kits.ts')
+          text = path.read_text()
+          old = """    const textFields = ['name', 'description', 'companyName', 'companyDescription', 'contactEmail', 'contactPhone', 'address'] as const
+    for (const field of textFields) if (input[field] !== undefined) Object.assign(row, { [field]: optionalValue(input[field]) })
+"""
+          new = """    if (input.name !== undefined) row.name = input.name
+    if (input.description !== undefined) row.description = input.description
+    const textFields = ['companyName', 'companyDescription', 'contactEmail', 'contactPhone', 'address'] as const
+    for (const field of textFields) if (input[field] !== undefined) Object.assign(row, { [field]: optionalValue(input[field]) })
+"""
+          if old not in text: raise SystemExit('brand text field block not found')
+          path.write_text(text.replace(old, new, 1))
+
+          mysql = Path('apps/server/scripts/mysql-ci.ts')
+          text = mysql.read_text()
+          old = """  '005_operations_rbac.sql',
+  '006_product_polish.sql',
+"""
+          new = """  '005_operations_rbac.sql',
+  '006_product_polish.sql',
+  '007_brand_kit_2_1.sql',
+"""
+          if old not in text: raise SystemExit('migration list block not found')
+          mysql.write_text(text.replace(old, new, 1))
+          Path('.github/workflows/agent-brand-2-1-cleanup.yml').unlink()
+          PY
+      - name: Commit cleanup
+        run: |
+          git config user.name 'SiteForge Agent'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: preserve required brand fields and verify migration 007'
+          git push origin HEAD:agent/continue-development-20260723
