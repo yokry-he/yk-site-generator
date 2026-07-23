@@ -1,6 +1,8 @@
 import { authFetch } from '../composables/useAuth'
 import { ensureOk } from './api'
 
+export type ProjectLifecycleStatus = 'active' | 'archived' | 'trashed'
+
 export interface ProjectVersionSummary {
   id: string
   projectId: string
@@ -9,6 +11,11 @@ export interface ProjectVersionSummary {
   source: 'generate' | 'iterate' | 'editor' | 'import'
   instruction?: string
   model?: string
+  name?: string
+  note?: string
+  starred: boolean
+  parentVersionId?: string
+  changeSummary: string[]
   createdAt: string
   sizeBytes: number
 }
@@ -24,6 +31,12 @@ export interface CloudProject {
   siteType: string
   requirement: string
   templateId?: string
+  status: ProjectLifecycleStatus
+  starred: boolean
+  openedAt?: string
+  duplicatedFromId?: string
+  brandKitId?: string
+  coverDataUrl?: string
   createdAt: string
   updatedAt: string
   latestVersion: ProjectVersionSummary | null
@@ -63,8 +76,8 @@ function jsonHeaders(): HeadersInit {
   return { 'content-type': 'application/json' }
 }
 
-export async function listProjects(): Promise<CloudProject[]> {
-  const response = await ensureOk(await authFetch('/api/projects'))
+export async function listProjects(status: ProjectLifecycleStatus | 'all' = 'all'): Promise<CloudProject[]> {
+  const response = await ensureOk(await authFetch(`/api/projects?status=${encodeURIComponent(status)}`))
   return ((await response.json()) as { projects: CloudProject[] }).projects
 }
 
@@ -81,6 +94,7 @@ export async function createProject(input: {
   source?: ProjectVersionSummary['source']
   instruction?: string
   model?: string
+  brandKitId?: string
 }): Promise<CloudProject> {
   const response = await ensureOk(
     await authFetch('/api/projects', {
@@ -94,7 +108,10 @@ export async function createProject(input: {
 
 export async function updateProject(
   id: string,
-  input: Partial<Pick<CloudProject, 'title' | 'siteType' | 'requirement'>>,
+  input: Partial<Pick<CloudProject, 'title' | 'siteType' | 'requirement' | 'status' | 'starred' | 'openedAt' | 'brandKitId' | 'coverDataUrl'>> & {
+    brandKitId?: string | null
+    coverDataUrl?: string | null
+  },
 ): Promise<CloudProject> {
   const response = await ensureOk(
     await authFetch(`/api/projects/${encodeURIComponent(id)}`, {
@@ -102,6 +119,13 @@ export async function updateProject(
       headers: jsonHeaders(),
       body: JSON.stringify(input),
     }),
+  )
+  return ((await response.json()) as { project: CloudProject }).project
+}
+
+export async function duplicateProject(id: string): Promise<CloudProject> {
+  const response = await ensureOk(
+    await authFetch(`/api/projects/${encodeURIComponent(id)}/duplicate`, { method: 'POST' }),
   )
   return ((await response.json()) as { project: CloudProject }).project
 }
@@ -117,11 +141,30 @@ export async function addProjectVersion(
     source: ProjectVersionSummary['source']
     instruction?: string
     model?: string
+    name?: string
+    note?: string
+    parentVersionId?: string
+    changeSummary?: string[]
   },
 ): Promise<ProjectVersionSummary> {
   const response = await ensureOk(
     await authFetch(`/api/projects/${encodeURIComponent(id)}/versions`, {
       method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify(input),
+    }),
+  )
+  return ((await response.json()) as { version: ProjectVersionSummary }).version
+}
+
+export async function updateProjectVersion(
+  projectId: string,
+  versionId: string,
+  input: { name?: string | null; note?: string | null; starred?: boolean },
+): Promise<ProjectVersionSummary> {
+  const response = await ensureOk(
+    await authFetch(`/api/projects/${encodeURIComponent(projectId)}/versions/${encodeURIComponent(versionId)}`, {
+      method: 'PATCH',
       headers: jsonHeaders(),
       body: JSON.stringify(input),
     }),
