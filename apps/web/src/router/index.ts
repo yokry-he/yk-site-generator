@@ -8,6 +8,9 @@ export const router = createRouter({
     // 除首页外全部路由级懒加载,按页面分包
     { path: '/generator', name: 'generator', component: () => import('../pages/GeneratorPage.vue') },
     { path: '/templates', name: 'templates', component: () => import('../pages/TemplatesPage.vue') },
+    { path: '/projects', name: 'projects', component: () => import('../pages/ProjectsPage.vue') },
+    { path: '/projects/:id', name: 'project-detail', component: () => import('../pages/ProjectPage.vue') },
+    { path: '/usage', name: 'usage', component: () => import('../pages/QuotaPage.vue') },
     { path: '/pricing', name: 'pricing', component: () => import('../pages/PricingPage.vue') },
     { path: '/docs', name: 'docs', component: () => import('../pages/DocsPage.vue') },
     { path: '/changelog', name: 'changelog', component: () => import('../pages/ChangelogPage.vue') },
@@ -16,7 +19,6 @@ export const router = createRouter({
   ],
   scrollBehavior(to, _from, savedPosition) {
     if (to.hash) {
-      // 等待懒加载页面渲染完成后再滚动到锚点
       return new Promise((resolve) => {
         window.setTimeout(() => {
           resolve({ el: to.hash, behavior: 'smooth', top: 80 })
