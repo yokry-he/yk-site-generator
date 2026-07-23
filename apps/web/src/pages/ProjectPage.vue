@@ -19,6 +19,7 @@ import {
 import VisualEditor from '../components/VisualEditor.vue'
 import { useAuth } from '../composables/useAuth'
 import { useAuthDialog } from '../composables/useAuthDialog'
+import { useFeatures } from '../composables/useFeatures'
 import { useToast } from '../composables/useToast'
 import { ApiError } from '../lib/api'
 import { downloadSiteZip } from '../lib/exportArtifact'
@@ -41,6 +42,7 @@ const route = useRoute()
 const router = useRouter()
 const { isAuthenticated, loading: authLoading } = useAuth()
 const { show: showAuth } = useAuthDialog()
+const { enabled } = useFeatures()
 const toast = useToast()
 const detail = ref<ProjectDetail | null>(null)
 const selected = ref<ProjectVersion | null>(null)
@@ -125,6 +127,7 @@ async function rollback(version: ProjectVersionSummary) {
 }
 
 async function saveEdited(html: string) {
+  if (!enabled('visual-editor')) return
   actionBusy.value = 'editor'
   try {
     const created = await addProjectVersion(projectId.value, {
@@ -143,7 +146,7 @@ async function saveEdited(html: string) {
 }
 
 function openBrandKits() {
-  if (!selected.value) return
+  if (!selected.value || !enabled('brand-kits')) return
   void router.push({
     name: 'brand-kits',
     query: { project: projectId.value, version: selected.value.id },
@@ -151,6 +154,7 @@ function openBrandKits() {
 }
 
 async function publish() {
+  if (!enabled('site-publishing')) return
   const version = selectedSummary.value
   if (!detail.value || !version) return
   actionBusy.value = 'publish'
@@ -175,9 +179,13 @@ async function publish() {
 
 async function togglePublication() {
   if (!publication.value) return
+  const next = publication.value.status === 'published' ? 'offline' : 'published'
+  if (next === 'published' && !enabled('site-publishing')) {
+    toast.error('暂时无法恢复上线', '发布能力当前处于关闭或灰度未命中状态。')
+    return
+  }
   actionBusy.value = 'status'
   try {
-    const next = publication.value.status === 'published' ? 'offline' : 'published'
     publication.value = await updatePublication(publication.value.id, { status: next })
     toast.success(next === 'published' ? '站点已恢复上线' : '站点已下线')
   } catch (err) {
@@ -254,7 +262,7 @@ onMounted(() => void load())
             title="刷新项目"
             @click="load(selected?.id)"
           >
-            <RefreshCw class="h-4 w-4" :class="loading && 'animate-spin'" />
+            <RefreshCw class="h-4 w-4" :class="loading ? 'animate-spin' : ''" />
           </button>
           <button
             v-if="selected"
@@ -267,7 +275,7 @@ onMounted(() => void load())
             导出 ZIP
           </button>
           <button
-            v-if="selected"
+            v-if="selected && enabled('brand-kits')"
             class="flex items-center gap-1.5 rounded-xl border border-brand2/20 bg-brand2/[0.07] px-3.5 py-2.5 text-xs font-semibold text-brand2 hover:bg-brand2/[0.13]"
             @click="openBrandKits"
           >
@@ -275,7 +283,7 @@ onMounted(() => void load())
             应用品牌
           </button>
           <button
-            v-if="selected"
+            v-if="selected && enabled('visual-editor')"
             class="flex items-center gap-1.5 rounded-xl border border-brand1/20 bg-brand1/[0.08] px-3.5 py-2.5 text-xs font-semibold text-brand1 hover:bg-brand1/[0.14]"
             @click="editorOpen = true"
           >
@@ -283,7 +291,7 @@ onMounted(() => void load())
             可视化编辑
           </button>
           <button
-            v-if="selected"
+            v-if="selected && enabled('site-publishing')"
             :disabled="actionBusy === 'publish'"
             class="bg-brand-gradient flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-brand1/20 disabled:opacity-50"
             @click="publish"
@@ -352,6 +360,7 @@ onMounted(() => void load())
                 {{ publication.status === 'published' ? '线上运行中' : '当前已下线' }}
               </p>
               <button
+                v-if="publication.status === 'published' || enabled('site-publishing')"
                 :disabled="actionBusy === 'status'"
                 class="text-[10px] text-faint hover:text-brand1"
                 @click="togglePublication"
@@ -408,7 +417,7 @@ onMounted(() => void load())
     </div>
 
     <VisualEditor
-      v-if="selected"
+      v-if="selected && enabled('visual-editor')"
       :open="editorOpen"
       :html="selected.html"
       :title="`${detail?.project.title ?? '项目'} · 第 ${selected.version} 版`"
