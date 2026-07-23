@@ -1,10 +1,23 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
-import { Sparkles, Menu, X, Plug } from 'lucide-vue-next'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import {
+  ChevronDown,
+  FolderKanban,
+  Gauge,
+  LogOut,
+  Menu,
+  Plug,
+  Sparkles,
+  UserRound,
+  X,
+} from 'lucide-vue-next'
 import ThemeSwitcher from './ThemeSwitcher.vue'
+import { useAuth } from '../composables/useAuth'
+import { useAuthDialog } from '../composables/useAuthDialog'
 import { useModelConfig } from '../composables/useModelConfig'
 import { useModelDialog } from '../composables/useModelDialog'
+import { useToast } from '../composables/useToast'
 
 const NAV_LINKS = [
   { label: '首页', to: '/' },
@@ -14,10 +27,16 @@ const NAV_LINKS = [
 ]
 
 const route = useRoute()
+const router = useRouter()
 const scrolled = ref(false)
 const open = ref(false)
+const accountOpen = ref(false)
 const { activeProvider } = useModelConfig()
 const { show: showModelSettings } = useModelDialog()
+const { user, isAuthenticated, logout } = useAuth()
+const { show: showAuth } = useAuthDialog()
+const toast = useToast()
+const initials = computed(() => user.value?.email.slice(0, 2).toUpperCase() ?? 'SF')
 
 function isActive(to: string) {
   return to === '/' ? route.path === '/' : route.path.startsWith(to)
@@ -27,17 +46,39 @@ function onScroll() {
   scrolled.value = window.scrollY > 12
 }
 
+async function signOut() {
+  accountOpen.value = false
+  open.value = false
+  await logout()
+  toast.success('已安全退出账号')
+  if (route.path.startsWith('/projects') || route.path === '/usage') await router.push('/')
+}
+
+function onDocumentClick(event: MouseEvent) {
+  const target = event.target as HTMLElement
+  if (!target.closest('[data-account-menu]')) accountOpen.value = false
+}
+
+watch(() => route.path, () => {
+  open.value = false
+  accountOpen.value = false
+})
+
 onMounted(() => {
   onScroll()
   window.addEventListener('scroll', onScroll, { passive: true })
+  document.addEventListener('click', onDocumentClick)
 })
-onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', onScroll)
+  document.removeEventListener('click', onDocumentClick)
+})
 </script>
 
 <template>
   <header
     class="fixed inset-x-0 top-0 z-50 transition-all duration-300"
-    :class="scrolled ? 'border-b border-line/8 bg-app/70 backdrop-blur-xl' : 'bg-transparent'"
+    :class="scrolled ? 'border-b border-line/8 bg-app/75 backdrop-blur-xl' : 'bg-transparent'"
   >
     <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
       <RouterLink to="/" class="flex shrink-0 items-center gap-2">
@@ -61,6 +102,18 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
             class="bg-brand-gradient absolute -bottom-2 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full"
           />
         </RouterLink>
+        <RouterLink
+          v-if="isAuthenticated"
+          to="/projects"
+          class="relative text-sm transition-colors"
+          :class="isActive('/projects') ? 'font-semibold text-ink' : 'text-mut hover:text-ink'"
+        >
+          我的项目
+          <span
+            v-if="isActive('/projects')"
+            class="bg-brand-gradient absolute -bottom-2 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full"
+          />
+        </RouterLink>
       </nav>
 
       <div class="flex items-center gap-2">
@@ -70,14 +123,62 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
           @click="showModelSettings"
         >
           <Plug class="h-3.5 w-3.5" />
-          <span class="hidden lg:inline">模型设置</span>
+          <span class="hidden xl:inline">模型设置</span>
           <span v-if="activeProvider" class="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-400" />
         </button>
+
+        <div v-if="isAuthenticated" data-account-menu class="relative hidden sm:block">
+          <button
+            class="flex max-w-52 items-center gap-2 rounded-full border border-line/10 bg-soft/70 p-1 pr-2.5 text-xs text-sub shadow-sm transition-colors hover:border-brand1/25 hover:text-ink"
+            :aria-expanded="accountOpen"
+            @click.stop="accountOpen = !accountOpen"
+          >
+            <span class="bg-brand-gradient flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white">
+              {{ initials }}
+            </span>
+            <span class="hidden max-w-28 truncate xl:block">{{ user?.email }}</span>
+            <ChevronDown class="h-3.5 w-3.5 transition-transform" :class="accountOpen && 'rotate-180'" />
+          </button>
+
+          <Transition name="menu">
+            <div
+              v-if="accountOpen"
+              class="absolute top-[calc(100%+10px)] right-0 w-64 overflow-hidden rounded-2xl border border-line/10 bg-soft/95 p-2 shadow-2xl shadow-black/15 backdrop-blur-xl"
+            >
+              <div class="border-b border-line/10 px-3 py-2.5">
+                <p class="text-[10px] font-medium tracking-wider text-faint uppercase">当前账号</p>
+                <p class="mt-1 truncate text-xs font-medium text-ink">{{ user?.email }}</p>
+              </div>
+              <RouterLink to="/projects" class="mt-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink">
+                <FolderKanban class="h-4 w-4 text-brand1" />
+                我的项目
+              </RouterLink>
+              <RouterLink to="/usage" class="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink">
+                <Gauge class="h-4 w-4 text-brand2" />
+                额度与用量
+              </RouterLink>
+              <button class="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm text-red-500 hover:bg-red-500/[0.07]" @click="signOut">
+                <LogOut class="h-4 w-4" />
+                退出登录
+              </button>
+            </div>
+          </Transition>
+        </div>
+
+        <button
+          v-else
+          class="hidden items-center gap-1.5 rounded-full border border-line/12 bg-soft/60 px-3.5 py-2 text-sm font-medium text-sub transition-colors hover:border-brand1/30 hover:text-brand1 sm:flex"
+          @click="showAuth"
+        >
+          <UserRound class="h-4 w-4" />
+          登录
+        </button>
+
         <RouterLink
           to="/generator"
-          class="bg-brand-gradient hidden rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap text-white shadow-lg shadow-brand1/25 transition-transform hover:scale-[1.03] active:scale-95 sm:inline-block"
+          class="bg-brand-gradient hidden rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap text-white shadow-lg shadow-brand1/25 transition-transform hover:scale-[1.03] active:scale-95 md:inline-block"
         >
-          免费开始
+          {{ isAuthenticated ? '新建网站' : '免费开始' }}
         </RouterLink>
         <button
           class="rounded-lg p-2 text-mut hover:bg-ink/5 hover:text-ink lg:hidden"
@@ -90,18 +191,25 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
       </div>
     </div>
 
-    <nav v-if="open" class="border-t border-line/8 bg-app/95 px-4 py-4 backdrop-blur-xl lg:hidden">
-      <div class="flex flex-col gap-1">
+    <nav v-if="open" class="border-t border-line/8 bg-app/95 px-4 py-4 shadow-xl backdrop-blur-xl lg:hidden">
+      <div class="mx-auto flex max-w-7xl flex-col gap-1">
         <RouterLink
           v-for="link in NAV_LINKS"
           :key="link.to"
           :to="link.to"
           class="rounded-lg px-3 py-2.5 text-sm"
           :class="isActive(link.to) ? 'bg-brand1/12 font-semibold text-ink' : 'text-sub hover:bg-ink/5 hover:text-ink'"
-          @click="open = false"
         >
           {{ link.label }}
         </RouterLink>
+        <template v-if="isAuthenticated">
+          <RouterLink to="/projects" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink">
+            <FolderKanban class="h-4 w-4 text-brand1" />我的项目
+          </RouterLink>
+          <RouterLink to="/usage" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink">
+            <Gauge class="h-4 w-4 text-brand2" />额度与用量
+          </RouterLink>
+        </template>
         <button
           class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-sub hover:bg-ink/5 hover:text-ink"
           @click="((open = false), showModelSettings())"
@@ -110,14 +218,28 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
           模型设置
           <span v-if="activeProvider" class="h-2 w-2 rounded-full bg-emerald-400" />
         </button>
-        <RouterLink
-          to="/generator"
-          class="bg-brand-gradient mt-2 rounded-full px-5 py-2.5 text-center text-sm font-semibold text-white"
-          @click="open = false"
+        <button
+          v-if="!isAuthenticated"
+          class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-sub hover:bg-ink/5 hover:text-ink"
+          @click="((open = false), showAuth())"
         >
-          免费开始
+          <UserRound class="h-4 w-4" />登录或创建账号
+        </button>
+        <button
+          v-else
+          class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-red-500 hover:bg-red-500/[0.07]"
+          @click="signOut"
+        >
+          <LogOut class="h-4 w-4" />退出登录
+        </button>
+        <RouterLink to="/generator" class="bg-brand-gradient mt-2 rounded-full px-5 py-2.5 text-center text-sm font-semibold text-white">
+          {{ isAuthenticated ? '新建网站' : '免费开始' }}
         </RouterLink>
       </div>
     </nav>
   </header>
 </template>
+
+<style scoped>
+.menu-enter-active,.menu-leave-active{transition:opacity .15s ease,transform .15s ease}.menu-enter-from,.menu-leave-to{opacity:0;transform:translateY(-4px)}
+</style>
