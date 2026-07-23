@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto'
-import type { AppData, FeatureFlagRecord, UserRole } from './data-store'
+import type { MiddlewareHandler } from 'hono'
+import type { AccessClaims, AuthEnv } from './auth'
+import { readData, type AppData, type FeatureFlagRecord, type UserRole } from './data-store'
 
 export interface FeatureFlagDefinition {
   key: string
@@ -114,4 +116,36 @@ export function evaluateFeatureFlag(data: AppData, key: string, context: Feature
   const identity = context.userId || context.email || context.anonymousId
   if (!identity) return false
   return stableBucket(`${flag.key}:${identity}`) < flag.rolloutPercent
+}
+
+export function featureContextForClaims(data: AppData, claims: AccessClaims): FeatureContext {
+  const user = data.users.find((item) => item.id === claims.sub)
+  return {
+    userId: claims.sub,
+    email: user?.email ?? claims.email,
+    role: user?.role ?? 'user',
+  }
+}
+
+export function featureName(key: string): string {
+  return FEATURE_FLAG_DEFINITIONS.find((item) => item.key === key)?.name ?? '该功能'
+}
+
+export async function authenticatedFeatureEnabled(key: string, claims: AccessClaims): Promise<boolean> {
+  const data = await readData()
+  return evaluateFeatureFlag(data, key, featureContextForClaims(data, claims))
+}
+
+export function featureFlagMiddleware(key: string): MiddlewareHandler<AuthEnv> {
+  return async (c, next) => {
+    if (!(await authenticatedFeatureEnabled(key, c.get('auth')))) {
+      return c.json({
+        error: {
+          code: 'FEATURE_DISABLED',
+          message: `${featureName(key)}当前未开放`,
+        },
+      }, 503)
+    }
+    await next()
+  }
 }
