@@ -1,5 +1,6 @@
 import { authFetch } from '../composables/useAuth'
 import { ensureOk } from './api'
+import type { Permission, UserRole } from './rbac'
 
 export interface QualitySummary {
   total: number
@@ -26,7 +27,7 @@ export interface AdminOverview {
 export interface AdminUser {
   id: string
   email: string
-  role: 'user' | 'admin' | 'support'
+  role: UserRole
   status: 'active' | 'suspended' | 'deleted'
   createdAt: string
   updatedAt: string
@@ -40,7 +41,7 @@ export interface AdminUser {
 export interface AuditLog {
   id: string
   actorUserId?: string
-  actorRole?: 'user' | 'admin' | 'support'
+  actorRole?: UserRole
   action: string
   resourceType: string
   resourceId?: string
@@ -90,12 +91,66 @@ export interface HealthComponent {
   detail: string
 }
 
+export interface AdminTemplate {
+  id: string
+  slug: string
+  name: string
+  description: string
+  siteType: string
+  category: string
+  industry: string
+  styleTags: string[]
+  featured: boolean
+  dark: boolean
+  status: 'draft' | 'published' | 'archived'
+  sortOrder: number
+  operationVersion: number
+  operationUpdatedAt?: string
+  operationUpdatedBy?: string
+  useCount: number
+  publicationCount: number
+  negativeFeedbackCount: number
+}
+
+export interface TemplateOperationsSummary {
+  total: number
+  published: number
+  draft: number
+  archived: number
+  featured: number
+}
+
+export interface AdminFeatureFlag {
+  key: string
+  name: string
+  description: string
+  category: 'experience' | 'creation' | 'publishing' | 'operations'
+  defaultEnabled: boolean
+  enabled: boolean
+  rolloutPercent: number
+  rules: {
+    userIds?: string[]
+    emails?: string[]
+    roles?: UserRole[]
+  }
+  startsAt?: string
+  expiresAt?: string
+  version: number
+  updatedAt?: string
+  updatedBy?: string
+}
+
 function queryString(input: Record<string, string | number | undefined>): string {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(input)) {
     if (value !== undefined && value !== '') params.set(key, String(value))
   }
   return params.toString()
+}
+
+export async function getAdminAccess(): Promise<{ role: UserRole; permissions: Permission[] }> {
+  const response = await ensureOk(await authFetch('/api/admin/access'))
+  return response.json() as Promise<{ role: UserRole; permissions: Permission[] }>
 }
 
 export async function getAdminOverview(): Promise<AdminOverview> {
@@ -126,6 +181,60 @@ export async function updateAdminUser(
     }),
   )
   return ((await response.json()) as { user: AdminUser }).user
+}
+
+export async function listAdminTemplates(input: {
+  q?: string
+  status?: string
+} = {}): Promise<{ templates: AdminTemplate[]; summary: TemplateOperationsSummary }> {
+  const response = await ensureOk(await authFetch(`/api/admin/templates?${queryString(input)}`))
+  return response.json() as Promise<{ templates: AdminTemplate[]; summary: TemplateOperationsSummary }>
+}
+
+export async function updateAdminTemplate(
+  id: string,
+  input: {
+    status?: AdminTemplate['status']
+    featured?: boolean
+    sortOrder?: number
+    expectedVersion: number
+  },
+): Promise<AdminTemplate> {
+  const response = await ensureOk(
+    await authFetch(`/api/admin/templates/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
+  )
+  return ((await response.json()) as { template: AdminTemplate }).template
+}
+
+export async function listAdminFeatureFlags(): Promise<AdminFeatureFlag[]> {
+  const response = await ensureOk(await authFetch('/api/admin/feature-flags'))
+  return ((await response.json()) as { flags: AdminFeatureFlag[] }).flags
+}
+
+export async function updateAdminFeatureFlag(
+  key: string,
+  input: {
+    enabled?: boolean
+    rolloutPercent?: number
+    description?: string
+    rules?: AdminFeatureFlag['rules']
+    startsAt?: string | null
+    expiresAt?: string | null
+    expectedVersion: number
+  },
+): Promise<AdminFeatureFlag> {
+  const response = await ensureOk(
+    await authFetch(`/api/admin/feature-flags/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    }),
+  )
+  return ((await response.json()) as { flag: AdminFeatureFlag }).flag
 }
 
 export async function listAdminFeedback(input: {
