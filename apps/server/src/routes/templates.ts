@@ -8,14 +8,15 @@ import {
   renderOfficialTemplate,
 } from 'shared'
 import { env } from '../env'
-import { authMiddleware, type AuthEnv } from '../lib/auth'
+import { authenticateBearerHeader, authMiddleware, type AuthEnv } from '../lib/auth'
 import {
   mutateData,
   readData,
+  type AppData,
   type ProjectRecord,
   type ProjectVersionRecord,
 } from '../lib/data-store'
-import { evaluateFeatureFlag } from '../lib/feature-flags'
+import { evaluateFeatureFlag, featureContextForClaims } from '../lib/feature-flags'
 import { operatedTemplate, operatedTemplates } from '../lib/template-operations'
 import { errorBody } from '../types'
 
@@ -54,9 +55,21 @@ function requestIdentity(c: { req: { header(name: string): string | undefined } 
     || 'anonymous'
 }
 
+async function templateFeatureEnabled(
+  c: { req: { header(name: string): string | undefined } },
+  data: AppData,
+): Promise<boolean> {
+  const claims = await authenticateBearerHeader(c.req.header('authorization'))
+  return evaluateFeatureFlag(
+    data,
+    'official-templates',
+    claims ? featureContextForClaims(data, claims) : { anonymousId: requestIdentity(c) },
+  )
+}
+
 templates.get('/', async (c) => {
   const data = await readData()
-  if (!evaluateFeatureFlag(data, 'official-templates', { anonymousId: requestIdentity(c) })) {
+  if (!(await templateFeatureEnabled(c, data))) {
     return c.json(errorBody('FEATURE_DISABLED', '官方模板中心当前未开放'), 503)
   }
   const visible = operatedTemplates(data, OFFICIAL_TEMPLATES).filter((template) => template.status === 'published')
@@ -71,7 +84,7 @@ templates.get('/', async (c) => {
 
 templates.get('/:id', async (c) => {
   const data = await readData()
-  if (!evaluateFeatureFlag(data, 'official-templates', { anonymousId: requestIdentity(c) })) {
+  if (!(await templateFeatureEnabled(c, data))) {
     return c.json(errorBody('FEATURE_DISABLED', '官方模板中心当前未开放'), 503)
   }
   const definition = getOfficialTemplate(c.req.param('id'))
@@ -87,11 +100,7 @@ templates.get('/:id', async (c) => {
 templates.post('/:id/use', authMiddleware, async (c) => {
   const data = await readData()
   const claims = c.get('auth')
-  if (!evaluateFeatureFlag(data, 'official-templates', {
-    userId: claims.sub,
-    email: claims.email,
-    role: data.users.find((item) => item.id === claims.sub)?.role ?? 'user',
-  })) {
+  if (!evaluateFeatureFlag(data, 'official-templates', featureContextForClaims(data, claims))) {
     return c.json(errorBody('FEATURE_DISABLED', '官方模板中心当前未开放'), 503)
   }
 
