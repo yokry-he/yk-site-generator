@@ -6,6 +6,7 @@ import { adminMiddleware, type AuthEnv } from '../lib/auth'
 import {
   mutateData,
   readData,
+  type FeedbackStatus,
   type UserRecord,
   type UserRole,
   type UserStatus,
@@ -39,6 +40,18 @@ const eventQuerySchema = z.object({
   source: z.string().trim().max(80).default(''),
 })
 
+const feedbackQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  status: z.enum(['all', 'open', 'reviewed', 'resolved', 'dismissed']).default('all'),
+  sentiment: z.enum(['all', 'positive', 'negative']).default('all'),
+  siteType: z.string().trim().max(40).default(''),
+  model: z.string().trim().max(120).default(''),
+})
+
+const feedbackStatusSchema = z.object({
+  status: z.enum(['open', 'reviewed', 'resolved', 'dismissed']),
+})
+
 const admin = new Hono<AuthEnv>()
 admin.use('*', adminMiddleware)
 
@@ -52,6 +65,48 @@ function statusOf(user: UserRecord): UserStatus {
 
 function startOfDaysAgo(days: number): number {
   return Date.now() - days * 86_400_000
+}
+
+function feedbackSummary(data: Awaited<ReturnType<typeof readData>>) {
+  const negative = data.feedback.filter((item) => item.sentiment === 'negative')
+  const categoryCounts = negative.flatMap((item) => item.categories).reduce<Record<string, number>>((acc, category) => {
+    acc[category] = (acc[category] ?? 0) + 1
+    return acc
+  }, {})
+  return {
+    total: data.feedback.length,
+    positive: data.feedback.length - negative.length,
+    negative: negative.length,
+    negativeRate: data.feedback.length ? Math.round((negative.length / data.feedback.length) * 100) : 0,
+    open: data.feedback.filter((item) => item.status === 'open').length,
+    topCategories: Object.entries(categoryCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([category, count]) => ({ category, count })),
+  }
+}
+
+async function auditBlockedUserAction(
+  c: Parameters<typeof requestMetadata>[0],
+  actorUserId: string,
+  targetId: string,
+  errorCode: string,
+  input: Record<string, unknown>,
+): Promise<void> {
+  const meta = requestMetadata(c)
+  await recordAudit({
+    actorUserId,
+    actorRole: 'admin',
+    action: 'admin.user.update',
+    resourceType: 'user',
+    resourceId: targetId,
+    requestId: meta.requestId,
+    ipAddress: meta.ipAddress,
+    userAgent: meta.userAgent,
+    outcome: 'failure',
+    afterData: input,
+    errorCode,
+  })
 }
 
 admin.get('/overview', async (c) => {
@@ -103,6 +158,7 @@ admin.get('/overview', async (c) => {
         byAction: usageByAction,
         daily: dailyUsage,
       },
+      quality: feedbackSummary(data),
       operations: {
         audit24h: data.auditLogs.filter((item) => Date.parse(item.createdAt) >= last24Hours).length,
         errors24h: data.systemEvents.filter(
@@ -117,6 +173,9 @@ admin.get('/overview', async (c) => {
         .slice(0, 8),
       recentAudit: [...data.auditLogs]
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+        .slice(0, 8),
+      recentFeedback: [...data.feedback]
+        .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
         .slice(0, 8),
     },
   })
@@ -184,9 +243,11 @@ admin.patch('/users/:id', async (c) => {
   const claims = c.get('auth')
   const targetId = c.req.param('id')
   if (targetId === claims.sub && (input.status && input.status !== 'active')) {
+    await auditBlockedUserAction(c, claims.sub, targetId, 'SELF_LOCKOUT_BLOCKED', input)
     return c.json(errorBody('SELF_LOCKOUT_BLOCKED', '不能限制当前登录账号'), 409)
   }
   if (targetId === claims.sub && input.role && input.role !== 'admin') {
+    await auditBlockedUserAction(c, claims.sub, targetId, 'SELF_DEMOTION_BLOCKED', input)
     return c.json(errorBody('SELF_DEMOTION_BLOCKED', '不能降低当前登录账号权限'), 409)
   }
 
@@ -211,7 +272,10 @@ admin.patch('/users/:id', async (c) => {
       after: { id: user.id, email: user.email, role: roleOf(user), status: statusOf(user) },
     }
   })
-  if (!result.ok) return c.json(errorBody('USER_NOT_FOUND', '用户不存在'), 404)
+  if (!result.ok) {
+    await auditBlockedUserAction(c, claims.sub, targetId, 'USER_NOT_FOUND', input)
+    return c.json(errorBody('USER_NOT_FOUND', '用户不存在'), 404)
+  }
 
   const meta = requestMetadata(c)
   await recordAudit({
@@ -228,6 +292,64 @@ admin.patch('/users/:id', async (c) => {
     afterData: result.after,
   })
   return c.json({ user: result.after })
+})
+
+admin.get('/feedback', async (c) => {
+  let query: z.infer<typeof feedbackQuerySchema>
+  try {
+    query = feedbackQuerySchema.parse(c.req.query())
+  } catch {
+    return c.json(errorBody('BAD_REQUEST', '查询参数错误'), 400)
+  }
+  const data = await readData()
+  const rows = data.feedback
+    .filter((item) =>
+      (query.status === 'all' || item.status === query.status) &&
+      (query.sentiment === 'all' || item.sentiment === query.sentiment) &&
+      (!query.siteType || item.siteType.includes(query.siteType)) &&
+      (!query.model || item.model?.includes(query.model)),
+    )
+    .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+    .slice(0, query.limit)
+  return c.json({ feedback: rows, summary: feedbackSummary(data) })
+})
+
+admin.patch('/feedback/:id', async (c) => {
+  let input: z.infer<typeof feedbackStatusSchema>
+  try {
+    input = feedbackStatusSchema.parse(await c.req.json())
+  } catch {
+    return c.json(errorBody('BAD_REQUEST', '反馈状态无效'), 400)
+  }
+  const claims = c.get('auth')
+  const id = c.req.param('id')
+  const result = await mutateData<
+    | { ok: true; before: { status: FeedbackStatus }; after: { status: FeedbackStatus } }
+    | { ok: false }
+  >((data) => {
+    const row = data.feedback.find((item) => item.id === id)
+    if (!row) return { ok: false }
+    const before = { status: row.status }
+    row.status = input.status
+    row.updatedAt = new Date().toISOString()
+    return { ok: true, before, after: { status: row.status } }
+  })
+  if (!result.ok) return c.json(errorBody('FEEDBACK_NOT_FOUND', '反馈不存在'), 404)
+  const meta = requestMetadata(c)
+  await recordAudit({
+    actorUserId: claims.sub,
+    actorRole: 'admin',
+    action: 'admin.feedback.status.update',
+    resourceType: 'feedback',
+    resourceId: id,
+    requestId: meta.requestId,
+    ipAddress: meta.ipAddress,
+    userAgent: meta.userAgent,
+    outcome: 'success',
+    beforeData: result.before,
+    afterData: result.after,
+  })
+  return c.json({ id, status: input.status })
 })
 
 admin.get('/audit', async (c) => {
