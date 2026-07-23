@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import type { BrandKit } from 'shared'
 import { env } from '../env'
 
 export interface UserRecord {
@@ -76,8 +77,12 @@ export interface PublicationRecord {
   publishedAt: string
 }
 
+export interface BrandKitRecord extends BrandKit {
+  userId: string
+}
+
 export interface AppData {
-  schemaVersion: 1
+  schemaVersion: 2
   users: UserRecord[]
   verificationCodes: VerificationCodeRecord[]
   sessions: SessionRecord[]
@@ -85,10 +90,11 @@ export interface AppData {
   projectVersions: ProjectVersionRecord[]
   usage: UsageRecord[]
   publications: PublicationRecord[]
+  brandKits: BrandKitRecord[]
 }
 
 const emptyData = (): AppData => ({
-  schemaVersion: 1,
+  schemaVersion: 2,
   users: [],
   verificationCodes: [],
   sessions: [],
@@ -96,6 +102,7 @@ const emptyData = (): AppData => ({
   projectVersions: [],
   usage: [],
   publications: [],
+  brandKits: [],
 })
 
 let memoryData: AppData = emptyData()
@@ -108,10 +115,10 @@ function cloneData(data: AppData): AppData {
 async function readFromDisk(): Promise<AppData> {
   try {
     const raw = await readFile(env.DATA_STORAGE_FILE, 'utf8')
-    const parsed = JSON.parse(raw) as Partial<AppData>
-    if (parsed.schemaVersion !== 1) throw new Error('UNSUPPORTED_DATA_SCHEMA')
+    const parsed = JSON.parse(raw) as Partial<AppData> & { schemaVersion?: number }
+    if (parsed.schemaVersion !== 1 && parsed.schemaVersion !== 2) throw new Error('UNSUPPORTED_DATA_SCHEMA')
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       users: parsed.users ?? [],
       verificationCodes: parsed.verificationCodes ?? [],
       sessions: parsed.sessions ?? [],
@@ -119,6 +126,7 @@ async function readFromDisk(): Promise<AppData> {
       projectVersions: parsed.projectVersions ?? [],
       usage: parsed.usage ?? [],
       publications: parsed.publications ?? [],
+      brandKits: parsed.brandKits ?? [],
     }
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return emptyData()
@@ -156,6 +164,6 @@ export function mutateData<T>(mutator: (draft: AppData) => T | Promise<T>): Prom
 }
 
 export function resetDataStoreForTest(seed?: Partial<AppData>): void {
-  memoryData = { ...emptyData(), ...seed, schemaVersion: 1 }
+  memoryData = { ...emptyData(), ...seed, schemaVersion: 2 }
   queue = Promise.resolve()
 }
