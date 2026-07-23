@@ -25,6 +25,11 @@ export interface BrandAssetInput {
   tags: string[]
 }
 
+export type BrandAssetUpdate = Partial<Omit<BrandAssetInput, 'brandKitId' | 'alt'>> & {
+  brandKitId?: string | null
+  alt?: string | null
+}
+
 function jsonHeaders(): HeadersInit {
   return { 'content-type': 'application/json' }
 }
@@ -46,7 +51,7 @@ export async function createBrandAsset(input: BrandAssetInput): Promise<BrandAss
   return ((await response.json()) as { asset: BrandAsset }).asset
 }
 
-export async function updateBrandAsset(id: string, input: Partial<BrandAssetInput> & { brandKitId?: string | null; alt?: string | null }): Promise<BrandAsset> {
+export async function updateBrandAsset(id: string, input: BrandAssetUpdate): Promise<BrandAsset> {
   const response = await ensureOk(await authFetch(`/api/brand-assets/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: jsonHeaders(),
