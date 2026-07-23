@@ -12,7 +12,6 @@ import {
   Sparkles,
   Target,
   Upload,
-  Users,
   X,
 } from 'lucide-vue-next'
 

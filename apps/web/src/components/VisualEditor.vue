@@ -6,7 +6,6 @@ import {
   ArrowUp,
   Blocks,
   Check,
-  ChevronLeft,
   ChevronRight,
   CircleCheck,
   Copy,

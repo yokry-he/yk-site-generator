@@ -3,10 +3,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowRight,
-  Check,
   ChevronDown,
   Clock3,
-  Command,
   Eye,
   Heart,
   LayoutGrid,

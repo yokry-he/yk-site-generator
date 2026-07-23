@@ -13,7 +13,6 @@ import {
   MoreHorizontal,
   Palette,
   Pencil,
-  Plus,
   RefreshCw,
   Search,
   Tag,

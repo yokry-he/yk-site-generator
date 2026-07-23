@@ -112,7 +112,7 @@ export function analyzeSiteQuality(html: string): QualityReport {
 
   ;[...document.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input,select,textarea')].forEach((input, index) => {
     if (input.type === 'hidden') return
-    if (!hasLabel(input, document)) issues.push(issue({ rule: 'form-label', category: 'accessibility', severity: 'error', title: '表单字段缺少标签', description: '字段需要可见 label、aria-label 或 aria-labelledby。', selector: selectorFor(input, index), elementLabel: input.name || input.placeholder || input.tagName, fixable: true }))
+    if (!hasLabel(input, document)) issues.push(issue({ rule: 'form-label', category: 'accessibility', severity: 'error', title: '表单字段缺少标签', description: '字段需要可见 label、aria-label 或 aria-labelledby。', selector: selectorFor(input, index), elementLabel: input.name || ('placeholder' in input ? input.placeholder : '') || input.tagName, fixable: true }))
   })
 
   ;[...document.querySelectorAll<HTMLElement>('[style]')].forEach((element, index) => {

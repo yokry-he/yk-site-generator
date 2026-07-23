@@ -7,7 +7,6 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
-  CircleDot,
   CloudOff,
   Columns2,
   Download,
@@ -18,7 +17,6 @@ import {
   LayoutDashboard,
   Loader2,
   Monitor,
-  Note,
   Palette,
   Pencil,
   PencilRuler,
@@ -30,7 +28,6 @@ import {
   Star,
   UserRound,
   WandSparkles,
-  X,
 } from 'lucide-vue-next'
 import VisualEditor from '../components/VisualEditor.vue'
 import SiteQualityPanel from '../components/SiteQualityPanel.vue'
