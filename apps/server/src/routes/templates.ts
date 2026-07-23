@@ -82,6 +82,39 @@ templates.get('/', async (c) => {
   })
 })
 
+templates.get('/favorites', authMiddleware, async (c) => {
+  const userId = c.get('auth').sub
+  const data = await readData()
+  return c.json({
+    favoriteTemplateIds: data.templateFavorites
+      .filter((favorite) => favorite.userId === userId)
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+      .map((favorite) => favorite.templateId),
+  })
+})
+
+templates.put('/:id/favorite', authMiddleware, async (c) => {
+  const definition = getOfficialTemplate(c.req.param('id'))
+  if (!definition) return c.json(errorBody('TEMPLATE_NOT_FOUND', '官方模板不存在'), 404)
+  const userId = c.get('auth').sub
+  await mutateData((data) => {
+    if (!data.templateFavorites.some((favorite) => favorite.userId === userId && favorite.templateId === definition.id)) {
+      data.templateFavorites.push({ userId, templateId: definition.id, createdAt: new Date().toISOString() })
+    }
+  })
+  return c.json({ favorite: true })
+})
+
+templates.delete('/:id/favorite', authMiddleware, async (c) => {
+  const userId = c.get('auth').sub
+  await mutateData((data) => {
+    data.templateFavorites = data.templateFavorites.filter(
+      (favorite) => favorite.userId !== userId || favorite.templateId !== c.req.param('id'),
+    )
+  })
+  return c.json({ favorite: false })
+})
+
 templates.get('/:id', async (c) => {
   const data = await readData()
   if (!(await templateFeatureEnabled(c, data))) {
@@ -143,6 +176,10 @@ templates.post('/:id/use', authMiddleware, async (c) => {
       siteType: definition.siteType,
       requirement: `基于官方模板「${definition.name}」创建`,
       templateId: definition.id,
+      brandKitId: brandKit?.id,
+      status: 'active',
+      starred: false,
+      openedAt: now,
       createdAt: now,
       updatedAt: now,
     }
@@ -156,6 +193,9 @@ templates.post('/:id/use', authMiddleware, async (c) => {
       instruction: brandKit
         ? `使用官方模板「${definition.name}」并应用品牌套件「${brandKit.name}」`
         : `使用官方模板「${definition.name}」`,
+      name: '模板初始版本',
+      starred: true,
+      changeSummary: [`使用官方模板「${definition.name}」创建项目`],
       createdAt: now,
     }
     draft.projects.push(project)
@@ -173,6 +213,8 @@ templates.post('/:id/use', authMiddleware, async (c) => {
     {
       project: {
         ...result.project,
+        status: result.project.status ?? 'active',
+        starred: result.project.starred ?? false,
         latestVersion: {
           id: result.version.id,
           projectId: result.version.projectId,
@@ -180,6 +222,9 @@ templates.post('/:id/use', authMiddleware, async (c) => {
           version: result.version.version,
           source: result.version.source,
           instruction: result.version.instruction,
+          name: result.version.name,
+          starred: result.version.starred ?? false,
+          changeSummary: result.version.changeSummary ?? [],
           createdAt: result.version.createdAt,
           sizeBytes: Buffer.byteLength(result.version.html, 'utf8'),
         },
