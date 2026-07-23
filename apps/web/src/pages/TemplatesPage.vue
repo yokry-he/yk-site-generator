@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Check,
   ChevronDown,
+  Clock3,
   Command,
   Eye,
   Heart,
@@ -12,6 +13,7 @@ import {
   Loader2,
   Monitor,
   Palette,
+  RefreshCw,
   Search,
   SlidersHorizontal,
   Smartphone,
@@ -21,7 +23,7 @@ import {
   X,
 } from 'lucide-vue-next'
 import {
-  OFFICIAL_TEMPLATES,
+  SITEFORGE_TEMPLATES,
   applyBrandKitToHtml,
   officialTemplateDefaults,
   renderOfficialTemplate,
@@ -35,9 +37,12 @@ import { ApiError } from '../lib/api'
 import { listBrandKits } from '../lib/brandKits'
 import {
   listOfficialTemplates,
+  listTemplateFavorites,
+  setTemplateFavorite,
   useOfficialTemplate,
   type OfficialTemplateFilters,
 } from '../lib/officialTemplates'
+import { listProjects } from '../lib/workspace'
 import { typeById } from '../data/siteTypes'
 
 const route = useRoute()
@@ -52,120 +57,136 @@ const templates = ref<OfficialTemplateDefinition[]>([])
 const filters = ref<OfficialTemplateFilters>({ categories: [], industries: [], styles: [] })
 const brandKits = ref<BrandKit[]>([])
 const loading = ref(true)
+const refreshing = ref(false)
 const error = ref('')
 const query = ref('')
 const category = ref('all')
 const industry = ref('all')
 const style = ref('all')
-const sort = ref<'featured' | 'name' | 'type'>('featured')
+const sort = ref<'featured' | 'recent' | 'favorites' | 'name' | 'type'>('featured')
 const mobileFiltersOpen = ref(false)
 const selected = ref<OfficialTemplateDefinition | null>(null)
 const variables = ref<Record<string, string>>({})
 const selectedBrandKitId = ref('')
 const viewport = ref<'desktop' | 'tablet' | 'mobile'>('desktop')
+const colorVariant = ref<'original' | 'cool' | 'warm'>('original')
 const creating = ref(false)
 const favorites = ref<Set<string>>(new Set())
+const recentTemplateIds = ref<string[]>([])
 let lastFocused: HTMLElement | null = null
 
 const categoryOptions = computed(() => ['all', ...filters.value.categories])
-const filtered = computed(() => {
-  const normalizedQuery = query.value.trim().toLowerCase()
+const activeFilterCount = computed(() => [category.value, industry.value, style.value].filter((value) => value !== 'all').length)
+const selectedBrandKit = computed(() => brandKits.value.find((kit) => kit.id === selectedBrandKitId.value) ?? null)
+const recentRank = computed(() => new Map(recentTemplateIds.value.map((id, index) => [id, index])))
+const visible = computed(() => {
+  const keyword = query.value.trim().toLowerCase()
   const rows = templates.value.filter((template) => {
-    const haystack = [
-      template.name,
-      template.description,
-      template.industry,
-      template.category,
-      typeById(template.siteType)?.name ?? template.siteType,
-      ...template.styleTags,
-    ].join(' ').toLowerCase()
-    return (
-      (!normalizedQuery || haystack.includes(normalizedQuery)) &&
-      (category.value === 'all' || template.category === category.value) &&
-      (industry.value === 'all' || template.industry === industry.value) &&
-      (style.value === 'all' || template.styleTags.includes(style.value))
-    )
+    const haystack = [template.name, template.description, template.industry, template.category, typeById(template.siteType)?.name ?? template.siteType, ...template.styleTags].join(' ').toLowerCase()
+    return (!keyword || haystack.includes(keyword))
+      && (category.value === 'all' || template.category === category.value)
+      && (industry.value === 'all' || template.industry === industry.value)
+      && (style.value === 'all' || template.styleTags.includes(style.value))
+      && (sort.value !== 'favorites' || favorites.value.has(template.id))
   })
   return [...rows].sort((a, b) => {
+    if (sort.value === 'recent') return (recentRank.value.get(a.id) ?? 9999) - (recentRank.value.get(b.id) ?? 9999)
     if (sort.value === 'name') return a.name.localeCompare(b.name, 'zh-CN')
     if (sort.value === 'type') return a.siteType.localeCompare(b.siteType)
     if (a.featured !== b.featured) return a.featured ? -1 : 1
     return a.name.localeCompare(b.name, 'zh-CN')
   })
 })
-const activeFilterCount = computed(() =>
-  [category.value, industry.value, style.value].filter((value) => value !== 'all').length,
-)
-const previewMap = computed(() =>
-  Object.fromEntries(templates.value.map((template) => [template.id, renderOfficialTemplate(template)])),
-)
-const selectedBrandKit = computed(() =>
-  brandKits.value.find((kit) => kit.id === selectedBrandKitId.value) ?? null,
-)
+const previewMap = computed(() => Object.fromEntries(templates.value.map((template) => [template.id, renderOfficialTemplate(template)])))
+const variantTemplate = computed(() => {
+  if (!selected.value || colorVariant.value === 'original') return selected.value
+  const palette = colorVariant.value === 'cool'
+    ? { ...selected.value.palette, primary: '#2563eb', secondary: '#7c3aed', accent: '#06b6d4', background: selected.value.dark ? '#070b16' : '#f5f8ff', surface: selected.value.dark ? '#11182a' : '#ffffff' }
+    : { ...selected.value.palette, primary: '#ea580c', secondary: '#be123c', accent: '#eab308', background: selected.value.dark ? '#160b08' : '#fff8f3', surface: selected.value.dark ? '#27140e' : '#ffffff' }
+  return { ...selected.value, palette }
+})
 const previewHtml = computed(() => {
-  if (!selected.value) return ''
-  const html = renderOfficialTemplate(selected.value, variables.value)
+  if (!variantTemplate.value) return ''
+  const html = renderOfficialTemplate(variantTemplate.value, variables.value)
   return selectedBrandKit.value ? applyBrandKitToHtml(html, selectedBrandKit.value) : html
 })
-const previewWidth = computed(() => {
-  if (viewport.value === 'mobile') return '390px'
-  if (viewport.value === 'tablet') return '820px'
-  return '1180px'
+const previewWidth = computed(() => viewport.value === 'mobile' ? '390px' : viewport.value === 'tablet' ? '820px' : '1180px')
+const selectedTypeName = computed(() => selected.value ? typeById(selected.value.siteType)?.name ?? selected.value.siteType : '')
+const similarTemplates = computed(() => {
+  if (!selected.value) return []
+  return templates.value
+    .filter((item) => item.id !== selected.value?.id)
+    .map((item) => ({ item, score: (item.category === selected.value?.category ? 3 : 0) + (item.industry === selected.value?.industry ? 3 : 0) + item.styleTags.filter((tag) => selected.value?.styleTags.includes(tag)).length }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map((entry) => entry.item)
 })
-const selectedTypeName = computed(() =>
-  selected.value ? typeById(selected.value.siteType)?.name ?? selected.value.siteType : '',
-)
 
 function messageOf(err: unknown): string {
   return err instanceof ApiError || err instanceof Error ? err.message : '操作失败，请稍后重试'
 }
 
-async function loadCatalog() {
-  loading.value = true
+function localFavorites(): Set<string> {
+  try {
+    const stored = JSON.parse(localStorage.getItem('siteforge:template-favorites') ?? '[]') as unknown
+    return new Set(Array.isArray(stored) ? stored.filter((item): item is string => typeof item === 'string') : [])
+  } catch { return new Set() }
+}
+
+async function loadCatalog(silent = false) {
+  if (silent) refreshing.value = true
+  else loading.value = true
   error.value = ''
   try {
     const response = await listOfficialTemplates()
     templates.value = response.templates
     filters.value = response.filters
   } catch (err) {
-    // 保持目录可浏览，创建项目仍会通过服务端再次校验模板。
-    templates.value = OFFICIAL_TEMPLATES
+    templates.value = SITEFORGE_TEMPLATES
     filters.value = {
-      categories: [...new Set(OFFICIAL_TEMPLATES.map((item) => item.category))],
-      industries: [...new Set(OFFICIAL_TEMPLATES.map((item) => item.industry))],
-      styles: [...new Set(OFFICIAL_TEMPLATES.flatMap((item) => item.styleTags))],
+      categories: [...new Set(SITEFORGE_TEMPLATES.map((item) => item.category))],
+      industries: [...new Set(SITEFORGE_TEMPLATES.map((item) => item.industry))],
+      styles: [...new Set(SITEFORGE_TEMPLATES.flatMap((item) => item.styleTags))],
     }
     error.value = `模板服务暂时不可用，当前展示内置目录。${messageOf(err)}`
   } finally {
     loading.value = false
+    refreshing.value = false
   }
 }
 
-async function loadBrands() {
+async function loadAccountData() {
   if (!isAuthenticated.value) {
     brandKits.value = []
-    selectedBrandKitId.value = ''
+    favorites.value = localFavorites()
+    recentTemplateIds.value = []
     return
   }
-  try {
-    brandKits.value = await listBrandKits()
-    const defaultKit = brandKits.value.find((kit) => kit.isDefault)
-    if (!selectedBrandKitId.value && defaultKit) selectedBrandKitId.value = defaultKit.id
-  } catch {
-    brandKits.value = []
-  }
+  const [brands, cloudFavorites, projects] = await Promise.allSettled([listBrandKits(), listTemplateFavorites(), listProjects('all')])
+  brandKits.value = brands.status === 'fulfilled' ? brands.value : []
+  if (cloudFavorites.status === 'fulfilled') favorites.value = new Set(cloudFavorites.value)
+  else favorites.value = localFavorites()
+  if (projects.status === 'fulfilled') {
+    recentTemplateIds.value = [...new Set(projects.value.filter((project) => project.templateId).sort((a, b) => Date.parse(b.openedAt || b.updatedAt) - Date.parse(a.openedAt || a.updatedAt)).map((project) => project.templateId!))]
+  } else recentTemplateIds.value = []
+  const defaultKit = brandKits.value.find((kit) => kit.isDefault)
+  if (!selectedBrandKitId.value && defaultKit) selectedBrandKitId.value = defaultKit.id
 }
 
-function persistFavorites() {
-  localStorage.setItem('siteforge:template-favorites', JSON.stringify([...favorites.value]))
-}
-
-function toggleFavorite(template: OfficialTemplateDefinition) {
+async function toggleFavorite(template: OfficialTemplateDefinition) {
   const next = new Set(favorites.value)
-  if (next.has(template.id)) next.delete(template.id)
-  else next.add(template.id)
+  const value = !next.has(template.id)
+  value ? next.add(template.id) : next.delete(template.id)
   favorites.value = next
-  persistFavorites()
+  localStorage.setItem('siteforge:template-favorites', JSON.stringify([...next]))
+  if (isAuthenticated.value) {
+    try { await setTemplateFavorite(template.id, value) }
+    catch (err) {
+      value ? next.delete(template.id) : next.add(template.id)
+      favorites.value = new Set(next)
+      toast.error('收藏同步失败', messageOf(err))
+    }
+  }
 }
 
 async function openTemplate(template: OfficialTemplateDefinition) {
@@ -173,6 +194,7 @@ async function openTemplate(template: OfficialTemplateDefinition) {
   selected.value = template
   variables.value = officialTemplateDefaults(template)
   viewport.value = 'desktop'
+  colorVariant.value = 'original'
   mobileFiltersOpen.value = false
   document.body.style.overflow = 'hidden'
   await router.replace({ query: { ...route.query, template: template.slug } })
@@ -196,6 +218,7 @@ function resetFilters() {
   category.value = 'all'
   industry.value = 'all'
   style.value = 'all'
+  sort.value = 'featured'
   mobileFiltersOpen.value = false
   searchRef.value?.focus()
 }
@@ -209,449 +232,73 @@ async function createFromSelected() {
   }
   creating.value = true
   try {
-    const project = await useOfficialTemplate(selected.value.id, {
-      title: variables.value.brandName || selected.value.name,
-      brandKitId: selectedBrandKitId.value || undefined,
-      variables: variables.value,
-    })
+    const project = await useOfficialTemplate(selected.value.id, { title: variables.value.brandName || selected.value.name, brandKitId: selectedBrandKitId.value || undefined, variables: variables.value })
     toast.success('项目已创建', `「${project.title}」已保存到你的工作区。`)
     await router.push({ name: 'project-detail', params: { id: project.id } })
-  } catch (err) {
-    toast.error('创建失败', messageOf(err))
-  } finally {
-    creating.value = false
-  }
+  } catch (err) { toast.error('创建失败', messageOf(err)) }
+  finally { creating.value = false }
 }
 
 function focusableElements(): HTMLElement[] {
   if (!dialogRef.value) return []
-  return [...dialogRef.value.querySelectorAll<HTMLElement>(
-    'button:not([disabled]),a[href],input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])',
-  )].filter((element) => !element.hasAttribute('hidden'))
+  return [...dialogRef.value.querySelectorAll<HTMLElement>('button:not([disabled]),a[href],input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])')].filter((element) => !element.hasAttribute('hidden'))
 }
 
 function onKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement
-  const isTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
-  if (!selected.value && event.key === '/' && !isTyping) {
-    event.preventDefault()
-    searchRef.value?.focus()
-    return
-  }
+  const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+  if (!selected.value && event.key === '/' && !typing) { event.preventDefault(); searchRef.value?.focus(); return }
   if (!selected.value) return
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    void closeTemplate()
-    return
-  }
+  if (event.key === 'Escape') { event.preventDefault(); void closeTemplate(); return }
   if (event.key === 'Tab') {
     const focusables = focusableElements()
     if (!focusables.length) return
     const first = focusables[0]
-    const last = focusables[focusables.length - 1]
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault()
-      last.focus()
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault()
-      first.focus()
-    }
+    const last = focusables.at(-1)!
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
   }
 }
 
-watch(isAuthenticated, () => void loadBrands())
-watch(
-  () => route.query.template,
-  (value) => {
-    if (typeof value !== 'string' || selected.value?.slug === value || !templates.value.length) return
-    const template = templates.value.find((item) => item.slug === value)
-    if (template) void openTemplate(template)
-  },
-)
+watch(isAuthenticated, () => void loadAccountData())
+watch(() => route.query.template, (value) => {
+  if (typeof value !== 'string' || selected.value?.slug === value || !templates.value.length) return
+  const template = templates.value.find((item) => item.slug === value)
+  if (template) void openTemplate(template)
+})
 
 onMounted(async () => {
-  try {
-    const stored = JSON.parse(localStorage.getItem('siteforge:template-favorites') ?? '[]') as unknown
-    if (Array.isArray(stored)) favorites.value = new Set(stored.filter((item): item is string => typeof item === 'string'))
-  } catch {
-    favorites.value = new Set()
-  }
+  favorites.value = localFavorites()
   window.addEventListener('keydown', onKeydown)
-  await Promise.all([loadCatalog(), loadBrands()])
+  await Promise.all([loadCatalog(), loadAccountData()])
   const slug = typeof route.query.template === 'string' ? route.query.template : ''
   const template = templates.value.find((item) => item.slug === slug)
   if (template) await openTemplate(template)
 })
-
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onKeydown)
-  document.body.style.overflow = ''
-})
+onBeforeUnmount(() => { window.removeEventListener('keydown', onKeydown); document.body.style.overflow = '' })
 </script>
 
 <template>
   <main class="min-h-screen pt-16 pb-24">
-    <section class="relative overflow-hidden border-b border-line/8 bg-soft/35">
-      <div class="pointer-events-none absolute -top-40 left-[12%] h-96 w-96 rounded-full bg-brand1/14 blur-3xl" />
-      <div class="pointer-events-none absolute -right-32 -bottom-56 h-[430px] w-[430px] rounded-full bg-brand2/10 blur-3xl" />
-      <div class="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <div class="grid items-end gap-10 lg:grid-cols-[minmax(0,1fr)_360px]">
-          <div class="max-w-3xl">
-            <span class="inline-flex items-center gap-2 rounded-full border border-brand1/18 bg-brand1/[0.07] px-3 py-1.5 text-[11px] font-semibold text-brand1">
-              <Sparkles class="h-3.5 w-3.5" />官方精选模板
-            </span>
-            <h1 class="mt-5 text-4xl font-bold tracking-tight text-ink sm:text-5xl lg:text-6xl">
-              从经过打磨的起点开始，<span class="text-brand-gradient">更快做出好网站</span>
-            </h1>
-            <p class="mt-5 max-w-2xl text-sm leading-7 text-mut sm:text-base">
-              每套模板都包含完整响应式布局、清晰内容结构和可编辑变量。预览满意后，可直接应用品牌套件并创建云端项目。
-            </p>
-          </div>
-          <div class="grid grid-cols-3 gap-3">
-            <div class="rounded-2xl border border-line/10 bg-app/55 p-4 backdrop-blur">
-              <p class="text-[10px] tracking-wider text-faint uppercase">官方模板</p>
-              <p class="mt-2 text-2xl font-bold text-ink">{{ templates.length }}</p>
-            </div>
-            <div class="rounded-2xl border border-line/10 bg-app/55 p-4 backdrop-blur">
-              <p class="text-[10px] tracking-wider text-faint uppercase">场景分类</p>
-              <p class="mt-2 text-2xl font-bold text-ink">{{ filters.categories.length }}</p>
-            </div>
-            <div class="rounded-2xl border border-line/10 bg-app/55 p-4 backdrop-blur">
-              <p class="text-[10px] tracking-wider text-faint uppercase">我的收藏</p>
-              <p class="mt-2 text-2xl font-bold text-ink">{{ favorites.size }}</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="mt-10 flex flex-col gap-3 sm:flex-row">
-          <label class="group flex min-w-0 flex-1 items-center gap-3 rounded-2xl border border-line/12 bg-app/75 px-4 py-3 shadow-sm transition focus-within:border-brand1/40 focus-within:ring-4 focus-within:ring-brand1/8">
-            <Search class="h-4.5 w-4.5 shrink-0 text-faint group-focus-within:text-brand1" />
-            <input
-              ref="searchRef"
-              v-model="query"
-              type="search"
-              placeholder="搜索模板、行业或风格"
-              class="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-faint"
-            />
-            <span class="hidden items-center gap-1 rounded-md border border-line/10 bg-ink/[0.04] px-2 py-1 text-[10px] text-faint sm:flex">
-              <Command class="h-3 w-3" /> /
-            </span>
-          </label>
-          <button
-            class="flex items-center justify-center gap-2 rounded-2xl border border-line/12 bg-app/75 px-4 py-3 text-sm font-medium text-sub transition hover:border-brand1/25 hover:text-brand1 lg:hidden"
-            :aria-expanded="mobileFiltersOpen"
-            @click="mobileFiltersOpen = !mobileFiltersOpen"
-          >
-            <SlidersHorizontal class="h-4 w-4" />筛选
-            <span v-if="activeFilterCount" class="rounded-full bg-brand1 px-1.5 py-0.5 text-[10px] text-white">{{ activeFilterCount }}</span>
-          </button>
-        </div>
-      </div>
-    </section>
+    <section class="relative overflow-hidden border-b border-line/8 bg-soft/35"><div class="pointer-events-none absolute -top-40 left-[12%] h-96 w-96 rounded-full bg-brand1/14 blur-3xl" /><div class="pointer-events-none absolute -right-32 -bottom-56 h-[430px] w-[430px] rounded-full bg-brand2/10 blur-3xl" /><div class="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8"><div class="grid items-end gap-10 lg:grid-cols-[minmax(0,1fr)_360px]"><div class="max-w-3xl"><span class="inline-flex items-center gap-2 rounded-full border border-brand1/18 bg-brand1/[0.07] px-3 py-1.5 text-[11px] font-semibold text-brand1"><Sparkles class="h-3.5 w-3.5" />官方精选模板 2.0</span><h1 class="mt-5 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">从经过打磨的起点开始，<span class="text-brand-gradient">更快做出好网站</span></h1><p class="mt-5 max-w-2xl text-sm leading-7 text-mut sm:text-base">24 套响应式模板覆盖商业、内容、专业服务与活动场景。可切换配色变体、应用品牌套件并从相似模板继续探索。</p></div><div class="grid grid-cols-3 gap-3"><div class="rounded-2xl border border-line/10 bg-app/55 p-4"><p class="text-[10px] text-faint">官方模板</p><p class="mt-2 text-2xl font-bold">{{ templates.length }}</p></div><div class="rounded-2xl border border-line/10 bg-app/55 p-4"><p class="text-[10px] text-faint">最近使用</p><p class="mt-2 text-2xl font-bold">{{ recentTemplateIds.length }}</p></div><div class="rounded-2xl border border-line/10 bg-app/55 p-4"><p class="text-[10px] text-faint">我的收藏</p><p class="mt-2 text-2xl font-bold">{{ favorites.size }}</p></div></div></div></div></section>
 
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="sticky top-16 z-20 -mx-4 border-b border-line/8 bg-app/90 px-4 py-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-        <div class="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <button
-            v-for="item in categoryOptions"
-            :key="item"
-            class="shrink-0 rounded-full px-4 py-2 text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand1/50"
-            :class="category === item ? 'bg-brand-gradient text-white shadow-lg shadow-brand1/20' : 'border border-line/10 bg-soft/55 text-mut hover:border-brand1/25 hover:text-ink'"
-            @click="category = item"
-          >
-            {{ item === 'all' ? '全部模板' : item }}
-          </button>
-          <span class="mx-1 hidden h-6 w-px shrink-0 bg-line/10 lg:block" />
-          <div class="ml-auto hidden items-center gap-2 lg:flex">
-            <label class="relative">
-              <span class="sr-only">行业筛选</span>
-              <select v-model="industry" class="appearance-none rounded-xl border border-line/10 bg-soft/55 py-2 pr-8 pl-3 text-xs text-sub outline-none focus:border-brand1/35">
-                <option value="all">全部行业</option>
-                <option v-for="item in filters.industries" :key="item" :value="item">{{ item }}</option>
-              </select>
-              <ChevronDown class="pointer-events-none absolute top-1/2 right-2.5 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
-            </label>
-            <label class="relative">
-              <span class="sr-only">风格筛选</span>
-              <select v-model="style" class="appearance-none rounded-xl border border-line/10 bg-soft/55 py-2 pr-8 pl-3 text-xs text-sub outline-none focus:border-brand1/35">
-                <option value="all">全部风格</option>
-                <option v-for="item in filters.styles" :key="item" :value="item">{{ item }}</option>
-              </select>
-              <ChevronDown class="pointer-events-none absolute top-1/2 right-2.5 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
-            </label>
-            <label class="relative">
-              <span class="sr-only">排序方式</span>
-              <select v-model="sort" class="appearance-none rounded-xl border border-line/10 bg-soft/55 py-2 pr-8 pl-3 text-xs text-sub outline-none focus:border-brand1/35">
-                <option value="featured">精选优先</option>
-                <option value="name">名称排序</option>
-                <option value="type">类型排序</option>
-              </select>
-              <ChevronDown class="pointer-events-none absolute top-1/2 right-2.5 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
-            </label>
-          </div>
-        </div>
+      <div class="sticky top-16 z-20 mt-6 rounded-2xl border border-line/10 bg-app/85 p-3 shadow-lg backdrop-blur-xl"><div class="flex flex-col gap-3 lg:flex-row lg:items-center"><label class="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-line/10 bg-soft/65 px-3.5 py-2.5 focus-within:border-brand1/35"><Search class="h-4 w-4 text-faint" /><input ref="searchRef" v-model="query" placeholder="搜索模板、行业、风格或目标" class="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-faint" /><kbd class="hidden rounded bg-ink/5 px-1.5 py-0.5 text-[9px] text-faint sm:block">/</kbd></label><button class="flex items-center justify-center gap-2 rounded-xl border border-line/10 px-3 py-2.5 text-xs text-sub lg:hidden" @click="mobileFiltersOpen = !mobileFiltersOpen"><SlidersHorizontal class="h-3.5 w-3.5" />筛选<span v-if="activeFilterCount" class="rounded-full bg-brand1 px-1.5 text-[9px] text-white">{{ activeFilterCount }}</span></button><div class="gap-2" :class="mobileFiltersOpen ? 'grid grid-cols-2' : 'hidden lg:flex'"><label class="relative"><select v-model="category" class="w-full appearance-none rounded-xl border border-line/10 bg-soft/65 py-2.5 pr-8 pl-3 text-xs outline-none"><option v-for="item in categoryOptions" :key="item" :value="item">{{ item === 'all' ? '全部分类' : item }}</option></select><ChevronDown class="pointer-events-none absolute top-1/2 right-2.5 h-3.5 w-3.5 -translate-y-1/2 text-faint" /></label><label class="relative"><select v-model="industry" class="w-full appearance-none rounded-xl border border-line/10 bg-soft/65 py-2.5 pr-8 pl-3 text-xs outline-none"><option value="all">全部行业</option><option v-for="item in filters.industries" :key="item">{{ item }}</option></select><ChevronDown class="pointer-events-none absolute top-1/2 right-2.5 h-3.5 w-3.5 -translate-y-1/2 text-faint" /></label><label class="relative"><select v-model="style" class="w-full appearance-none rounded-xl border border-line/10 bg-soft/65 py-2.5 pr-8 pl-3 text-xs outline-none"><option value="all">全部风格</option><option v-for="item in filters.styles" :key="item">{{ item }}</option></select><ChevronDown class="pointer-events-none absolute top-1/2 right-2.5 h-3.5 w-3.5 -translate-y-1/2 text-faint" /></label><label class="relative"><select v-model="sort" class="w-full appearance-none rounded-xl border border-line/10 bg-soft/65 py-2.5 pr-8 pl-3 text-xs outline-none"><option value="featured">精选优先</option><option value="recent">最近使用</option><option value="favorites">只看收藏</option><option value="name">按名称</option><option value="type">按类型</option></select><ChevronDown class="pointer-events-none absolute top-1/2 right-2.5 h-3.5 w-3.5 -translate-y-1/2 text-faint" /></label></div><button :disabled="refreshing" class="hidden rounded-xl border border-line/10 p-2.5 text-faint hover:text-ink lg:block" @click="loadCatalog(true)"><RefreshCw class="h-4 w-4" :class="refreshing && 'animate-spin'" /></button></div></div>
 
-        <div v-if="mobileFiltersOpen" class="mt-3 grid gap-3 rounded-2xl border border-line/10 bg-soft/85 p-4 lg:hidden">
-          <label class="grid gap-1.5 text-xs text-mut">
-            行业
-            <select v-model="industry" class="rounded-xl border border-line/10 bg-app px-3 py-2.5 text-sm text-ink outline-none focus:border-brand1/35">
-              <option value="all">全部行业</option>
-              <option v-for="item in filters.industries" :key="item" :value="item">{{ item }}</option>
-            </select>
-          </label>
-          <label class="grid gap-1.5 text-xs text-mut">
-            风格
-            <select v-model="style" class="rounded-xl border border-line/10 bg-app px-3 py-2.5 text-sm text-ink outline-none focus:border-brand1/35">
-              <option value="all">全部风格</option>
-              <option v-for="item in filters.styles" :key="item" :value="item">{{ item }}</option>
-            </select>
-          </label>
-          <button v-if="activeFilterCount" class="justify-self-start text-xs font-medium text-brand1" @click="resetFilters">清除全部筛选</button>
-        </div>
-      </div>
+      <div v-if="error" class="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-4 text-sm text-amber-600">{{ error }}</div>
+      <div v-if="loading" class="mt-7 grid gap-5 sm:grid-cols-2 xl:grid-cols-3"><div v-for="item in 9" :key="item" class="h-80 animate-pulse rounded-3xl bg-ink/[0.04]" /></div>
+      <section v-else-if="!visible.length" class="mt-8 rounded-3xl border border-dashed border-line/15 p-16 text-center"><LayoutGrid class="mx-auto h-9 w-9 text-faint" /><h2 class="mt-4 text-lg font-semibold">没有匹配的模板</h2><p class="mt-2 text-sm text-mut">调整筛选条件，或恢复查看全部模板。</p><button class="mt-4 text-sm font-semibold text-brand1" @click="resetFilters">重置筛选</button></section>
 
-      <div class="mt-7 flex items-center justify-between gap-4">
-        <div>
-          <h2 class="flex items-center gap-2 text-lg font-semibold text-ink">
-            <LayoutGrid class="h-4.5 w-4.5 text-brand1" />模板目录
-          </h2>
-          <p class="mt-1 text-xs text-faint">找到 {{ filtered.length }} 套符合条件的模板</p>
-        </div>
-        <button v-if="query || activeFilterCount" class="text-xs font-medium text-brand1 hover:underline" @click="resetFilters">重置筛选</button>
-      </div>
-
-      <div v-if="error" class="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-xs leading-5 text-amber-600 dark:text-amber-300">
-        {{ error }}
-      </div>
-
-      <div v-if="loading" class="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-        <div v-for="index in 6" :key="index" class="overflow-hidden rounded-2xl border border-line/8 bg-soft/50">
-          <div class="aspect-[16/11] animate-pulse bg-ink/[0.05]" />
-          <div class="space-y-3 p-4"><div class="h-4 w-2/3 animate-pulse rounded bg-ink/[0.07]" /><div class="h-3 w-full animate-pulse rounded bg-ink/[0.05]" /></div>
-        </div>
-      </div>
-
-      <div v-else-if="filtered.length" class="stagger mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-        <article
-          v-for="template in filtered"
-          :key="template.id"
-          class="group overflow-hidden rounded-2xl border border-line/10 bg-soft/60 transition-all duration-300 hover:-translate-y-1 hover:border-brand1/28 hover:shadow-2xl hover:shadow-brand1/8"
-        >
-          <div class="relative aspect-[16/11] overflow-hidden bg-white">
-            <iframe
-              :srcdoc="previewMap[template.id]"
-              sandbox=""
-              loading="lazy"
-              tabindex="-1"
-              aria-hidden="true"
-              class="pointer-events-none h-[200%] w-[200%] origin-top-left scale-50 border-0"
-              title=""
-            />
-            <div class="absolute inset-0 bg-gradient-to-t from-black/28 via-transparent to-transparent opacity-55" />
-            <div class="absolute top-3 left-3 flex flex-wrap gap-1.5">
-              <span v-if="template.featured" class="inline-flex items-center gap-1 rounded-full bg-white/92 px-2.5 py-1 text-[10px] font-bold text-zinc-900 shadow-sm backdrop-blur">
-                <Sparkles class="h-3 w-3 text-violet-600" />官方精选
-              </span>
-              <span class="rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-medium text-white backdrop-blur">{{ template.dark ? '深色' : '浅色' }}</span>
-            </div>
-            <button
-              class="absolute top-3 right-3 grid h-9 w-9 place-items-center rounded-full bg-white/90 text-zinc-600 opacity-0 shadow-lg backdrop-blur transition-all hover:text-rose-500 focus:opacity-100 group-hover:opacity-100"
-              :class="favorites.has(template.id) && '!opacity-100 text-rose-500'"
-              :aria-label="favorites.has(template.id) ? `取消收藏 ${template.name}` : `收藏 ${template.name}`"
-              @click="toggleFavorite(template)"
-            >
-              <Heart class="h-4 w-4" :fill="favorites.has(template.id) ? 'currentColor' : 'none'" />
-            </button>
-            <div class="absolute inset-x-3 bottom-3 flex translate-y-2 gap-2 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100">
-              <button class="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-white/94 px-3 py-2.5 text-xs font-semibold text-zinc-900 shadow-lg backdrop-blur hover:bg-white" @click="openTemplate(template)">
-                <Eye class="h-3.5 w-3.5" />预览
-              </button>
-              <button class="bg-brand-gradient flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-semibold text-white shadow-lg" @click="openTemplate(template)">
-                使用模板<ArrowRight class="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-          <div class="p-4">
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <h3 class="truncate text-sm font-semibold text-ink">{{ template.name }}</h3>
-                <p class="mt-1 text-[11px] text-faint">{{ typeById(template.siteType)?.name || template.siteType }} · {{ template.industry }}</p>
-              </div>
-              <div class="flex shrink-0 gap-1">
-                <span v-for="color in [template.palette.primary, template.palette.secondary, template.palette.accent]" :key="color" class="h-4 w-4 rounded-full border border-black/5" :style="{ backgroundColor: color }" />
-              </div>
-            </div>
-            <p class="mt-3 line-clamp-2 text-xs leading-5 text-mut">{{ template.description }}</p>
-            <div class="mt-4 flex flex-wrap gap-1.5">
-              <span v-for="tag in template.styleTags" :key="tag" class="rounded-md border border-line/8 bg-ink/[0.035] px-2 py-1 text-[10px] text-faint">{{ tag }}</span>
-            </div>
-          </div>
-        </article>
-      </div>
-
-      <div v-else class="mt-10 flex min-h-80 flex-col items-center justify-center rounded-3xl border border-dashed border-line/15 bg-soft/35 px-6 text-center">
-        <Search class="h-8 w-8 text-faint" />
-        <h3 class="mt-4 text-base font-semibold text-ink">没有找到匹配模板</h3>
-        <p class="mt-2 max-w-md text-sm leading-6 text-mut">尝试减少筛选条件，或者使用更宽泛的行业和风格关键词。</p>
-        <button class="mt-5 rounded-xl border border-brand1/20 bg-brand1/[0.07] px-4 py-2.5 text-sm font-semibold text-brand1" @click="resetFilters">查看全部模板</button>
+      <div v-else class="mt-7 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <article v-for="template in visible" :key="template.id" class="group overflow-hidden rounded-3xl border border-line/10 bg-soft/60 shadow-lg shadow-black/[0.035] transition hover:-translate-y-0.5 hover:border-brand1/25 hover:shadow-xl"><div class="relative h-52 overflow-hidden border-b border-line/8 bg-white"><iframe :srcdoc="previewMap[template.id]" sandbox="" loading="lazy" class="pointer-events-none h-[780px] w-[1440px] origin-top-left scale-[.29]" :title="`${template.name} 缩略图`" /><div class="absolute inset-0 bg-gradient-to-t from-black/15 to-transparent opacity-0 transition group-hover:opacity-100" /><button class="absolute inset-0" :aria-label="`预览 ${template.name}`" @click="openTemplate(template)" /><button class="absolute top-3 right-3 grid h-9 w-9 place-items-center rounded-full border border-white/20 bg-black/35 text-white backdrop-blur" :aria-label="favorites.has(template.id) ? '取消收藏' : '收藏模板'" @click.stop="toggleFavorite(template)"><Heart class="h-4 w-4" :fill="favorites.has(template.id) ? 'currentColor' : 'none'" /></button><span v-if="recentTemplateIds.includes(template.id)" class="absolute top-3 left-3 flex items-center gap-1 rounded-full bg-sky-500/90 px-2.5 py-1 text-[9px] font-semibold text-white"><Clock3 class="h-3 w-3" />最近使用</span></div><div class="p-5"><div class="flex items-start justify-between gap-3"><div><div class="flex flex-wrap gap-1.5"><span class="rounded bg-brand1/10 px-2 py-0.5 text-[9px] text-brand1">{{ typeById(template.siteType)?.name || template.siteType }}</span><span v-if="template.featured" class="rounded bg-violet-500/10 px-2 py-0.5 text-[9px] text-violet-500">精选</span></div><h2 class="mt-3 text-lg font-semibold">{{ template.name }}</h2></div><span class="text-[10px] text-faint">{{ template.industry }}</span></div><p class="mt-2 line-clamp-2 text-xs leading-5 text-mut">{{ template.description }}</p><div class="mt-4 flex flex-wrap gap-1.5"><span v-for="tag in template.styleTags" :key="tag" class="rounded-full border border-line/10 px-2 py-1 text-[9px] text-faint">{{ tag }}</span></div><button class="mt-5 flex w-full items-center justify-center gap-1.5 rounded-xl border border-line/10 bg-app/45 px-3 py-2.5 text-xs font-semibold text-sub hover:border-brand1/25 hover:text-brand1" @click="openTemplate(template)"><Eye class="h-3.5 w-3.5" />预览并使用</button></div></article>
       </div>
     </div>
 
-    <Teleport to="body">
-      <Transition name="template-dialog">
-        <div v-if="selected" class="fixed inset-0 z-[110] bg-black/65 p-0 backdrop-blur-sm sm:p-3 lg:p-5" @mousedown.self="closeTemplate">
-          <section
-            ref="dialogRef"
-            role="dialog"
-            aria-modal="true"
-            :aria-label="`预览模板 ${selected.name}`"
-            tabindex="-1"
-            class="mx-auto flex h-full max-w-[1700px] flex-col overflow-hidden bg-app text-ink outline-none sm:rounded-2xl sm:border sm:border-white/10 sm:shadow-2xl"
-          >
-            <header class="flex min-h-16 items-center gap-3 border-b border-line/10 bg-soft/92 px-3 py-2 backdrop-blur sm:px-5">
-              <button class="rounded-xl p-2 text-faint transition hover:bg-ink/5 hover:text-ink focus-visible:ring-2 focus-visible:ring-brand1/50" aria-label="关闭模板预览" @click="closeTemplate">
-                <X class="h-5 w-5" />
-              </button>
-              <div class="min-w-0">
-                <h2 class="truncate text-sm font-semibold text-ink">{{ selected.name }}</h2>
-                <p class="truncate text-[11px] text-faint">{{ selectedTypeName }} · {{ selected.industry }}</p>
-              </div>
-              <div class="ml-auto hidden items-center gap-1 rounded-xl bg-ink/[0.045] p-1 sm:flex" role="group" aria-label="预览设备">
-                <button
-                  v-for="device in [
-                    { id: 'desktop', label: '桌面', icon: Monitor },
-                    { id: 'tablet', label: '平板', icon: Tablet },
-                    { id: 'mobile', label: '手机', icon: Smartphone },
-                  ]"
-                  :key="device.id"
-                  class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs transition focus-visible:ring-2 focus-visible:ring-brand1/45"
-                  :class="viewport === device.id ? 'bg-soft font-semibold text-ink shadow-sm' : 'text-faint hover:text-ink'"
-                  :aria-pressed="viewport === device.id"
-                  @click="viewport = device.id as typeof viewport"
-                >
-                  <component :is="device.icon" class="h-3.5 w-3.5" /><span class="hidden lg:inline">{{ device.label }}</span>
-                </button>
-              </div>
-              <button
-                :disabled="creating"
-                class="bg-brand-gradient flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-brand1/20 disabled:cursor-wait disabled:opacity-60 sm:text-sm"
-                @click="createFromSelected"
-              >
-                <Loader2 v-if="creating" class="h-4 w-4 animate-spin" />
-                <WandSparkles v-else class="h-4 w-4" />
-                <span class="hidden sm:inline">{{ isAuthenticated ? '创建项目' : '登录并使用' }}</span>
-                <span class="sm:hidden">使用</span>
-              </button>
-            </header>
-
-            <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
-              <div class="relative min-h-[48vh] flex-1 overflow-auto bg-ink/[0.045] p-3 sm:p-5 lg:min-h-0 lg:p-7">
-                <div class="pointer-events-none absolute inset-0 opacity-35 [background-image:radial-gradient(circle_at_1px_1px,currentColor_1px,transparent_0)] [background-size:22px_22px] text-line/20" />
-                <div class="relative mx-auto h-full min-h-[540px] overflow-hidden rounded-xl border border-line/14 bg-white shadow-2xl shadow-black/20 transition-[max-width] duration-300" :style="{ maxWidth: previewWidth }">
-                  <iframe :srcdoc="previewHtml" sandbox="" referrerpolicy="no-referrer" class="h-full min-h-[540px] w-full border-0" :title="`${selected.name} 实时预览`" />
-                </div>
-              </div>
-
-              <aside class="w-full shrink-0 overflow-y-auto border-t border-line/10 bg-soft/65 lg:w-[390px] lg:border-t-0 lg:border-l">
-                <div class="space-y-7 p-5 sm:p-6">
-                  <section>
-                    <div class="flex items-center justify-between gap-3">
-                      <div>
-                        <p class="text-[10px] font-semibold tracking-wider text-brand1 uppercase">模板说明</p>
-                        <h3 class="mt-1 text-lg font-semibold text-ink">{{ selected.name }}</h3>
-                      </div>
-                      <button class="grid h-10 w-10 place-items-center rounded-full border border-line/10 text-faint hover:text-rose-500" :aria-label="favorites.has(selected.id) ? '取消收藏' : '收藏模板'" @click="toggleFavorite(selected)">
-                        <Heart class="h-4.5 w-4.5" :fill="favorites.has(selected.id) ? 'currentColor' : 'none'" :class="favorites.has(selected.id) && 'text-rose-500'" />
-                      </button>
-                    </div>
-                    <p class="mt-3 text-sm leading-6 text-mut">{{ selected.description }}</p>
-                    <div class="mt-4 flex flex-wrap gap-1.5">
-                      <span v-for="tag in selected.styleTags" :key="tag" class="rounded-lg border border-line/8 bg-app/50 px-2.5 py-1 text-[10px] text-faint">{{ tag }}</span>
-                    </div>
-                  </section>
-
-                  <section class="border-t border-line/10 pt-6">
-                    <div class="flex items-center gap-2">
-                      <Palette class="h-4 w-4 text-brand1" />
-                      <h3 class="text-sm font-semibold text-ink">品牌套件</h3>
-                    </div>
-                    <p class="mt-1 text-[11px] leading-5 text-faint">选择后实时更新预览，创建项目时自动生成品牌化首版。</p>
-                    <label class="mt-3 block">
-                      <span class="sr-only">选择品牌套件</span>
-                      <select v-model="selectedBrandKitId" :disabled="!isAuthenticated" class="w-full rounded-xl border border-line/10 bg-app/65 px-3 py-2.5 text-sm text-ink outline-none focus:border-brand1/40 disabled:cursor-not-allowed disabled:opacity-55">
-                        <option value="">使用模板原始风格</option>
-                        <option v-for="kit in brandKits" :key="kit.id" :value="kit.id">{{ kit.name }}{{ kit.isDefault ? ' · 默认' : '' }}</option>
-                      </select>
-                    </label>
-                    <RouterLink v-if="isAuthenticated" to="/brand" class="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-brand1 hover:underline">
-                      管理品牌套件<ArrowRight class="h-3 w-3" />
-                    </RouterLink>
-                    <button v-else class="mt-2 text-[11px] font-medium text-brand1 hover:underline" @click="showAuth">登录后使用品牌套件</button>
-                  </section>
-
-                  <section class="border-t border-line/10 pt-6">
-                    <div class="flex items-center gap-2">
-                      <SlidersHorizontal class="h-4 w-4 text-brand2" />
-                      <h3 class="text-sm font-semibold text-ink">快速定制内容</h3>
-                    </div>
-                    <p class="mt-1 text-[11px] leading-5 text-faint">所有字段都会实时反映在预览中，之后仍可在项目编辑器继续修改。</p>
-                    <div class="mt-4 space-y-4">
-                      <label v-for="field in selected.variables" :key="field.key" class="grid gap-1.5">
-                        <span class="flex items-center justify-between text-xs font-medium text-sub">
-                          {{ field.label }}
-                          <span class="font-normal text-faint">{{ (variables[field.key] || '').length }}/{{ field.maxLength }}</span>
-                        </span>
-                        <textarea
-                          v-if="field.type === 'textarea'"
-                          v-model="variables[field.key]"
-                          rows="4"
-                          :maxlength="field.maxLength"
-                          :placeholder="field.placeholder"
-                          class="resize-y rounded-xl border border-line/10 bg-app/65 px-3 py-2.5 text-sm leading-6 text-ink outline-none transition focus:border-brand1/40 focus:ring-4 focus:ring-brand1/7"
-                        />
-                        <input
-                          v-else
-                          v-model="variables[field.key]"
-                          :maxlength="field.maxLength"
-                          :placeholder="field.placeholder"
-                          class="rounded-xl border border-line/10 bg-app/65 px-3 py-2.5 text-sm text-ink outline-none transition focus:border-brand1/40 focus:ring-4 focus:ring-brand1/7"
-                        />
-                      </label>
-                    </div>
-                  </section>
-
-                  <section class="rounded-2xl border border-brand1/16 bg-brand1/[0.055] p-4">
-                    <div class="flex gap-3">
-                      <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand1/12 text-brand1"><Check class="h-4 w-4" /></span>
-                      <div>
-                        <h3 class="text-xs font-semibold text-ink">安全创建新项目</h3>
-                        <p class="mt-1 text-[11px] leading-5 text-mut">模板会成为项目第 1 版。后续编辑、AI 迭代与品牌调整都会创建新版本，不覆盖历史。</p>
-                      </div>
-                    </div>
-                  </section>
-
-                  <button :disabled="creating" class="bg-brand-gradient flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-brand1/20 transition hover:brightness-110 disabled:cursor-wait disabled:opacity-60" @click="createFromSelected">
-                    <Loader2 v-if="creating" class="h-4 w-4 animate-spin" />
-                    <WandSparkles v-else class="h-4 w-4" />
-                    {{ isAuthenticated ? '使用此模板创建项目' : '登录后使用此模板' }}
-                  </button>
-                </div>
-              </aside>
-            </div>
-          </section>
-        </div>
-      </Transition>
-    </Teleport>
+    <Teleport to="body"><Transition name="modal"><div v-if="selected" class="fixed inset-0 z-[150] bg-black/55 p-2 backdrop-blur-sm sm:p-5"><section ref="dialogRef" role="dialog" aria-modal="true" tabindex="-1" class="mx-auto flex h-full max-w-[1600px] flex-col overflow-hidden rounded-3xl border border-white/10 bg-app shadow-2xl"><header class="flex items-center gap-3 border-b border-line/10 px-4 py-3 sm:px-5"><button class="rounded-lg p-2 text-faint hover:bg-ink/5 hover:text-ink" aria-label="关闭模板预览" @click="closeTemplate"><X class="h-5 w-5" /></button><div class="min-w-0"><h2 class="truncate text-sm font-semibold">{{ selected.name }}</h2><p class="text-[10px] text-faint">{{ selectedTypeName }} · {{ selected.industry }}</p></div><div class="ml-auto hidden rounded-xl bg-ink/[0.04] p-1 sm:flex"><button v-for="item in [{id:'desktop',label:'桌面',icon:Monitor},{id:'tablet',label:'平板',icon:Tablet},{id:'mobile',label:'手机',icon:Smartphone}]" :key="item.id" class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px]" :class="viewport === item.id ? 'bg-soft font-semibold text-brand1 shadow' : 'text-faint'" @click="viewport = item.id as typeof viewport"><component :is="item.icon" class="h-3.5 w-3.5" />{{ item.label }}</button></div><button class="rounded-xl border border-line/10 p-2.5" :class="favorites.has(selected.id) ? 'text-red-500' : 'text-faint'" @click="toggleFavorite(selected)"><Heart class="h-4 w-4" :fill="favorites.has(selected.id) ? 'currentColor' : 'none'" /></button></header>
+      <div class="flex min-h-0 flex-1"><aside class="hidden w-[360px] shrink-0 overflow-y-auto border-r border-line/10 bg-soft/55 p-5 lg:block"><div><h3 class="text-xs font-semibold">快速定制</h3><p class="mt-1 text-[10px] text-faint">修改内容和配色后，预览会立即更新。</p></div><div class="mt-4 grid grid-cols-3 gap-2"><button v-for="variant in [{id:'original',label:'原始'},{id:'cool',label:'冷色'},{id:'warm',label:'暖色'}]" :key="variant.id" class="rounded-xl border px-2 py-2.5 text-[10px]" :class="colorVariant === variant.id ? 'border-brand1/30 bg-brand1/10 font-semibold text-brand1' : 'border-line/10 text-faint'" @click="colorVariant = variant.id as typeof colorVariant">{{ variant.label }}</button></div><label v-if="brandKits.length" class="mt-4 block text-[10px] font-semibold text-sub">品牌套件<select v-model="selectedBrandKitId" class="mt-2 w-full rounded-xl border border-line/10 bg-app/65 px-3 py-2.5 text-xs outline-none"><option value="">不应用品牌</option><option v-for="kit in brandKits" :key="kit.id" :value="kit.id">{{ kit.name }}{{ kit.isDefault ? ' · 默认' : '' }}</option></select></label><div class="mt-5 grid gap-4"><label v-for="variable in selected.variables" :key="variable.key" class="text-[10px] font-semibold text-sub">{{ variable.label }}<textarea v-if="variable.type === 'textarea'" v-model="variables[variable.key]" :maxlength="variable.maxLength" rows="4" class="mt-2 w-full resize-y rounded-xl border border-line/10 bg-app/65 p-3 text-xs leading-5 outline-none" /><input v-else v-model="variables[variable.key]" :maxlength="variable.maxLength" class="mt-2 w-full rounded-xl border border-line/10 bg-app/65 px-3 py-2.5 text-xs outline-none" /></label></div><button :disabled="creating" class="bg-brand-gradient mt-5 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" @click="createFromSelected"><Loader2 v-if="creating" class="h-4 w-4 animate-spin" /><WandSparkles v-else class="h-4 w-4" />{{ creating ? '正在创建项目' : '使用此模板创建项目' }}</button><div class="mt-6 border-t border-line/10 pt-5"><div class="flex items-center justify-between"><h3 class="text-xs font-semibold">相似模板</h3><span class="text-[9px] text-faint">根据场景与风格</span></div><div class="mt-3 grid gap-2"><button v-for="item in similarTemplates" :key="item.id" class="rounded-xl border border-line/10 bg-app/45 p-3 text-left hover:border-brand1/25" @click="openTemplate(item)"><strong class="text-xs">{{ item.name }}</strong><span class="mt-1 block text-[9px] text-faint">{{ item.industry }} · {{ item.styleTags.slice(0,2).join('、') }}</span></button></div></div></aside><main class="min-w-0 flex-1 overflow-auto bg-ink/[0.04] p-3 sm:p-5"><div class="mx-auto h-full min-h-[680px] overflow-hidden rounded-xl border border-line/12 bg-white shadow-2xl transition-all" :style="{ maxWidth: previewWidth }"><iframe :srcdoc="previewHtml" sandbox="allow-scripts" class="h-full min-h-[680px] w-full" title="模板实时预览" /></div></main></div><footer class="flex items-center justify-between border-t border-line/10 bg-soft/70 px-4 py-3 lg:hidden"><div class="text-[10px] text-faint">{{ selected.variables.length }} 个可编辑字段 · {{ colorVariant === 'original' ? '原始配色' : colorVariant === 'cool' ? '冷色变体' : '暖色变体' }}</div><button class="bg-brand-gradient flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold text-white" @click="createFromSelected"><ArrowRight class="h-3.5 w-3.5" />创建项目</button></footer></section></div></Transition></Teleport>
   </main>
 </template>
 
 <style scoped>
-.template-dialog-enter-active,
-.template-dialog-leave-active { transition: opacity .18s ease; }
-.template-dialog-enter-active section,
-.template-dialog-leave-active section { transition: transform .22s cubic-bezier(.22,1,.36,1), opacity .18s ease; }
-.template-dialog-enter-from,
-.template-dialog-leave-to { opacity: 0; }
-.template-dialog-enter-from section,
-.template-dialog-leave-to section { transform: translateY(12px) scale(.992); opacity: 0; }
+.modal-enter-active,.modal-leave-active{transition:opacity .18s ease}.modal-enter-from,.modal-leave-to{opacity:0}
 </style>
