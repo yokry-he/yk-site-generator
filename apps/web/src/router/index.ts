@@ -12,6 +12,7 @@ export const router = createRouter({
     { path: '/projects/:id', name: 'project-detail', component: () => import('../pages/ProjectPage.vue') },
     { path: '/brand', name: 'brand-kits', component: () => import('../pages/BrandKitsPage.vue') },
     { path: '/usage', name: 'usage', component: () => import('../pages/QuotaPage.vue') },
+    { path: '/admin', name: 'admin', component: () => import('../pages/AdminPage.vue') },
     { path: '/pricing', name: 'pricing', component: () => import('../pages/PricingPage.vue') },
     { path: '/docs', name: 'docs', component: () => import('../pages/DocsPage.vue') },
     { path: '/changelog', name: 'changelog', component: () => import('../pages/ChangelogPage.vue') },
