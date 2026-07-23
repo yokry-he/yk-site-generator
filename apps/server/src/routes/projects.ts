@@ -215,12 +215,13 @@ projects.post('/:id/duplicate', async (c) => {
     const idMap = new Map<string, string>()
     const versions = sourceVersions.map((sourceVersion) => {
       const id = randomUUID()
+      const parentVersionId = sourceVersion.parentVersionId
       idMap.set(sourceVersion.id, id)
       const version: ProjectVersionRecord = {
         ...structuredClone(sourceVersion),
         id,
         projectId: project.id,
-        parentVersionId: sourceVersion.parentVersionId ? idMap.get(sourceVersion.parentVersionId) : undefined,
+        parentVersionId: parentVersionId ? idMap.get(parentVersionId) : undefined,
         createdAt: now,
       }
       data.projectVersions.push(version)
