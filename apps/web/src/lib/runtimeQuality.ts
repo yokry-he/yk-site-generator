@@ -51,8 +51,19 @@ export function runtimeAuditBridgeSource(): string {
       focusable.forEach((el)=>{const style=getComputedStyle(el);if(style.outlineStyle==='none' && style.boxShadow==='none')add('suggestion','accessibility','焦点样式可能不明显','键盘用户聚焦时可能缺少清晰的视觉提示。',el);});
       parent.postMessage({source:'siteforge-runtime-quality',type:'${RUNTIME_AUDIT_RESULT}',payload:{viewport:{width:innerWidth,height:innerHeight,scrollWidth:root.scrollWidth,scrollHeight:root.scrollHeight},issues:issues.slice(0,120),measuredAt:new Date().toISOString()}},'*');
     };
-    addEventListener('message',(event)=>{if(event.data?.source==='siteforge-runtime-quality-parent'&&event.data?.type==='${RUNTIME_AUDIT_REQUEST}')requestAnimationFrame(()=>requestAnimationFrame(audit));});
+    addEventListener('message',(event)=>{if(event.data?.source==='siteforge-runtime-quality-parent'&&event.data?.type==='${RUNTIME_AUDIT_REQUEST}')requestAnimationFrame(()=>requestAnimationFrame(audit));if(event.data?.source==='siteforge-runtime-quality-parent'&&event.data?.type==='focus-selector'&&event.data?.selector){const el=document.querySelector(event.data.selector);el?.scrollIntoView({behavior:'smooth',block:'center'});el?.animate([{outline:'3px solid #ef4444',outlineOffset:'4px'},{outline:'0 solid transparent',outlineOffset:'10px'}],{duration:1800,easing:'ease-out'});}});
   })();`
+}
+
+export function buildRuntimeAuditPreview(html: string): string {
+  const document = new DOMParser().parseFromString(html, 'text/html')
+  document.getElementById('siteforge-runtime-quality-bridge')?.remove()
+  const script = document.createElement('script')
+  script.id = 'siteforge-runtime-quality-bridge'
+  script.textContent = runtimeAuditBridgeSource()
+  document.body.appendChild(script)
+  const doctype = /^\s*<!doctype[^>]*>/i.exec(html)?.[0] ?? '<!DOCTYPE html>'
+  return `${doctype}\n${document.documentElement.outerHTML}`
 }
 
 export function runRuntimeAudit(iframe: HTMLIFrameElement, timeoutMs = 5_000): Promise<RuntimeQualityReport> {
