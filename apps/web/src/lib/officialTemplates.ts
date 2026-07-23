@@ -30,6 +30,17 @@ export async function listOfficialTemplates(): Promise<OfficialTemplateCatalogRe
   return response.json() as Promise<OfficialTemplateCatalogResponse>
 }
 
+export async function listTemplateFavorites(): Promise<string[]> {
+  const response = await ensureOk(await authFetch('/api/templates/favorites'))
+  return ((await response.json()) as { favoriteTemplateIds: string[] }).favoriteTemplateIds
+}
+
+export async function setTemplateFavorite(templateId: string, favorite: boolean): Promise<void> {
+  await ensureOk(await authFetch(`/api/templates/${encodeURIComponent(templateId)}/favorite`, {
+    method: favorite ? 'PUT' : 'DELETE',
+  }))
+}
+
 export async function useOfficialTemplate(
   templateId: string,
   input: {
