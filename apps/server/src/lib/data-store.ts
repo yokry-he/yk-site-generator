@@ -35,6 +35,8 @@ export interface ProjectRecord {
   title: string
   siteType: string
   requirement: string
+  /** 官方模板来源；手动生成项目为空。 */
+  templateId?: string
   createdAt: string
   updatedAt: string
 }
@@ -93,8 +95,6 @@ export interface AppData {
   brandKits: BrandKitRecord[]
 }
 
-type StoredAppData = Omit<Partial<AppData>, 'schemaVersion'> & { schemaVersion?: 1 | 2 }
-
 const emptyData = (): AppData => ({
   schemaVersion: 2,
   users: [],
@@ -117,7 +117,17 @@ function cloneData(data: AppData): AppData {
 async function readFromDisk(): Promise<AppData> {
   try {
     const raw = await readFile(env.DATA_STORAGE_FILE, 'utf8')
-    const parsed = JSON.parse(raw) as StoredAppData
+    const parsed = JSON.parse(raw) as {
+      schemaVersion?: number
+      users?: UserRecord[]
+      verificationCodes?: VerificationCodeRecord[]
+      sessions?: SessionRecord[]
+      projects?: ProjectRecord[]
+      projectVersions?: ProjectVersionRecord[]
+      usage?: UsageRecord[]
+      publications?: PublicationRecord[]
+      brandKits?: BrandKitRecord[]
+    }
     if (parsed.schemaVersion !== 1 && parsed.schemaVersion !== 2) throw new Error('UNSUPPORTED_DATA_SCHEMA')
     return {
       schemaVersion: 2,
