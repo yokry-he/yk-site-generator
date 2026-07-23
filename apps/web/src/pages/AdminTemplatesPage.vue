@@ -40,6 +40,7 @@ const selected = ref<AdminTemplate | null>(null)
 const draftStatus = ref<AdminTemplate['status']>('published')
 const draftFeatured = ref(false)
 const draftSortOrder = ref(100)
+const templateStatusOptions: AdminTemplate['status'][] = ['published', 'draft', 'archived']
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 const canPublish = computed(() => hasPermission('templates.publish'))
@@ -48,6 +49,13 @@ const dirty = computed(() => Boolean(selected.value) && (
   || draftFeatured.value !== selected.value?.featured
   || draftSortOrder.value !== selected.value?.sortOrder
 ))
+const summaryCards = computed(() => [
+  { label: '全部模板', value: summary.value.total },
+  { label: '已发布', value: summary.value.published },
+  { label: '草稿', value: summary.value.draft },
+  { label: '已归档', value: summary.value.archived },
+  { label: '精选', value: summary.value.featured },
+])
 
 function messageOf(error: unknown): string {
   return error instanceof ApiError || error instanceof Error ? error.message : '操作失败，请稍后重试'
@@ -163,16 +171,14 @@ onMounted(() => void load())
         <div class="flex items-center gap-2">
           <span v-if="!canPublish" class="rounded-full bg-sky-500/10 px-3 py-1.5 text-[10px] font-semibold text-sky-500">只读模式</span>
           <button :disabled="loading" class="flex items-center gap-2 rounded-xl border border-line/12 bg-soft/55 px-3.5 py-2.5 text-xs font-semibold text-sub disabled:opacity-50" @click="load(true)">
-            <RefreshCw class="h-3.5 w-3.5" :class="loading && 'animate-spin'" />刷新
+            <RefreshCw class="h-3.5 w-3.5" :class="loading ? 'animate-spin' : ''" />刷新
           </button>
         </div>
       </header>
 
       <div class="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <article v-for="item in [
-          ['全部模板', summary.total], ['已发布', summary.published], ['草稿', summary.draft], ['已归档', summary.archived], ['精选', summary.featured],
-        ]" :key="String(item[0])" class="rounded-2xl border border-line/10 bg-soft/60 p-4">
-          <p class="text-[10px] font-medium text-faint">{{ item[0] }}</p><p class="mt-2 text-2xl font-bold">{{ item[1] }}</p>
+        <article v-for="item in summaryCards" :key="item.label" class="rounded-2xl border border-line/10 bg-soft/60 p-4">
+          <p class="text-[10px] font-medium text-faint">{{ item.label }}</p><p class="mt-2 text-2xl font-bold">{{ item.value }}</p>
         </article>
       </div>
 
@@ -195,7 +201,7 @@ onMounted(() => void load())
                 <td class="px-4 py-4"><div class="flex items-center gap-3"><span class="grid h-10 w-10 place-items-center rounded-xl bg-brand1/10 text-brand1"><LayoutTemplate class="h-4.5 w-4.5" /></span><div><p class="text-xs font-semibold">{{ item.name }}</p><p class="mt-1 text-[10px] text-faint">{{ item.industry }} · {{ item.siteType }}</p></div></div></td>
                 <td class="px-4 py-4"><div class="flex flex-wrap items-center gap-2"><span class="rounded-md px-2 py-1 text-[10px] font-semibold" :class="statusMeta(item.status).class">{{ statusMeta(item.status).label }}</span><span v-if="item.featured" class="flex items-center gap-1 rounded-md bg-violet-500/10 px-2 py-1 text-[10px] font-semibold text-violet-500"><Sparkles class="h-3 w-3" />精选</span></div></td>
                 <td class="px-4 py-4"><p class="text-xs font-semibold">{{ item.useCount }} 次创建</p><p class="mt-1 text-[10px] text-faint">{{ item.publicationCount }} 个已发布项目</p></td>
-                <td class="px-4 py-4"><p class="text-xs font-semibold" :class="item.negativeFeedbackCount ? 'text-amber-500' : 'text-emerald-500'">{{ item.negativeFeedbackCount }} 条负向反馈</p><p class="mt-1 text-[10px] text-faint">排序权重 {{ item.sortOrder }}</p></td>
+                <td class="px-4 py-4"><p class="text-xs font-semibold" :class="item.negativeFeedbackCount > 0 ? 'text-amber-500' : 'text-emerald-500'">{{ item.negativeFeedbackCount }} 条负向反馈</p><p class="mt-1 text-[10px] text-faint">排序权重 {{ item.sortOrder }}</p></td>
                 <td class="px-4 py-4"><p class="text-xs text-sub">{{ formatDate(item.operationUpdatedAt) }}</p><p class="mt-1 text-[10px] text-faint">配置版本 {{ item.operationVersion }}</p></td>
                 <td class="px-4 py-4 text-right"><button class="inline-flex items-center gap-1.5 rounded-lg border border-line/10 px-3 py-2 text-[10px] font-semibold text-sub hover:border-brand1/25 hover:text-brand1" @click="openTemplate(item)"><SlidersHorizontal class="h-3.5 w-3.5" />{{ canPublish ? '管理' : '查看' }}</button></td>
               </tr>
@@ -212,9 +218,9 @@ onMounted(() => void load())
           <aside role="dialog" aria-modal="true" aria-label="模板运营详情" class="absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-line/10 bg-app shadow-2xl">
             <header class="flex items-start justify-between gap-4 border-b border-line/10 p-5 sm:p-6"><div><p class="text-[10px] font-semibold tracking-wider text-brand1 uppercase">Template Operations</p><h2 class="mt-2 text-xl font-bold">{{ selected.name }}</h2><p class="mt-1 text-xs text-mut">{{ selected.description }}</p></div><button class="rounded-lg p-2 text-faint hover:bg-ink/5 hover:text-ink" aria-label="关闭" @click="closeDrawer"><X class="h-5 w-5" /></button></header>
             <div class="flex-1 space-y-6 overflow-y-auto p-5 sm:p-6">
-              <section><h3 class="text-xs font-semibold">公开状态</h3><div class="mt-3 grid grid-cols-3 gap-2"><button v-for="option in ['published','draft','archived'] as const" :key="option" :disabled="!canPublish" class="rounded-xl border px-3 py-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50" :class="draftStatus === option ? 'border-brand1/40 bg-brand1/10 text-brand1' : 'border-line/10 bg-soft/45 text-mut'" @click="draftStatus = option">{{ statusMeta(option).label }}</button></div><p class="mt-2 text-[10px] leading-5 text-faint">草稿与归档状态会立即从公开目录、预览接口和创建项目接口隐藏。</p></section>
+              <section><h3 class="text-xs font-semibold">公开状态</h3><div class="mt-3 grid grid-cols-3 gap-2"><button v-for="option in templateStatusOptions" :key="option" :disabled="!canPublish" class="rounded-xl border px-3 py-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50" :class="draftStatus === option ? 'border-brand1/40 bg-brand1/10 text-brand1' : 'border-line/10 bg-soft/45 text-mut'" @click="draftStatus = option">{{ statusMeta(option).label }}</button></div><p class="mt-2 text-[10px] leading-5 text-faint">草稿与归档状态会立即从公开目录、预览接口和创建项目接口隐藏。</p></section>
               <section class="grid gap-4 sm:grid-cols-2"><label class="rounded-2xl border border-line/10 bg-soft/50 p-4"><span class="flex items-center justify-between gap-3"><span><strong class="block text-xs">精选模板</strong><small class="mt-1 block text-[10px] text-faint">在模板中心优先展示</small></span><input v-model="draftFeatured" type="checkbox" :disabled="!canPublish" class="h-5 w-5 accent-violet-500" /></span></label><label class="rounded-2xl border border-line/10 bg-soft/50 p-4"><span class="text-xs font-semibold">排序权重</span><input v-model.number="draftSortOrder" type="number" min="0" max="999" :disabled="!canPublish" class="mt-2 w-full rounded-xl border border-line/10 bg-app/60 px-3 py-2.5 text-sm outline-none focus:border-brand1/35" /><small class="mt-1 block text-[10px] text-faint">数字越小越靠前</small></label></section>
-              <section class="rounded-2xl border border-line/10 bg-soft/50 p-4"><h3 class="text-xs font-semibold">表现与质量</h3><div class="mt-4 grid grid-cols-3 gap-3 text-center"><div><strong class="text-lg">{{ selected.useCount }}</strong><p class="mt-1 text-[9px] text-faint">创建项目</p></div><div><strong class="text-lg">{{ selected.publicationCount }}</strong><p class="mt-1 text-[9px] text-faint">发布站点</p></div><div><strong class="text-lg" :class="selected.negativeFeedbackCount && 'text-amber-500'">{{ selected.negativeFeedbackCount }}</strong><p class="mt-1 text-[9px] text-faint">负向反馈</p></div></div></section>
+              <section class="rounded-2xl border border-line/10 bg-soft/50 p-4"><h3 class="text-xs font-semibold">表现与质量</h3><div class="mt-4 grid grid-cols-3 gap-3 text-center"><div><strong class="text-lg">{{ selected.useCount }}</strong><p class="mt-1 text-[9px] text-faint">创建项目</p></div><div><strong class="text-lg">{{ selected.publicationCount }}</strong><p class="mt-1 text-[9px] text-faint">发布站点</p></div><div><strong class="text-lg" :class="selected.negativeFeedbackCount > 0 ? 'text-amber-500' : ''">{{ selected.negativeFeedbackCount }}</strong><p class="mt-1 text-[9px] text-faint">负向反馈</p></div></div></section>
               <section class="rounded-2xl border border-line/10 bg-soft/50 p-4"><div class="flex items-center justify-between"><div><h3 class="text-xs font-semibold">用户侧预览</h3><p class="mt-1 text-[10px] text-faint">只有已发布模板可通过公开接口访问。</p></div><RouterLink v-if="selected.status === 'published'" to="/templates" class="flex items-center gap-1.5 rounded-lg border border-line/10 px-3 py-2 text-[10px] font-semibold text-brand1"><Eye class="h-3.5 w-3.5" />打开模板中心</RouterLink><Archive v-else class="h-4 w-4 text-faint" /></div></section>
             </div>
             <footer class="flex items-center justify-between gap-3 border-t border-line/10 bg-soft/35 p-5 sm:p-6"><div class="text-[10px] text-faint"><span v-if="dirty" class="font-semibold text-amber-500">有未保存修改</span><span v-else>配置版本 {{ selected.operationVersion }}</span></div><div class="flex gap-2"><button class="rounded-xl border border-line/10 px-4 py-2.5 text-sm text-sub" @click="closeDrawer">关闭</button><button v-if="canPublish" :disabled="!dirty || saving" class="bg-brand-gradient flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-45" @click="save"><Loader2 v-if="saving" class="h-4 w-4 animate-spin" /><BadgeCheck v-else class="h-4 w-4" />保存设置</button></div></footer>
