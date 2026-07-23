@@ -46,10 +46,6 @@ function publicTemplate(template: ReturnType<typeof operatedTemplate>) {
   }
 }
 
-function anonymousIdentity(c: Parameters<typeof templates.get>[0] extends never ? never : never): string {
-  return String(c)
-}
-
 function requestIdentity(c: { req: { header(name: string): string | undefined } }): string {
   return c.req.header('x-anonymous-id')
     || c.req.header('cf-connecting-ip')
