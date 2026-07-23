@@ -1,15 +1,26 @@
 import { authFetch } from '../composables/useAuth'
 import { ensureOk } from './api'
 
+export interface QualitySummary {
+  total: number
+  positive: number
+  negative: number
+  negativeRate: number
+  open: number
+  topCategories: Array<{ category: string; count: number }>
+}
+
 export interface AdminOverview {
   users: { total: number; active: number; suspended: number; admins: number }
   projects: { total: number; versions: number; fromTemplates: number }
   publications: { total: number; published: number; offline: number }
   assets: { brandKits: number; officialTemplates: number }
   usage: { last30Days: number; byAction: Record<string, number>; daily: Array<{ date: string; value: number }> }
+  quality: QualitySummary
   operations: { audit24h: number; errors24h: number; slow24h: number }
   recentEvents: SystemEvent[]
   recentAudit: AuditLog[]
+  recentFeedback: AdminFeedback[]
 }
 
 export interface AdminUser {
@@ -55,11 +66,36 @@ export interface SystemEvent {
   createdAt: string
 }
 
+export interface AdminFeedback {
+  id: string
+  userId: string
+  projectId: string
+  versionId: string
+  sentiment: 'positive' | 'negative'
+  categories: string[]
+  message?: string
+  siteType: string
+  model?: string
+  promptVersion?: string
+  metadata?: Record<string, unknown>
+  status: 'open' | 'reviewed' | 'resolved' | 'dismissed'
+  createdAt: string
+  updatedAt: string
+}
+
 export interface HealthComponent {
   id: string
   name: string
   status: 'operational' | 'not_configured' | 'fallback' | 'degraded'
   detail: string
+}
+
+function queryString(input: Record<string, string | number | undefined>): string {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(input)) {
+    if (value !== undefined && value !== '') params.set(key, String(value))
+  }
+  return params.toString()
 }
 
 export async function getAdminOverview(): Promise<AdminOverview> {
@@ -74,11 +110,7 @@ export async function listAdminUsers(input: {
   page?: number
   limit?: number
 } = {}): Promise<{ users: AdminUser[]; pagination: { page: number; limit: number; total: number; pages: number } }> {
-  const params = new URLSearchParams()
-  for (const [key, value] of Object.entries(input)) {
-    if (value !== undefined && value !== '') params.set(key, String(value))
-  }
-  const response = await ensureOk(await authFetch(`/api/admin/users?${params.toString()}`))
+  const response = await ensureOk(await authFetch(`/api/admin/users?${queryString(input)}`))
   return response.json() as Promise<{ users: AdminUser[]; pagination: { page: number; limit: number; total: number; pages: number } }>
 }
 
@@ -96,17 +128,37 @@ export async function updateAdminUser(
   return ((await response.json()) as { user: AdminUser }).user
 }
 
+export async function listAdminFeedback(input: {
+  limit?: number
+  status?: string
+  sentiment?: string
+  siteType?: string
+  model?: string
+} = {}): Promise<{ feedback: AdminFeedback[]; summary: QualitySummary }> {
+  const response = await ensureOk(await authFetch(`/api/admin/feedback?${queryString(input)}`))
+  return response.json() as Promise<{ feedback: AdminFeedback[]; summary: QualitySummary }>
+}
+
+export async function updateAdminFeedbackStatus(
+  id: string,
+  status: AdminFeedback['status'],
+): Promise<void> {
+  await ensureOk(
+    await authFetch(`/api/admin/feedback/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status }),
+    }),
+  )
+}
+
 export async function listAuditLogs(input: {
   limit?: number
   action?: string
   resourceType?: string
   outcome?: string
 } = {}): Promise<AuditLog[]> {
-  const params = new URLSearchParams()
-  for (const [key, value] of Object.entries(input)) {
-    if (value !== undefined && value !== '') params.set(key, String(value))
-  }
-  const response = await ensureOk(await authFetch(`/api/admin/audit?${params.toString()}`))
+  const response = await ensureOk(await authFetch(`/api/admin/audit?${queryString(input)}`))
   return ((await response.json()) as { auditLogs: AuditLog[] }).auditLogs
 }
 
@@ -115,11 +167,7 @@ export async function listSystemEvents(input: {
   level?: string
   source?: string
 } = {}): Promise<SystemEvent[]> {
-  const params = new URLSearchParams()
-  for (const [key, value] of Object.entries(input)) {
-    if (value !== undefined && value !== '') params.set(key, String(value))
-  }
-  const response = await ensureOk(await authFetch(`/api/admin/events?${params.toString()}`))
+  const response = await ensureOk(await authFetch(`/api/admin/events?${queryString(input)}`))
   return ((await response.json()) as { systemEvents: SystemEvent[] }).systemEvents
 }
 
