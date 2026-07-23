@@ -9,6 +9,7 @@ import {
   ExternalLink,
   History,
   Loader2,
+  Palette,
   PencilRuler,
   RefreshCw,
   Rocket,
@@ -52,6 +53,7 @@ const editorOpen = ref(false)
 const previewWidth = ref<'desktop' | 'mobile'>('desktop')
 
 const projectId = computed(() => String(route.params.id ?? ''))
+const preferredVersionId = computed(() => typeof route.query.version === 'string' ? route.query.version : '')
 const versions = computed(() => detail.value?.versions ?? [])
 const selectedSummary = computed(() =>
   versions.value.find((version) => version.id === selected.value?.id) ?? null,
@@ -72,6 +74,9 @@ async function selectVersion(version: ProjectVersionSummary) {
   previewLoading.value = true
   try {
     selected.value = await getProjectVersion(projectId.value, version.id)
+    if (preferredVersionId.value !== version.id) {
+      await router.replace({ query: { ...route.query, version: version.id } })
+    }
   } catch (err) {
     toast.error('版本加载失败', messageOf(err))
   } finally {
@@ -79,7 +84,7 @@ async function selectVersion(version: ProjectVersionSummary) {
   }
 }
 
-async function load(preferredVersionId?: string) {
+async function load(preferredId = preferredVersionId.value) {
   if (!isAuthenticated.value || !projectId.value || loading.value) return
   loading.value = true
   error.value = ''
@@ -91,10 +96,14 @@ async function load(preferredVersionId?: string) {
     detail.value = projectDetail
     publication.value = publications.find((item) => item.projectId === projectId.value) ?? null
     const target =
-      projectDetail.versions.find((version) => version.id === preferredVersionId) ??
+      projectDetail.versions.find((version) => version.id === preferredId) ??
       projectDetail.versions[0]
-    if (target) selected.value = await getProjectVersion(projectId.value, target.id)
-    else selected.value = null
+    if (target) {
+      selected.value = await getProjectVersion(projectId.value, target.id)
+      if (preferredVersionId.value !== target.id) {
+        await router.replace({ query: { ...route.query, version: target.id } })
+      }
+    } else selected.value = null
   } catch (err) {
     error.value = messageOf(err)
   } finally {
@@ -131,6 +140,14 @@ async function saveEdited(html: string) {
   } finally {
     actionBusy.value = ''
   }
+}
+
+function openBrandKits() {
+  if (!selected.value) return
+  void router.push({
+    name: 'brand-kits',
+    query: { project: projectId.value, version: selected.value.id },
+  })
 }
 
 async function publish() {
@@ -192,7 +209,12 @@ async function exportZip() {
 
 watch(isAuthenticated, (value) => value && void load())
 watch(projectId, () => void load())
-onMounted(load)
+watch(preferredVersionId, (value) => {
+  if (value && value !== selected.value?.id && versions.value.some((version) => version.id === value)) {
+    void load(value)
+  }
+})
+onMounted(() => void load())
 </script>
 
 <template>
@@ -243,6 +265,14 @@ onMounted(load)
             <Loader2 v-if="actionBusy === 'export'" class="h-3.5 w-3.5 animate-spin" />
             <Download v-else class="h-3.5 w-3.5" />
             导出 ZIP
+          </button>
+          <button
+            v-if="selected"
+            class="flex items-center gap-1.5 rounded-xl border border-brand2/20 bg-brand2/[0.07] px-3.5 py-2.5 text-xs font-semibold text-brand2 hover:bg-brand2/[0.13]"
+            @click="openBrandKits"
+          >
+            <Palette class="h-3.5 w-3.5" />
+            应用品牌
           </button>
           <button
             v-if="selected"
@@ -351,9 +381,9 @@ onMounted(load)
             <div class="min-w-0 flex-1 truncate rounded-md bg-ink/[0.04] px-3 py-1.5 text-[11px] text-faint">
               {{ selected ? `${detail.project.title} / v${selected.version}` : '暂无版本' }}
             </div>
-            <div class="flex rounded-lg bg-ink/[0.04] p-1">
-              <button class="rounded-md px-2 py-1 text-[10px]" :class="previewWidth === 'desktop' ? 'bg-soft text-ink shadow' : 'text-faint'" @click="previewWidth = 'desktop'">桌面</button>
-              <button class="rounded-md px-2 py-1 text-[10px]" :class="previewWidth === 'mobile' ? 'bg-soft text-ink shadow' : 'text-faint'" @click="previewWidth = 'mobile'">手机</button>
+            <div class="flex rounded-lg bg-ink/[0.04] p-1" role="group" aria-label="预览尺寸">
+              <button class="rounded-md px-2 py-1 text-[10px]" :class="previewWidth === 'desktop' ? 'bg-soft text-ink shadow' : 'text-faint'" :aria-pressed="previewWidth === 'desktop'" @click="previewWidth = 'desktop'">桌面</button>
+              <button class="rounded-md px-2 py-1 text-[10px]" :class="previewWidth === 'mobile' ? 'bg-soft text-ink shadow' : 'text-faint'" :aria-pressed="previewWidth === 'mobile'" @click="previewWidth = 'mobile'">手机</button>
             </div>
           </div>
           <div class="relative min-h-0 flex-1 bg-ink/[0.035] p-3 sm:p-5">
