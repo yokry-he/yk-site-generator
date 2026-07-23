@@ -1,0 +1,101 @@
+name: Agent Confirmation Migration
+on:
+  push:
+    branches: [agent/continue-development-20260723]
+    paths: ['.github/workflows/agent-confirmation-migration.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/continue-development-20260723
+          fetch-depth: 0
+      - name: Replace destructive browser confirms
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          projects = Path('apps/web/src/pages/ProjectsPage.vue')
+          text = projects.read_text()
+          text = text.replace("import { useAuth } from '../composables/useAuth'", "import { useAuth } from '../composables/useAuth'\nimport { confirmDialog } from '../composables/useConfirmDialog'")
+          text = text.replace("const permanentConfirmId = ref('')\n", '')
+          old = '''async function permanentlyDelete(project: CloudProject) {
+  if (permanentConfirmId.value !== project.id) {
+    permanentConfirmId.value = project.id
+    toast.info('再次点击永久删除', '该操作会删除全部版本和反馈，无法恢复。')
+    return
+  }
+  actionBusyId.value = project.id
+  try {
+    await deleteProject(project.id)
+    projects.value = projects.value.filter((item) => item.id !== project.id)
+    permanentConfirmId.value = ''
+    toast.success('项目已永久删除')
+  } catch (err) { toast.error('删除失败', messageOf(err)) } finally { actionBusyId.value = '' }
+}
+'''
+          new = '''async function permanentlyDelete(project: CloudProject) {
+  const confirmed = await confirmDialog({
+    title: `永久删除「${project.title}」？`,
+    description: '项目、全部不可变版本、反馈和发布关联都会被移除，且无法恢复。',
+    confirmLabel: '永久删除',
+    tone: 'danger',
+    verificationText: project.title,
+    verificationLabel: `请输入项目名称「${project.title}」确认`,
+  })
+  if (!confirmed) return
+  actionBusyId.value = project.id
+  try {
+    await deleteProject(project.id)
+    projects.value = projects.value.filter((item) => item.id !== project.id)
+    toast.success('项目已永久删除')
+  } catch (err) { toast.error('删除失败', messageOf(err)) } finally { actionBusyId.value = '' }
+}
+'''
+          if old not in text: raise SystemExit('projects delete block not found')
+          projects.write_text(text.replace(old, new, 1))
+
+          assets = Path('apps/web/src/pages/BrandAssetsPage.vue')
+          text = assets.read_text()
+          text = text.replace("import { useAuth } from '../composables/useAuth'", "import { useAuth } from '../composables/useAuth'\nimport { confirmDialog } from '../composables/useConfirmDialog'")
+          old = "  if (!window.confirm(`永久删除资源「${asset.name}」？已插入项目的副本不会受影响。`)) return\n"
+          new = "  if (!(await confirmDialog({ title: `删除品牌资源「${asset.name}」？`, description: '已插入项目的副本不会受影响，但资源库中将无法继续复用。', confirmLabel: '删除资源', tone: 'danger' }))) return\n"
+          if old not in text: raise SystemExit('asset confirm not found')
+          assets.write_text(text.replace(old, new, 1))
+
+          kits = Path('apps/web/src/pages/BrandKitsPage.vue')
+          text = kits.read_text()
+          text = text.replace("import { useAuth } from '../composables/useAuth'", "import { useAuth } from '../composables/useAuth'\nimport { confirmDialog } from '../composables/useConfirmDialog'")
+          old = '''async function remove() {
+  const kit = pendingDelete.value
+  if (!kit) return
+  actionBusy.value = `delete:${kit.id}`
+'''
+          new = '''async function remove() {
+  const kit = pendingDelete.value
+  if (!kit) return
+  if (!(await confirmDialog({ title: `删除品牌套件「${kit.name}」？`, description: '已应用到项目的版本不会改变；资源库中关联的素材将保留但解除套件关联。', confirmLabel: '删除套件', tone: 'danger' }))) return
+  actionBusy.value = `delete:${kit.id}`
+'''
+          if old not in text: raise SystemExit('brand kit remove block not found')
+          kits.write_text(text.replace(old, new, 1))
+
+          template = Path('apps/web/src/pages/TemplatesPage.vue')
+          text = template.read_text()
+          old = '<button class="mt-5 flex w-full items-center justify-center gap-1.5 rounded-xl border border-line/10 bg-app/45 px-3 py-2.5 text-xs font-semibold text-sub hover:border-brand1/25 hover:text-brand1" @click="openTemplate(template)"><Eye class="h-3.5 w-3.5" />预览并使用</button>'
+          new = '<div class="mt-5 grid grid-cols-2 gap-2"><button class="flex items-center justify-center gap-1.5 rounded-xl border border-line/10 bg-app/45 px-3 py-2.5 text-xs font-semibold text-sub hover:border-brand1/25 hover:text-brand1" @click="openTemplate(template)"><Eye class="h-3.5 w-3.5" />快速预览</button><RouterLink :to="`/templates/${template.slug}`" class="flex items-center justify-center gap-1.5 rounded-xl bg-brand1/10 px-3 py-2.5 text-xs font-semibold text-brand1">完整详情<ArrowRight class="h-3.5 w-3.5" /></RouterLink></div>'
+          if old not in text: raise SystemExit('template card action not found')
+          template.write_text(text.replace(old, new, 1))
+
+          Path('.github/workflows/agent-confirmation-migration.yml').unlink()
+          PY
+      - name: Commit confirmation migration
+        run: |
+          git config user.name 'SiteForge Agent'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat(web): unify destructive confirmations and template details'
+          git push origin HEAD:agent/continue-development-20260723
