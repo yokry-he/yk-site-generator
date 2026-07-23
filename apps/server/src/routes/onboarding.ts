@@ -7,6 +7,7 @@ import {
   type OnboardingContext,
   type OnboardingProgressRecord,
 } from '../lib/data-store'
+import { featureFlagMiddleware } from '../lib/feature-flags'
 import { errorBody } from '../types'
 
 const stepSchema = z.enum(['welcome', 'goal', 'starter', 'brand', 'ready'])
@@ -25,6 +26,7 @@ const updateSchema = z.object({
 
 const onboarding = new Hono<AuthEnv>()
 onboarding.use('*', authMiddleware)
+onboarding.use('*', featureFlagMiddleware('onboarding-guide'))
 
 function emptyProgress(userId: string): OnboardingProgressRecord {
   return {
