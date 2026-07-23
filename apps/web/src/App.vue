@@ -5,6 +5,8 @@ import SiteFooter from './components/SiteFooter.vue'
 import ModelSettingsDialog from './components/ModelSettingsDialog.vue'
 import AuthDialog from './components/AuthDialog.vue'
 import HistoryMigrationNotice from './components/HistoryMigrationNotice.vue'
+import OnboardingGuide from './components/OnboardingGuide.vue'
+import ProjectFeedbackPrompt from './components/ProjectFeedbackPrompt.vue'
 import ToastHost from './components/ToastHost.vue'
 import { useAuth } from './composables/useAuth'
 
@@ -22,6 +24,8 @@ onMounted(loadAuthSession)
     <ModelSettingsDialog />
     <AuthDialog />
     <HistoryMigrationNotice />
+    <OnboardingGuide />
+    <ProjectFeedbackPrompt />
     <ToastHost />
   </div>
 </template>
