@@ -21,6 +21,7 @@ export interface GenerateError {
 const ERROR_HINTS: Record<string, { hint: string; action?: GenerateError['action'] }> = {
   PROVIDER_AUTH: { hint: '请检查模型设置中的 API Key 是否正确或已过期', action: 'openModelSettings' },
   PROVIDER_QUOTA: { hint: '请到对应厂商控制台查看额度并充值后重试' },
+  QUOTA_EXCEEDED: { hint: '本月账号额度已用完,可在“额度与用量”中查看重置日期和明细' },
   PROVIDER_RATE_LIMIT: { hint: '请求过于频繁,稍等 1 分钟再试' },
   PROVIDER_NETWORK: { hint: '请检查网络连接,或确认模型服务的 Base URL 是否正确' },
   TIMEOUT: { hint: '生成超时,可以重试;复杂需求建议拆分描述' },
