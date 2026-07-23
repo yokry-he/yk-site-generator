@@ -26,7 +26,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ (event: 'update:html', html: string): void }>()
 
-const { isAuthenticated } = useAuth()
+const { user, isAuthenticated } = useAuth()
 const { show: showAuth } = useAuthDialog()
 const toast = useToast()
 const busy = ref('')
@@ -54,6 +54,17 @@ const expiresText = computed(() =>
 
 function messageOf(err: unknown): string {
   return err instanceof ApiError || err instanceof Error ? err.message : '操作失败'
+}
+
+function resetExternalState() {
+  share.value = null
+  copied.value = false
+}
+
+function resetCloudBinding() {
+  cloudProjectId.value = null
+  cloudVersion.value = 0
+  resetExternalState()
 }
 
 function openEditor() {
@@ -151,13 +162,9 @@ async function saveEdited(html: string) {
   else toast.success('编辑已应用到当前预览', '登录后可将编辑结果保存为云端版本。')
 }
 
-watch(
-  () => props.html,
-  () => {
-    share.value = null
-    copied.value = false
-  },
-)
+watch(() => props.html, resetExternalState)
+// 更换需求、站点类型或登录账号代表新的云端项目上下文,不能沿用旧项目 id。
+watch([() => props.prompt, () => props.siteType, () => user.value?.id], resetCloudBinding)
 
 defineExpose({ openEditor })
 </script>
