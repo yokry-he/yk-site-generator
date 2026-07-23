@@ -106,3 +106,46 @@ jobs:
 
       - name: 前端历史恢复 E2E
         run: pnpm --filter web e2e:history
+
+  mysql-integration:
+    name: mysql-8-integration
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root-password
+          MYSQL_DATABASE: siteforge
+          MYSQL_USER: siteforge
+          MYSQL_PASSWORD: siteforge-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot-password"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: MySQL migration + 事务并发 + 回滚
+        working-directory: apps/server
+        env:
+          NODE_ENV: development
+          DATA_STORAGE_DRIVER: mysql
+          MYSQL_URL: mysql://siteforge:siteforge-password@127.0.0.1:3306/siteforge
+          MYSQL_SSL_MODE: disabled
+          AUTH_JWT_SECRET: mysql-ci-auth-secret-change-before-production-2026
+        run: pnpm db:mysql:ci
