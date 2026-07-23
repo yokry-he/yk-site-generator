@@ -10,6 +10,7 @@ import {
   type ProjectVersionRecord,
   type ProjectVersionSource,
 } from '../lib/data-store'
+import { removePublishedArtifact } from '../lib/publication-store'
 import { errorBody } from '../types'
 
 const createSchema = z.object({
@@ -154,15 +155,22 @@ projects.patch('/:id', async (c) => {
 
 projects.delete('/:id', async (c) => {
   const userId = c.get('auth').sub
+  const projectId = c.req.param('id')
+  const publications = (await readData()).publications.filter(
+    (item) => item.projectId === projectId && item.userId === userId,
+  )
+  // 先删除对外产物;任一存储删除失败则保留数据库元数据,避免留下不可追踪的孤儿对象。
+  for (const publication of publications) await removePublishedArtifact(publication.slug)
+
   const deleted = await mutateData((data) => {
     const before = data.projects.length
-    data.projects = data.projects.filter((item) => item.id !== c.req.param('id') || item.userId !== userId)
+    data.projects = data.projects.filter((item) => item.id !== projectId || item.userId !== userId)
     if (data.projects.length === before) return false
     data.projectVersions = data.projectVersions.filter(
-      (item) => item.projectId !== c.req.param('id') || item.userId !== userId,
+      (item) => item.projectId !== projectId || item.userId !== userId,
     )
     data.publications = data.publications.filter(
-      (item) => item.projectId !== c.req.param('id') || item.userId !== userId,
+      (item) => item.projectId !== projectId || item.userId !== userId,
     )
     return true
   })
