@@ -1,10 +1,13 @@
 import { Hono } from 'hono'
 import { env } from '../env'
-import { adminMiddleware, type AuthEnv } from '../lib/auth'
+import { authMiddleware, type AuthEnv } from '../lib/auth'
 import { getDataStoreHealth } from '../lib/data-store'
+import { operatorMiddleware, permissionMiddleware } from '../lib/rbac'
 
 const adminStorageHealth = new Hono<AuthEnv>()
-adminStorageHealth.use('*', adminMiddleware)
+adminStorageHealth.use('*', authMiddleware)
+adminStorageHealth.use('*', operatorMiddleware)
+adminStorageHealth.use('*', permissionMiddleware('health.read'))
 
 adminStorageHealth.get('/', async (c) => {
   const dataStore = await getDataStoreHealth()
