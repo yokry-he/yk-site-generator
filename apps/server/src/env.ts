@@ -16,7 +16,7 @@ const envSchema = z.object({
   MAX_SHARE_BYTES: z.coerce.number().int().positive().default(2 * 1024 * 1024),
   /** 对外可访问的服务根地址;为空时前端使用当前 origin */
   PUBLIC_BASE_URL: z.string().url().or(z.literal('')).default(''),
-  /** V1 账号、项目、额度和发布元数据文件;生产环境应替换为共享数据库适配器 */
+  /** V1 账号、项目、额度和发布元数据文件;生产环境可替换为共享数据库适配器 */
   DATA_STORAGE_FILE: z.string().min(1).default('.data/siteforge.json'),
   AUTH_JWT_SECRET: z.string().min(32).default(DEV_JWT_SECRET),
   ACCESS_TOKEN_TTL_MIN: z.coerce.number().int().min(5).max(120).default(15),
@@ -26,8 +26,19 @@ const envSchema = z.object({
   EMAIL_WEBHOOK_TOKEN: z.string().default(''),
   MONTHLY_GENERATION_LIMIT: z.coerce.number().int().positive().default(100),
   MAX_PROJECT_BYTES: z.coerce.number().int().positive().default(2 * 1024 * 1024),
+  /** 本地发布适配器 */
   PUBLISH_STORAGE_DIR: z.string().min(1).default('.data/published'),
   PUBLISH_BASE_DOMAIN: z.string().min(1).default('siteforge.local'),
+  /** S3 兼容对象存储:全部配置后自动启用 path-style 上传 */
+  S3_ENDPOINT: z.string().url().or(z.literal('')).default(''),
+  S3_REGION: z.string().min(1).default('auto'),
+  S3_BUCKET: z.string().default(''),
+  S3_ACCESS_KEY_ID: z.string().default(''),
+  S3_SECRET_ACCESS_KEY: z.string().default(''),
+  S3_PUBLIC_BASE_URL: z.string().url().or(z.literal('')).default(''),
+  /** 可选 CDN 缓存失效 Webhook */
+  CDN_INVALIDATION_WEBHOOK_URL: z.string().url().or(z.literal('')).default(''),
+  CDN_INVALIDATION_WEBHOOK_TOKEN: z.string().default(''),
 })
 
 const parsed = envSchema.safeParse(process.env)
@@ -42,7 +53,20 @@ if (parsed.data.NODE_ENV === 'production' && parsed.data.AUTH_JWT_SECRET === DEV
   process.exit(1)
 }
 
+const s3Values = [
+  parsed.data.S3_ENDPOINT,
+  parsed.data.S3_BUCKET,
+  parsed.data.S3_ACCESS_KEY_ID,
+  parsed.data.S3_SECRET_ACCESS_KEY,
+]
+const configuredS3Values = s3Values.filter(Boolean).length
+if (configuredS3Values > 0 && configuredS3Values < s3Values.length) {
+  console.error('[env] S3 配置不完整:必须同时提供 ENDPOINT/BUCKET/ACCESS_KEY_ID/SECRET_ACCESS_KEY')
+  process.exit(1)
+}
+
 export const env = {
   ...parsed.data,
   corsOrigins: parsed.data.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean),
+  s3Enabled: configuredS3Values === s3Values.length,
 }
