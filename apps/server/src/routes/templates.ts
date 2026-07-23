@@ -11,9 +11,12 @@ import { env } from '../env'
 import { authMiddleware, type AuthEnv } from '../lib/auth'
 import {
   mutateData,
+  readData,
   type ProjectRecord,
   type ProjectVersionRecord,
 } from '../lib/data-store'
+import { evaluateFeatureFlag } from '../lib/feature-flags'
+import { operatedTemplate, operatedTemplates } from '../lib/template-operations'
 import { errorBody } from '../types'
 
 const useSchema = z.object({
@@ -24,35 +27,82 @@ const useSchema = z.object({
 
 const templates = new Hono<AuthEnv>()
 
-function publicTemplate(template: (typeof OFFICIAL_TEMPLATES)[number]) {
+function publicTemplate(template: ReturnType<typeof operatedTemplate>) {
+  const {
+    operationVersion: _operationVersion,
+    operationUpdatedAt: _operationUpdatedAt,
+    operationUpdatedBy: _operationUpdatedBy,
+    useCount: _useCount,
+    publicationCount: _publicationCount,
+    negativeFeedbackCount: _negativeFeedbackCount,
+    status: _status,
+    sortOrder,
+    ...definition
+  } = template
   return {
-    ...template,
+    ...definition,
+    sortOrder,
     variableCount: template.variables.length,
   }
 }
 
-templates.get('/', (c) => {
-  const categories = [...new Set(OFFICIAL_TEMPLATES.map((template) => template.category))]
-  const industries = [...new Set(OFFICIAL_TEMPLATES.map((template) => template.industry))]
-  const styles = [...new Set(OFFICIAL_TEMPLATES.flatMap((template) => template.styleTags))]
+function anonymousIdentity(c: Parameters<typeof templates.get>[0] extends never ? never : never): string {
+  return String(c)
+}
+
+function requestIdentity(c: { req: { header(name: string): string | undefined } }): string {
+  return c.req.header('x-anonymous-id')
+    || c.req.header('cf-connecting-ip')
+    || c.req.header('x-forwarded-for')
+    || c.req.header('user-agent')
+    || 'anonymous'
+}
+
+templates.get('/', async (c) => {
+  const data = await readData()
+  if (!evaluateFeatureFlag(data, 'official-templates', { anonymousId: requestIdentity(c) })) {
+    return c.json(errorBody('FEATURE_DISABLED', '官方模板中心当前未开放'), 503)
+  }
+  const visible = operatedTemplates(data, OFFICIAL_TEMPLATES).filter((template) => template.status === 'published')
+  const categories = [...new Set(visible.map((template) => template.category))]
+  const industries = [...new Set(visible.map((template) => template.industry))]
+  const styles = [...new Set(visible.flatMap((template) => template.styleTags))]
   return c.json({
-    templates: OFFICIAL_TEMPLATES.map(publicTemplate),
+    templates: visible.map(publicTemplate),
     filters: { categories, industries, styles },
   })
 })
 
-templates.get('/:id', (c) => {
-  const template = getOfficialTemplate(c.req.param('id'))
-  if (!template) return c.json(errorBody('TEMPLATE_NOT_FOUND', '官方模板不存在'), 404)
+templates.get('/:id', async (c) => {
+  const data = await readData()
+  if (!evaluateFeatureFlag(data, 'official-templates', { anonymousId: requestIdentity(c) })) {
+    return c.json(errorBody('FEATURE_DISABLED', '官方模板中心当前未开放'), 503)
+  }
+  const definition = getOfficialTemplate(c.req.param('id'))
+  if (!definition) return c.json(errorBody('TEMPLATE_NOT_FOUND', '官方模板不存在'), 404)
+  const template = operatedTemplate(data, definition)
+  if (template.status !== 'published') return c.json(errorBody('TEMPLATE_NOT_FOUND', '官方模板不存在'), 404)
   return c.json({
     template: publicTemplate(template),
-    previewHtml: renderOfficialTemplate(template),
+    previewHtml: renderOfficialTemplate(definition),
   })
 })
 
 templates.post('/:id/use', authMiddleware, async (c) => {
-  const template = getOfficialTemplate(c.req.param('id'))
-  if (!template) return c.json(errorBody('TEMPLATE_NOT_FOUND', '官方模板不存在'), 404)
+  const data = await readData()
+  const claims = c.get('auth')
+  if (!evaluateFeatureFlag(data, 'official-templates', {
+    userId: claims.sub,
+    email: claims.email,
+    role: data.users.find((item) => item.id === claims.sub)?.role ?? 'user',
+  })) {
+    return c.json(errorBody('FEATURE_DISABLED', '官方模板中心当前未开放'), 503)
+  }
+
+  const definition = getOfficialTemplate(c.req.param('id'))
+  if (!definition) return c.json(errorBody('TEMPLATE_NOT_FOUND', '官方模板不存在'), 404)
+  const template = operatedTemplate(data, definition)
+  if (template.status !== 'published') return c.json(errorBody('TEMPLATE_NOT_FOUND', '官方模板不存在'), 404)
 
   let input: z.infer<typeof useSchema>
   try {
@@ -62,19 +112,21 @@ templates.post('/:id/use', authMiddleware, async (c) => {
     return c.json(errorBody('BAD_REQUEST', message), 400)
   }
 
-  const userId = c.get('auth').sub
+  const userId = claims.sub
   const now = new Date().toISOString()
-  const baseHtml = renderOfficialTemplate(template, input.variables)
+  const baseHtml = renderOfficialTemplate(definition, input.variables)
   if (Buffer.byteLength(baseHtml, 'utf8') > env.MAX_PROJECT_BYTES) {
     return c.json(errorBody('PROJECT_TOO_LARGE', '模板产物超过项目大小上限'), 413)
   }
 
   const result = await mutateData<
     | { ok: true; project: ProjectRecord; version: ProjectVersionRecord }
-    | { ok: false; code: 'BRAND_KIT_NOT_FOUND' }
-  >((data) => {
+    | { ok: false; code: 'BRAND_KIT_NOT_FOUND' | 'TEMPLATE_NOT_AVAILABLE' }
+  >((draft) => {
+    const currentTemplate = operatedTemplate(draft, definition)
+    if (currentTemplate.status !== 'published') return { ok: false, code: 'TEMPLATE_NOT_AVAILABLE' }
     const brandKit = input.brandKitId
-      ? data.brandKits.find((item) => item.id === input.brandKitId && item.userId === userId)
+      ? draft.brandKits.find((item) => item.id === input.brandKitId && item.userId === userId)
       : undefined
     if (input.brandKitId && !brandKit) return { ok: false, code: 'BRAND_KIT_NOT_FOUND' }
 
@@ -82,10 +134,10 @@ templates.post('/:id/use', authMiddleware, async (c) => {
     const project: ProjectRecord = {
       id: randomUUID(),
       userId,
-      title: input.title?.trim() || input.variables.brandName?.trim() || template.name,
-      siteType: template.siteType,
-      requirement: `基于官方模板「${template.name}」创建`,
-      templateId: template.id,
+      title: input.title?.trim() || input.variables.brandName?.trim() || definition.name,
+      siteType: definition.siteType,
+      requirement: `基于官方模板「${definition.name}」创建`,
+      templateId: definition.id,
       createdAt: now,
       updatedAt: now,
     }
@@ -97,16 +149,21 @@ templates.post('/:id/use', authMiddleware, async (c) => {
       html,
       source: 'import',
       instruction: brandKit
-        ? `使用官方模板「${template.name}」并应用品牌套件「${brandKit.name}」`
-        : `使用官方模板「${template.name}」`,
+        ? `使用官方模板「${definition.name}」并应用品牌套件「${brandKit.name}」`
+        : `使用官方模板「${definition.name}」`,
       createdAt: now,
     }
-    data.projects.push(project)
-    data.projectVersions.push(version)
+    draft.projects.push(project)
+    draft.projectVersions.push(version)
     return { ok: true, project: structuredClone(project), version: structuredClone(version) }
   })
 
-  if (!result.ok) return c.json(errorBody(result.code, '品牌套件不存在'), 404)
+  if (!result.ok) {
+    if (result.code === 'TEMPLATE_NOT_AVAILABLE') {
+      return c.json(errorBody('TEMPLATE_NOT_FOUND', '官方模板不存在'), 404)
+    }
+    return c.json(errorBody(result.code, '品牌套件不存在'), 404)
+  }
   return c.json(
     {
       project: {
