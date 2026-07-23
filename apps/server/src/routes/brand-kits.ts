@@ -27,15 +27,25 @@ const tokenSchema = z.object({
   shadow: z.enum(['none', 'soft', 'medium', 'dramatic']),
 })
 
+const nameSchema = z.string().trim().min(1, '请输入品牌套件名称').max(80)
+const descriptionSchema = z.string().trim().max(240)
+
 const createSchema = tokenSchema.extend({
-  name: z.string().trim().min(1, '请输入品牌套件名称').max(80),
-  description: z.string().trim().max(240).default(''),
+  name: nameSchema,
+  description: descriptionSchema.default(''),
   logoDataUrl: optionalImage,
   faviconDataUrl: optionalImage,
   isDefault: z.boolean().default(false),
 })
 
-const updateSchema = createSchema.partial()
+/** PATCH 不能继承 create 的默认值，否则未提交字段会被误判为显式 false/空值。 */
+const updateSchema = tokenSchema.partial().extend({
+  name: nameSchema.optional(),
+  description: descriptionSchema.optional(),
+  logoDataUrl: optionalImage,
+  faviconDataUrl: optionalImage,
+  isDefault: z.boolean().optional(),
+})
 
 const brandKits = new Hono<AuthEnv>()
 brandKits.use('*', authMiddleware)
