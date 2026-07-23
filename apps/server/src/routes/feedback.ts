@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { authMiddleware, type AuthEnv } from '../lib/auth'
 import { mutateData, readData, type FeedbackRecord } from '../lib/data-store'
+import { featureFlagMiddleware } from '../lib/feature-flags'
 import { errorBody } from '../types'
 
 const categorySchema = z.enum([
@@ -34,6 +35,7 @@ const querySchema = z.object({
 
 const feedback = new Hono<AuthEnv>()
 feedback.use('*', authMiddleware)
+feedback.use('*', featureFlagMiddleware('quality-feedback'))
 
 feedback.get('/mine', async (c) => {
   let query: z.infer<typeof querySchema>
