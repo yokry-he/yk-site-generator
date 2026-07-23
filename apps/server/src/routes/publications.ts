@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { env } from '../env'
 import { authMiddleware, type AuthEnv } from '../lib/auth'
 import { mutateData, readData, type PublicationRecord } from '../lib/data-store'
+import { featureFlagMiddleware } from '../lib/feature-flags'
 import {
   normalizeSlug,
   publicationUrl,
@@ -35,6 +36,7 @@ const republishSchema = z.object({
 
 const publications = new Hono<AuthEnv>()
 publications.use('*', authMiddleware)
+publications.use('*', featureFlagMiddleware('site-publishing'))
 
 function publicRecord(record: PublicationRecord) {
   const { html: _html, ...meta } = record
@@ -178,7 +180,7 @@ publications.post('/:id/republish', async (c) => {
   if (!current) return c.json(errorBody('PUBLICATION_NOT_FOUND', '发布记录不存在'), 404)
 
   let html = input.html
-  let versionId = input.versionId
+  const versionId = input.versionId
   if (versionId) {
     const version = data.projectVersions.find((item) => item.id === versionId && item.userId === userId)
     if (!version || (current.projectId && version.projectId !== current.projectId)) {
