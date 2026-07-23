@@ -7,6 +7,7 @@ import { SITE_TYPES } from '../data/siteTypes'
 
 const route = useRoute()
 const hostRef = ref<HTMLElement>()
+const artifactBarRef = ref<{ openEditor: () => void }>()
 const artifactHtml = ref('')
 const siteType = ref('website')
 let observer: MutationObserver | null = null
@@ -19,9 +20,27 @@ const prompt = ref(
     : SITE_TYPES.find((type) => type.id === 'dashboard')!.example,
 )
 
+function wireLegacyEditorButton(host: HTMLElement) {
+  const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find((item) =>
+    item.textContent?.includes('进入编辑'),
+  )
+  if (!button || button.dataset.sfEditorWired) return
+  button.dataset.sfEditorWired = 'true'
+  button.addEventListener(
+    'click',
+    (event) => {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      artifactBarRef.value?.openEditor()
+    },
+    { capture: true },
+  )
+}
+
 function scanArtifact() {
   const host = hostRef.value
   if (!host) return
+  wireLegacyEditorButton(host)
   const iframe = host.querySelector<HTMLIFrameElement>('iframe[title="生成产物预览"]')
   const html = iframe?.srcdoc || iframe?.getAttribute('srcdoc') || ''
   if (html && html !== artifactHtml.value) artifactHtml.value = html
@@ -49,7 +68,14 @@ onMounted(async () => {
   await nextTick()
   scanArtifact()
   observer = new MutationObserver(scanArtifact)
-  if (hostRef.value) observer.observe(hostRef.value, { childList: true, subtree: true, attributes: true, attributeFilter: ['srcdoc'] })
+  if (hostRef.value) {
+    observer.observe(hostRef.value, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['srcdoc'],
+    })
+  }
   scanTimer = setInterval(scanArtifact, 500)
 })
 
@@ -65,6 +91,7 @@ onBeforeUnmount(() => {
       <GeneratorDemo v-model:prompt="prompt" />
     </div>
     <GeneratorArtifactBar
+      ref="artifactBarRef"
       :html="artifactHtml"
       :prompt="prompt"
       :site-type="siteType"
