@@ -3,14 +3,14 @@ import { streamSSE } from 'hono/streaming'
 import { z } from 'zod'
 import { buildGenerationPrompt, buildIterationPrompt } from 'prompts'
 import { parseModelOutput } from 'shared'
+import { authenticateBearerHeader } from '../lib/auth'
 import { connectTimeoutMs, totalTimeoutMs } from '../lib/config'
+import { QuotaExceededError, refundUsage, reserveGenerationUsage } from '../lib/quota'
 import { takeToken } from '../lib/rate-limit'
 import {
-  PROVIDER_ERROR_META,
   ProviderError,
   SUPPORTED_PROVIDERS,
   streamFromProvider,
-  type ProviderErrorCode,
 } from '../providers'
 import { errorBody } from '../types'
 
@@ -39,6 +39,7 @@ const bodySchema = z.object({
  * POST /api/generate —— 生成代理(SSE)
  * 事件序列:token*(delta 增量) → done(含解析摘要);出错时 error → 结束。
  * apiKey 只在请求生命周期内存活:不落地、不打日志。
+ * 已登录用户在连接厂商前原子预占额度;厂商错误时自动退回。
  */
 const generate = new Hono()
 
@@ -91,6 +92,31 @@ generate.post('/', async (c) => {
     )
   }
 
+  const auth = await authenticateBearerHeader(c.req.header('authorization'))
+  let usageReservation: { id: string; userId: string } | null = null
+  if (auth) {
+    try {
+      const usage = await reserveGenerationUsage({
+        userId: auth.sub,
+        action: body.history?.length ? 'iterate' : 'generate',
+        siteType: body.siteType,
+        model: body.model,
+      })
+      usageReservation = { id: usage.id, userId: auth.sub }
+    } catch (err) {
+      if (err instanceof QuotaExceededError) {
+        return c.json(
+          errorBody(
+            'QUOTA_EXCEEDED',
+            `本月生成额度已用完(${err.used}/${err.limit}),下月自动重置`,
+          ),
+          429,
+        )
+      }
+      throw err
+    }
+  }
+
   return streamSSE(c, async (stream) => {
     let fullText = ''
     try {
@@ -110,6 +136,9 @@ generate.post('/', async (c) => {
         }
       }
     } catch (err) {
+      if (usageReservation) {
+        await refundUsage(usageReservation.id, usageReservation.userId)
+      }
       const pErr =
         err instanceof ProviderError ? err : new ProviderError('INTERNAL', '生成过程中出现内部错误')
       await stream.writeSSE({
