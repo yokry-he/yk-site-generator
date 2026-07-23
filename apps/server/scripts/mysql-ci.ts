@@ -112,7 +112,7 @@ async function main() {
           siteType: 'test',
           requirement: 'rollback',
           status: 'active',
-          isFavorite: false,
+          starred: false,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         })
