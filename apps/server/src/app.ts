@@ -7,6 +7,8 @@ import { errorBody } from './types'
 import health from './routes/health'
 import generate from './routes/generate'
 import providers from './routes/providers'
+import shares from './routes/shares'
+import sharePage from './routes/share-page'
 
 export function createApp() {
   const app = new Hono()
@@ -19,8 +21,10 @@ export function createApp() {
     '/api/*',
     cors({
       origin: env.corsOrigins,
-      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Content-Type', 'Authorization'],
+      allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowHeaders: ['Content-Type', 'Authorization', 'X-Share-Delete-Token'],
+      exposeHeaders: ['Content-Length'],
+      maxAge: 600,
     }),
   )
 
@@ -28,6 +32,8 @@ export function createApp() {
   app.route('/api/health', health)
   app.route('/api/generate', generate)
   app.route('/api/providers', providers)
+  app.route('/api/shares', shares)
+  app.route('/s', sharePage)
 
   // 404:统一错误格式
   app.notFound((c) =>
