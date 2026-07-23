@@ -41,10 +41,6 @@ async function publishingEnabled(c: { get(key: 'auth'): import('../lib/auth').Ac
   return authenticatedFeatureEnabled('site-publishing', c.get('auth'))
 }
 
-function publishingDisabled(c: Parameters<typeof errorBody>[0] extends never ? never : never) {
-  return c
-}
-
 function publicRecord(record: PublicationRecord) {
   const { html: _html, ...meta } = record
   return {
