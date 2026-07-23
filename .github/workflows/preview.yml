@@ -1,0 +1,84 @@
+name: Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  web-preview:
+    runs-on: ubuntu-latest
+    env:
+      VITE_API_BASE_URL: ${{ vars.PREVIEW_API_BASE_URL }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建前端预览
+        run: pnpm --filter web build
+
+      - name: 上传静态预览产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-preview-${{ github.event.pull_request.number || github.run_number }}
+          path: apps/web/dist
+          retention-days: 7
+
+      - name: 检查 Vercel 配置
+        id: vercel-config
+        shell: bash
+        run: |
+          if [[ -n "$VERCEL_TOKEN" && -n "$VERCEL_ORG_ID" && -n "$VERCEL_PROJECT_ID" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Vercel secrets 未配置:仅上传构建产物,跳过在线预览部署。" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: 部署 Vercel Preview
+        id: deploy
+        if: steps.vercel-config.outputs.ready == 'true'
+        shell: bash
+        run: |
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+          url=$(pnpm dlx vercel@latest deploy apps/web/dist --yes --token "$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "预览地址: $url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 回写 PR 预览链接
+        if: github.event_name == 'pull_request' && steps.deploy.outputs.url != ''
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+        with:
+          script: |
+            const marker = '<!-- siteforge-preview -->'
+            const body = `${marker}\n### SiteForge Preview\n\n✅ 前端预览已部署：${process.env.PREVIEW_URL}\n\n> API 地址由仓库变量 \`PREVIEW_API_BASE_URL\` 注入。`
+            const { owner, repo } = context.repo
+            const issue_number = context.issue.number
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number })
+            const previous = comments.find((comment) => comment.body?.includes(marker))
+            if (previous) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: previous.id, body })
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body })
+            }
