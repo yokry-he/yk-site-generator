@@ -30,7 +30,8 @@ import {
   WandSparkles,
 } from 'lucide-vue-next'
 import VisualEditor from '../components/VisualEditor.vue'
-import SiteQualityPanel from '../components/SiteQualityPanel.vue'
+import ProjectQualityWorkspace from '../components/ProjectQualityWorkspace.vue'
+import VersionVisualDiff from '../components/VersionVisualDiff.vue'
 import { useAuth } from '../composables/useAuth'
 import { useAuthDialog } from '../composables/useAuthDialog'
 import { useFeatures } from '../composables/useFeatures'
@@ -87,7 +88,6 @@ const error = ref('')
 const editorOpen = ref(false)
 const activeTab = ref<WorkspaceTab>((route.query.tab as WorkspaceTab) || 'overview')
 const previewWidth = ref<'desktop' | 'mobile'>('desktop')
-const compareWidth = ref<'split' | 'current' | 'other'>('split')
 const compareVersionId = ref('')
 const editingVersionId = ref('')
 const versionName = ref('')
@@ -300,10 +300,6 @@ function ignoreRule(rule: string) {
   if (!ignoredQualityRules.value.includes(rule)) ignoredQualityRules.value.push(rule)
 }
 
-function focusIssue(issue: QualityIssue) {
-  void setTab('preview')
-  toast.info('已切换到页面预览', issue.elementLabel || issue.title)
-}
 
 function runNextAction(action: (typeof nextActions.value)[number]['action']) {
   if (action === 'publish') void publish()
@@ -385,15 +381,24 @@ onMounted(() => void load())
             <div class="relative min-h-0 flex-1 bg-ink/[0.035] p-3 sm:p-5"><div v-if="previewLoading" class="absolute inset-0 z-10 flex items-center justify-center bg-app/45 backdrop-blur-sm"><Loader2 class="h-6 w-6 animate-spin text-brand1" /></div><div v-if="selected" class="mx-auto h-full min-h-[610px] overflow-hidden rounded-xl border border-line/12 bg-white shadow-2xl shadow-black/15" :class="previewWidth === 'mobile' ? 'max-w-[390px]' : 'max-w-none'"><iframe :srcdoc="selected.html" sandbox="allow-scripts" referrerpolicy="no-referrer" class="h-full min-h-[610px] w-full" title="项目版本预览" /></div><div v-else class="flex h-full min-h-[610px] flex-col items-center justify-center text-center"><CheckCircle2 class="h-8 w-8 text-faint" /><p class="mt-3 text-sm text-mut">尚无项目版本</p><RouterLink to="/generator" class="mt-3 text-xs text-brand1">前往生成器创建内容</RouterLink></div></div>
           </div>
 
-          <SiteQualityPanel v-else-if="activeTab === 'quality' && selected" class="min-h-[680px] rounded-none border-0" :html="selected.html" :ignored-rules="ignoredQualityRules" @apply="applyIssue" @apply-all="applyAllIssues" @focus="focusIssue" @ignore="ignoreRule" />
+          <ProjectQualityWorkspace v-else-if="activeTab === 'quality' && selected" :html="selected.html" :ignored-rules="ignoredQualityRules" @apply="applyIssue" @apply-all="applyAllIssues" @ignore="ignoreRule" />
 
           <div v-else-if="activeTab === 'versions'" class="p-5 sm:p-7"><div class="flex items-end justify-between"><div><h2 class="text-lg font-semibold">版本管理</h2><p class="mt-1 text-xs text-faint">为重要版本命名、添加备注或收藏。</p></div><span class="text-[10px] text-faint">共 {{ versions.length }} 版</span></div><div class="mt-5 grid gap-3"><article v-for="version in versions" :key="version.id" class="rounded-2xl border border-line/10 bg-app/45 p-4"><div v-if="editingVersionId === version.id" class="grid gap-3"><input v-model="versionName" maxlength="80" placeholder="版本名称" class="rounded-xl border border-line/10 bg-soft/65 px-3 py-2.5 text-sm outline-none" /><textarea v-model="versionNote" rows="3" maxlength="500" placeholder="记录这版解决了什么问题、需要继续关注什么。" class="resize-y rounded-xl border border-line/10 bg-soft/65 p-3 text-xs leading-5 outline-none" /><div class="flex justify-end gap-2"><button class="rounded-lg border border-line/10 px-3 py-2 text-xs text-faint" @click="editingVersionId = ''">取消</button><button :disabled="actionBusy === `meta:${version.id}`" class="bg-brand-gradient flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white" @click="saveVersionMetadata(version)"><Loader2 v-if="actionBusy === `meta:${version.id}`" class="h-3.5 w-3.5 animate-spin" /><Check v-else class="h-3.5 w-3.5" />保存</button></div></div><template v-else><div class="flex items-start gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand1/10 text-brand1"><FileClock class="h-4.5 w-4.5" /></span><div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2"><h3 class="text-sm font-semibold">{{ version.name || `第 ${version.version} 版` }}</h3><span class="rounded bg-ink/5 px-2 py-0.5 text-[9px] text-faint">{{ sourceLabel(version.source) }}</span><span v-if="selected?.id === version.id" class="rounded bg-emerald-500/10 px-2 py-0.5 text-[9px] text-emerald-500">当前版本</span></div><p class="mt-2 text-xs leading-5 text-mut">{{ version.note || version.instruction || '未添加版本备注' }}</p><div class="mt-3 flex flex-wrap gap-2 text-[9px] text-faint"><span>{{ formatDate(version.createdAt) }}</span><span>{{ (version.sizeBytes / 1024).toFixed(1) }}KB</span><span v-for="item in version.changeSummary.slice(0,3)" :key="item" class="rounded bg-ink/5 px-1.5 py-0.5">{{ item }}</span></div></div><div class="flex gap-1"><button class="rounded-lg p-2" :class="version.starred ? 'text-amber-500' : 'text-faint hover:text-amber-500'" @click="toggleVersionStar(version)"><Star class="h-4 w-4" :fill="version.starred ? 'currentColor' : 'none'" /></button><button class="rounded-lg p-2 text-faint hover:bg-ink/5 hover:text-brand1" @click="editMetadata(version)"><Pencil class="h-4 w-4" /></button></div></div></template></article></div></div>
 
-          <div v-else-if="activeTab === 'compare'" class="flex min-h-[680px] flex-col"><div class="flex flex-wrap items-center gap-3 border-b border-line/10 bg-app/45 p-3"><label class="relative min-w-56"><select v-model="compareVersionId" class="w-full appearance-none rounded-xl border border-line/10 bg-soft/65 py-2.5 pr-9 pl-3 text-xs outline-none"><option value="">选择对比版本</option><option v-for="version in versions.filter(item => item.id !== selected?.id)" :key="version.id" :value="version.id">{{ version.name || `第 ${version.version} 版` }}</option></select><ChevronDown class="pointer-events-none absolute top-1/2 right-3 h-3.5 w-3.5 -translate-y-1/2 text-faint" /></label><div class="flex rounded-xl bg-ink/[0.04] p-1"><button v-for="mode in [{id:'split',label:'并排'},{id:'current',label:'当前版'},{id:'other',label:'对比版'}]" :key="mode.id" class="rounded-lg px-3 py-2 text-[10px]" :class="compareWidth === mode.id ? 'bg-soft font-semibold text-brand1 shadow' : 'text-faint'" @click="compareWidth = mode.id as typeof compareWidth">{{ mode.label }}</button></div><span v-if="compareVersion" class="ml-auto text-[10px] text-faint">{{ selected?.name || `第 ${selected?.version} 版` }} ↔ {{ compareVersion.name || `第 ${compareVersion.version} 版` }}</span></div><div v-if="compareLoading" class="flex flex-1 items-center justify-center"><Loader2 class="h-6 w-6 animate-spin text-brand1" /></div><div v-else-if="selected && compareVersion" class="grid min-h-0 flex-1 gap-3 bg-ink/[0.035] p-3" :class="compareWidth === 'split' ? 'lg:grid-cols-2' : 'grid-cols-1'"><div v-show="compareWidth !== 'other'" class="overflow-hidden rounded-xl border border-line/10 bg-white"><div class="border-b border-line/10 bg-app/80 px-3 py-2 text-[10px] font-semibold text-ink">当前：{{ selected.name || `第 ${selected.version} 版` }}</div><iframe :srcdoc="selected.html" sandbox="allow-scripts" class="h-[610px] w-full" title="当前版本" /></div><div v-show="compareWidth !== 'current'" class="overflow-hidden rounded-xl border border-line/10 bg-white"><div class="border-b border-line/10 bg-app/80 px-3 py-2 text-[10px] font-semibold text-ink">对比：{{ compareVersion.name || `第 ${compareVersion.version} 版` }}</div><iframe :srcdoc="compareVersion.html" sandbox="allow-scripts" class="h-[610px] w-full" title="对比版本" /></div></div><div v-else class="flex flex-1 flex-col items-center justify-center p-8 text-center"><Columns2 class="h-9 w-9 text-faint" /><h3 class="mt-4 text-sm font-semibold">选择一个版本开始对比</h3><p class="mt-2 text-xs text-mut">可并排查看视觉结果，也可单独放大任一版本。</p></div></div>
+          <div v-else-if="activeTab === 'compare'" class="min-h-[680px] p-3 sm:p-5">
+  <div class="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-line/10 bg-app/45 p-3">
+    <label class="relative min-w-56 flex-1 sm:max-w-sm"><select v-model="compareVersionId" class="w-full appearance-none rounded-xl border border-line/10 bg-soft/65 py-2.5 pr-9 pl-3 text-xs outline-none"><option value="">选择对比版本</option><option v-for="version in versions.filter(item => item.id !== selected?.id)" :key="version.id" :value="version.id">{{ version.name || `第 ${version.version} 版` }}</option></select><ChevronDown class="pointer-events-none absolute top-1/2 right-3 h-3.5 w-3.5 -translate-y-1/2 text-faint" /></label>
+    <button v-if="publishedVersion && publishedVersion.id !== selected?.id" class="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2.5 text-[10px] font-semibold text-emerald-600" @click="compareVersionId = publishedVersion.id">与线上第 {{ publishedVersion.version }} 版对比</button>
+    <span v-if="compareVersion" class="ml-auto text-[10px] text-faint">{{ selected?.name || `第 ${selected?.version} 版` }} ↔ {{ compareVersion.name || `第 ${compareVersion.version} 版` }}</span>
+  </div>
+  <div v-if="compareLoading" class="flex min-h-[600px] items-center justify-center"><Loader2 class="h-6 w-6 animate-spin text-brand1" /></div>
+  <VersionVisualDiff v-else-if="selected && compareVersion" :before-html="compareVersion.html" :after-html="selected.html" :before-label="compareVersion.name || `第 ${compareVersion.version} 版`" :after-label="selected.name || `第 ${selected.version} 版`" />
+  <div v-else class="flex min-h-[600px] flex-col items-center justify-center rounded-2xl border border-dashed border-line/15 text-center"><Columns2 class="h-9 w-9 text-faint" /><h3 class="mt-4 text-sm font-semibold">选择一个版本开始对比</h3><p class="mt-2 text-xs text-mut">可滑动查看视觉变化，并按区块、内容、图片、链接、SEO 和样式筛选差异。</p></div>
+</div>
         </section>
       </div>
     </div>
 
-    <VisualEditor v-if="selected" :open="editorOpen" :html="selected.html" :title="`${detail?.project.title ?? '项目'} · ${selected.name || `第 ${selected.version} 版`}`" :draft-key="`${projectId}:${selected.id}`" :site-type="detail?.project.siteType" @close="editorOpen = false" @save="saveEdited" />
+    <VisualEditor v-if="selected" :open="editorOpen" :html="selected.html" :title="`${detail?.project.title ?? '项目'} · ${selected.name || `第 ${selected.version} 版`}`" :draft-key="`${projectId}:${selected.id}`" :site-type="detail?.project.siteType" :brand-kit-id="detail?.project.brandKitId" @close="editorOpen = false" @save="saveEdited" />
   </main>
 </template>
