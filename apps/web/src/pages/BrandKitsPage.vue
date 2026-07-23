@@ -3,7 +3,6 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowLeft,
-  Check,
   CopyPlus,
   Crown,
   Loader2,
@@ -111,14 +110,15 @@ function duplicate(kit: BrandKit) {
 
 async function save(input: BrandKitInput) {
   actionBusy.value = 'save'
+  const wasEditing = Boolean(editing.value?.id)
   try {
-    const saved = editing.value?.id
+    const saved = wasEditing && editing.value
       ? await updateBrandKit(editing.value.id, input)
       : await createBrandKit(input)
     editorOpen.value = false
     editing.value = null
     await load()
-    toast.success(editing.value?.id ? '品牌套件已更新' : '品牌套件已创建', `「${saved.name}」现在可以应用到项目。`)
+    toast.success(wasEditing ? '品牌套件已更新' : '品牌套件已创建', `「${saved.name}」现在可以应用到项目。`)
   } catch (err) {
     toast.error('保存失败', messageOf(err))
   } finally {
@@ -372,7 +372,7 @@ onMounted(load)
                 <span class="block text-sm font-semibold text-ink">{{ preset.name }}</span>
                 <span class="mt-1 line-clamp-2 block text-[11px] leading-5 text-mut">{{ preset.description }}</span>
               </span>
-              <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand1/8 text-brand1 transition-transform group-hover:rotate-6 group-hover:scale-105"><Plus class="h-4 w-4" /></span>
+              <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand1/[0.08] text-brand1 transition-transform group-hover:rotate-6 group-hover:scale-105"><Plus class="h-4 w-4" /></span>
             </span>
           </button>
         </div>
