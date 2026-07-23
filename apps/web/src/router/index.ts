@@ -5,12 +5,12 @@ export const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', name: 'home', component: HomePage },
-    // 除首页外全部路由级懒加载,按页面分包
     { path: '/generator', name: 'generator', component: () => import('../pages/GeneratorPage.vue') },
     { path: '/templates', name: 'templates', component: () => import('../pages/TemplatesPage.vue') },
     { path: '/projects', name: 'projects', component: () => import('../pages/ProjectsPage.vue') },
     { path: '/projects/:id', name: 'project-detail', component: () => import('../pages/ProjectPage.vue') },
     { path: '/brand', name: 'brand-kits', component: () => import('../pages/BrandKitsPage.vue') },
+    { path: '/brand/assets', name: 'brand-assets', component: () => import('../pages/BrandAssetsPage.vue') },
     { path: '/usage', name: 'usage', component: () => import('../pages/QuotaPage.vue') },
     { path: '/admin', name: 'admin', component: () => import('../pages/AdminPage.vue') },
     { path: '/admin/templates', name: 'admin-templates', component: () => import('../pages/AdminTemplatesPage.vue') },
@@ -25,9 +25,7 @@ export const router = createRouter({
   scrollBehavior(to, _from, savedPosition) {
     if (to.hash) {
       return new Promise((resolve) => {
-        window.setTimeout(() => {
-          resolve({ el: to.hash, behavior: 'smooth', top: 80 })
-        }, 120)
+        window.setTimeout(() => resolve({ el: to.hash, behavior: 'smooth', top: 80 }), 120)
       })
     }
     if (savedPosition) return savedPosition
