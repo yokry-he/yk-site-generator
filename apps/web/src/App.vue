@@ -1,8 +1,14 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import NavBar from './components/NavBar.vue'
 import SiteFooter from './components/SiteFooter.vue'
 import ModelSettingsDialog from './components/ModelSettingsDialog.vue'
+import AuthDialog from './components/AuthDialog.vue'
 import ToastHost from './components/ToastHost.vue'
+import { useAuth } from './composables/useAuth'
+
+const { loadAuthSession } = useAuth()
+onMounted(loadAuthSession)
 </script>
 
 <template>
@@ -13,6 +19,7 @@ import ToastHost from './components/ToastHost.vue'
     </RouterView>
     <SiteFooter />
     <ModelSettingsDialog />
+    <AuthDialog />
     <ToastHost />
   </div>
 </template>
