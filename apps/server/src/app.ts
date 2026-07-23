@@ -14,6 +14,7 @@ import projects from './routes/projects'
 import quota from './routes/quota'
 import publications from './routes/publications'
 import brandKits from './routes/brand-kits'
+import templates from './routes/templates'
 import sitePage, { serveSiteFromHost } from './routes/site-page'
 
 export function createApp() {
@@ -45,6 +46,7 @@ export function createApp() {
   app.route('/api/quota', quota)
   app.route('/api/publications', publications)
   app.route('/api/brand-kits', brandKits)
+  app.route('/api/templates', templates)
   app.route('/s', sharePage)
   app.route('/site', sitePage)
 
