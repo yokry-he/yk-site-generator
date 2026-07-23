@@ -13,6 +13,7 @@ export const router = createRouter({
     { path: '/brand', name: 'brand-kits', component: () => import('../pages/BrandKitsPage.vue') },
     { path: '/usage', name: 'usage', component: () => import('../pages/QuotaPage.vue') },
     { path: '/admin', name: 'admin', component: () => import('../pages/AdminPage.vue') },
+    { path: '/admin/quality', name: 'admin-quality', component: () => import('../pages/AdminQualityPage.vue') },
     { path: '/pricing', name: 'pricing', component: () => import('../pages/PricingPage.vue') },
     { path: '/docs', name: 'docs', component: () => import('../pages/DocsPage.vue') },
     { path: '/changelog', name: 'changelog', component: () => import('../pages/ChangelogPage.vue') },
