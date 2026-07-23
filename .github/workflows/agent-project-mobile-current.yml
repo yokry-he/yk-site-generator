@@ -1,0 +1,40 @@
+name: Agent Project Mobile Current
+on:
+  push:
+    branches: [agent/continue-development-20260723]
+    paths: ['.github/workflows/agent-project-mobile-current.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/continue-development-20260723
+          fetch-depth: 0
+      - name: Patch current project page
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path=Path('apps/web/src/pages/ProjectPage.vue')
+          text=path.read_text()
+          text=text.replace("import VersionVisualDiff from '../components/VersionVisualDiff.vue'", "import VersionVisualDiff from '../components/VersionVisualDiff.vue'\nimport MobileVersionDrawer from '../components/MobileVersionDrawer.vue'",1)
+          text=text.replace("const editorOpen = ref(false)\n", "const editorOpen = ref(false)\nconst mobileVersionsOpen = ref(false)\n",1)
+          anchor='          <button v-if="selected" :disabled="actionBusy === \'export\'"'
+          if anchor not in text: raise SystemExit('export button anchor not found')
+          text=text.replace(anchor, '          <button class="flex items-center gap-1.5 rounded-xl border border-line/12 bg-ink/[0.04] px-3 py-2.5 text-xs font-medium text-sub lg:hidden" @click="mobileVersionsOpen = true"><History class="h-3.5 w-3.5" />版本</button>\n'+anchor,1)
+          text=text.replace('<aside class="overflow-hidden rounded-2xl border border-line/10 bg-soft/65">','<aside class="hidden overflow-hidden rounded-2xl border border-line/10 bg-soft/65 lg:block">',1)
+          anchor='    <VisualEditor v-if="selected"'
+          if anchor not in text: raise SystemExit('editor mount anchor not found')
+          text=text.replace(anchor, '    <MobileVersionDrawer :open="mobileVersionsOpen" :versions="versions" :selected-id="selected?.id" :busy="actionBusy" @close="mobileVersionsOpen = false" @select="selectVersion" @rollback="rollback" />\n'+anchor,1)
+          path.write_text(text)
+          Path('.github/workflows/agent-project-mobile-current.yml').unlink()
+          PY
+      - name: Commit current mobile patch
+        run: |
+          git config user.name 'SiteForge Agent'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat(web): expose project versions in mobile drawer'
+          git push origin HEAD:agent/continue-development-20260723
