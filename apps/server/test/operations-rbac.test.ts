@@ -33,6 +33,22 @@ beforeEach(() => {
         updatedAt: now,
       },
     ],
+    feedback: [
+      {
+        id: '00000000-0000-4000-8000-000000000011',
+        userId: '00000000-0000-4000-8000-000000000003',
+        projectId: '00000000-0000-4000-8000-000000000012',
+        versionId: '00000000-0000-4000-8000-000000000013',
+        sentiment: 'negative',
+        categories: ['layout'],
+        message: '层级不够清晰',
+        siteType: 'saas',
+        model: 'test-model',
+        status: 'open',
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
   })
 })
 
@@ -60,27 +76,55 @@ const headers = (token: string): Record<string, string> => ({
 })
 
 describe('模板运营、功能开关与细粒度 RBAC', () => {
-  it('支持人员可读取模板运营，但不能更新模板或读取功能开关', async () => {
+  it('支持人员按权限读取运营数据和处理反馈，但不能修改用户、模板或开关', async () => {
     const supportToken = await login('support@example.com')
-    const access = await app.request('/api/admin/access', { headers: headers(supportToken) })
-    expect(access.status).toBe(200)
-    expect((await access.json()).permissions).toContain('templates.read')
+    const authHeaders = headers(supportToken)
 
-    const list = await app.request('/api/admin/templates', { headers: headers(supportToken) })
+    const access = await app.request('/api/admin/access', { headers: authHeaders })
+    expect(access.status).toBe(200)
+    const permissions = (await access.json()).permissions as string[]
+    expect(permissions).toContain('templates.read')
+    expect(permissions).toContain('feedback.resolve')
+    expect(permissions).not.toContain('feature_flags.read')
+
+    expect((await app.request('/api/admin/overview', { headers: authHeaders })).status).toBe(200)
+    expect((await app.request('/api/admin/users', { headers: authHeaders })).status).toBe(200)
+    expect((await app.request('/api/admin/audit', { headers: authHeaders })).status).toBe(200)
+    expect((await app.request('/api/admin/health', { headers: authHeaders })).status).toBe(200)
+
+    const feedback = await app.request('/api/admin/feedback', { headers: authHeaders })
+    expect(feedback.status).toBe(200)
+    expect((await feedback.json()).feedback).toHaveLength(1)
+    const resolve = await app.request('/api/admin/feedback/00000000-0000-4000-8000-000000000011', {
+      method: 'PATCH',
+      headers: authHeaders,
+      body: JSON.stringify({ status: 'reviewed' }),
+    })
+    expect(resolve.status).toBe(200)
+
+    const list = await app.request('/api/admin/templates', { headers: authHeaders })
     expect(list.status).toBe(200)
     const first = (await list.json()).templates[0]
     expect(first.operationVersion).toBe(0)
 
-    const update = await app.request(`/api/admin/templates/${first.id}`, {
+    const templateUpdate = await app.request(`/api/admin/templates/${first.id}`, {
       method: 'PATCH',
-      headers: headers(supportToken),
+      headers: authHeaders,
       body: JSON.stringify({ status: 'draft', expectedVersion: 0 }),
     })
-    expect(update.status).toBe(403)
-    expect((await update.json()).error.code).toBe('PERMISSION_DENIED')
+    expect(templateUpdate.status).toBe(403)
+    expect((await templateUpdate.json()).error.code).toBe('PERMISSION_DENIED')
 
-    const flags = await app.request('/api/admin/feature-flags', { headers: headers(supportToken) })
-    expect(flags.status).toBe(403)
+    const userUpdate = await app.request('/api/admin/users/00000000-0000-4000-8000-000000000003', {
+      method: 'PATCH',
+      headers: authHeaders,
+      body: JSON.stringify({ status: 'suspended' }),
+    })
+    expect(userUpdate.status).toBe(403)
+    expect((await userUpdate.json()).error.code).toBe('PERMISSION_DENIED')
+
+    expect((await app.request('/api/admin/events', { headers: authHeaders })).status).toBe(403)
+    expect((await app.request('/api/admin/feature-flags', { headers: authHeaders })).status).toBe(403)
   })
 
   it('管理员下架模板后，公开目录、详情和创建接口立即隐藏', async () => {
