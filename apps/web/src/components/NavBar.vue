@@ -4,10 +4,13 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   ChevronDown,
   CircleHelp,
+  FlaskConical,
   FolderKanban,
   Gauge,
+  LayoutTemplate,
   LogOut,
   Menu,
+  MessageSquareText,
   Palette,
   Plug,
   ShieldCheck,
@@ -36,11 +39,10 @@ const open = ref(false)
 const accountOpen = ref(false)
 const { activeProvider } = useModelConfig()
 const { show: showModelSettings } = useModelDialog()
-const { user, isAuthenticated, isAdmin, isOperator, logout } = useAuth()
+const { user, isAuthenticated, isAdmin, isOperator, hasPermission, logout } = useAuth()
 const { show: showAuth } = useAuthDialog()
 const toast = useToast()
 const initials = computed(() => user.value?.email.slice(0, 2).toUpperCase() ?? 'SF')
-const operationsTarget = computed(() => user.value?.role === 'admin' ? '/admin' : '/admin/templates')
 
 function isActive(to: string) {
   return to === '/' ? route.path === '/' : route.path.startsWith(to)
@@ -108,14 +110,19 @@ onBeforeUnmount(() => {
         <button class="relative hidden items-center gap-1.5 rounded-full border border-line/10 bg-ink/5 px-3 py-1.5 text-xs text-mut transition-colors hover:border-line/20 hover:text-ink sm:flex" @click="showModelSettings"><Plug class="h-3.5 w-3.5" /><span class="hidden xl:inline">模型设置</span><span v-if="activeProvider" class="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-400" /></button>
 
         <div v-if="isAuthenticated" data-account-menu class="relative hidden sm:block">
-          <button class="flex max-w-52 items-center gap-2 rounded-full border border-line/10 bg-soft/70 p-1 pr-2.5 text-xs text-sub shadow-sm transition-colors hover:border-brand1/25 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand1/45" :aria-expanded="accountOpen" aria-haspopup="menu" @click.stop="accountOpen = !accountOpen"><span class="bg-brand-gradient flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white">{{ initials }}</span><span class="hidden max-w-28 truncate xl:block">{{ user?.email }}</span><ChevronDown class="h-3.5 w-3.5 transition-transform" :class="accountOpen && 'rotate-180'" /></button>
-          <Transition name="menu"><div v-if="accountOpen" role="menu" class="absolute top-[calc(100%+10px)] right-0 w-64 overflow-hidden rounded-2xl border border-line/10 bg-soft/95 p-2 shadow-2xl shadow-black/15 backdrop-blur-xl">
+          <button class="flex max-w-52 items-center gap-2 rounded-full border border-line/10 bg-soft/70 p-1 pr-2.5 text-xs text-sub shadow-sm transition-colors hover:border-brand1/25 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand1/45" :aria-expanded="accountOpen" aria-haspopup="menu" @click.stop="accountOpen = !accountOpen"><span class="bg-brand-gradient flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white">{{ initials }}</span><span class="hidden max-w-28 truncate xl:block">{{ user?.email }}</span><ChevronDown class="h-3.5 w-3.5 transition-transform" :class="accountOpen ? 'rotate-180' : ''" /></button>
+          <Transition name="menu"><div v-if="accountOpen" role="menu" class="absolute top-[calc(100%+10px)] right-0 w-72 overflow-hidden rounded-2xl border border-line/10 bg-soft/95 p-2 shadow-2xl shadow-black/15 backdrop-blur-xl">
             <div class="border-b border-line/10 px-3 py-2.5"><div class="flex items-center justify-between gap-2"><p class="text-[10px] font-medium tracking-wider text-faint uppercase">当前账号</p><span v-if="isOperator" class="rounded-full px-2 py-0.5 text-[9px] font-bold" :class="isAdmin ? 'bg-violet-500/10 text-violet-500' : 'bg-sky-500/10 text-sky-500'">{{ isAdmin ? 'ADMIN' : 'SUPPORT' }}</span></div><p class="mt-1 truncate text-xs font-medium text-ink">{{ user?.email }}</p></div>
             <RouterLink to="/projects" role="menuitem" class="mt-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><FolderKanban class="h-4 w-4 text-brand1" />我的项目</RouterLink>
             <RouterLink to="/brand" role="menuitem" class="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><Palette class="h-4 w-4 text-brand2" />品牌套件</RouterLink>
             <RouterLink to="/usage" role="menuitem" class="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><Gauge class="h-4 w-4 text-brand2" />额度与用量</RouterLink>
             <button role="menuitem" class="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm text-sub hover:bg-ink/5 hover:text-ink" @click="openOnboarding"><CircleHelp class="h-4 w-4 text-amber-500" />重新打开新手引导</button>
-            <RouterLink v-if="isOperator" :to="operationsTarget" role="menuitem" class="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-violet-500 hover:bg-violet-500/[0.07]"><ShieldCheck class="h-4 w-4" />运营控制台</RouterLink>
+            <div v-if="isOperator" class="my-1 border-t border-line/10 pt-1">
+              <RouterLink v-if="isAdmin" to="/admin" role="menuitem" class="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-violet-500 hover:bg-violet-500/[0.07]"><ShieldCheck class="h-4 w-4" />运营总览</RouterLink>
+              <RouterLink v-if="hasPermission('templates.read')" to="/admin/templates" role="menuitem" class="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><LayoutTemplate class="h-4 w-4 text-violet-500" />模板运营</RouterLink>
+              <RouterLink v-if="hasPermission('feedback.read')" to="/admin/quality" role="menuitem" class="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><MessageSquareText class="h-4 w-4 text-amber-500" />质量反馈</RouterLink>
+              <RouterLink v-if="hasPermission('feature_flags.read')" to="/admin/feature-flags" role="menuitem" class="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><FlaskConical class="h-4 w-4 text-cyan-500" />功能开关</RouterLink>
+            </div>
             <button role="menuitem" class="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm text-red-500 hover:bg-red-500/[0.07]" @click="signOut"><LogOut class="h-4 w-4" />退出登录</button>
           </div></Transition>
         </div>
@@ -128,7 +135,7 @@ onBeforeUnmount(() => {
 
     <nav v-if="open" class="border-t border-line/8 bg-app/95 px-4 py-4 shadow-xl backdrop-blur-xl lg:hidden"><div class="mx-auto flex max-w-7xl flex-col gap-1">
       <RouterLink v-for="link in NAV_LINKS" :key="link.to" :to="link.to" class="rounded-lg px-3 py-2.5 text-sm" :class="isActive(link.to) ? 'bg-brand1/12 font-semibold text-ink' : 'text-sub hover:bg-ink/5 hover:text-ink'">{{ link.label }}</RouterLink>
-      <template v-if="isAuthenticated"><RouterLink to="/projects" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><FolderKanban class="h-4 w-4 text-brand1" />我的项目</RouterLink><RouterLink to="/brand" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><Palette class="h-4 w-4 text-brand2" />品牌套件</RouterLink><RouterLink to="/usage" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><Gauge class="h-4 w-4 text-brand2" />额度与用量</RouterLink><button class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-sub hover:bg-ink/5 hover:text-ink" @click="openOnboarding"><CircleHelp class="h-4 w-4 text-amber-500" />新手引导</button><RouterLink v-if="isOperator" :to="operationsTarget" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-violet-500 hover:bg-violet-500/[0.07]"><ShieldCheck class="h-4 w-4" />运营控制台</RouterLink></template>
+      <template v-if="isAuthenticated"><RouterLink to="/projects" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><FolderKanban class="h-4 w-4 text-brand1" />我的项目</RouterLink><RouterLink to="/brand" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><Palette class="h-4 w-4 text-brand2" />品牌套件</RouterLink><RouterLink to="/usage" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><Gauge class="h-4 w-4 text-brand2" />额度与用量</RouterLink><button class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-sub hover:bg-ink/5 hover:text-ink" @click="openOnboarding"><CircleHelp class="h-4 w-4 text-amber-500" />新手引导</button><template v-if="isOperator"><RouterLink v-if="isAdmin" to="/admin" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-violet-500 hover:bg-violet-500/[0.07]"><ShieldCheck class="h-4 w-4" />运营总览</RouterLink><RouterLink v-if="hasPermission('templates.read')" to="/admin/templates" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><LayoutTemplate class="h-4 w-4 text-violet-500" />模板运营</RouterLink><RouterLink v-if="hasPermission('feedback.read')" to="/admin/quality" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><MessageSquareText class="h-4 w-4 text-amber-500" />质量反馈</RouterLink><RouterLink v-if="hasPermission('feature_flags.read')" to="/admin/feature-flags" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><FlaskConical class="h-4 w-4 text-cyan-500" />功能开关</RouterLink></template></template>
       <button class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-sub hover:bg-ink/5 hover:text-ink" @click="((open = false), showModelSettings())"><Plug class="h-4 w-4" />模型设置<span v-if="activeProvider" class="h-2 w-2 rounded-full bg-emerald-400" /></button>
       <button v-if="!isAuthenticated" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-sub hover:bg-ink/5 hover:text-ink" @click="((open = false), showAuth())"><UserRound class="h-4 w-4" />登录或创建账号</button><button v-else class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-red-500 hover:bg-red-500/[0.07]" @click="signOut"><LogOut class="h-4 w-4" />退出登录</button><RouterLink to="/generator" class="bg-brand-gradient mt-2 rounded-full px-5 py-2.5 text-center text-sm font-semibold text-white">{{ isAuthenticated ? '新建网站' : '免费开始' }}</RouterLink>
     </div></nav>
