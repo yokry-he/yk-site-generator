@@ -132,7 +132,7 @@ export class MysqlSnapshotStore {
        WHERE state_key = ?${lock ? ' FOR UPDATE' : ''}`,
       [STATE_KEY],
     )
-    const row = firstRows(result)[0] as SnapshotRow | undefined
+    const row = firstRows(result)[0] as unknown as SnapshotRow | undefined
     return row ? parseSnapshotRow(row) : null
   }
 
