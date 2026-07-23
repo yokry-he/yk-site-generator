@@ -37,6 +37,8 @@ export interface SessionRecord {
   revokedAt?: string
 }
 
+export type ProjectLifecycleStatus = 'active' | 'archived' | 'trashed'
+
 export interface ProjectRecord {
   id: string
   userId: string
@@ -45,6 +47,13 @@ export interface ProjectRecord {
   requirement: string
   /** 官方模板来源；手动生成项目为空。 */
   templateId?: string
+  /** 项目当前生命周期；旧数据缺省为 active。 */
+  status?: ProjectLifecycleStatus
+  starred?: boolean
+  openedAt?: string
+  duplicatedFromId?: string
+  brandKitId?: string
+  coverDataUrl?: string
   createdAt: string
   updatedAt: string
 }
@@ -60,6 +69,12 @@ export interface ProjectVersionRecord {
   source: ProjectVersionSource
   instruction?: string
   model?: string
+  /** 面向用户的版本名称和备注。 */
+  name?: string
+  note?: string
+  starred?: boolean
+  parentVersionId?: string
+  changeSummary?: string[]
   createdAt: string
 }
 
@@ -89,6 +104,27 @@ export interface PublicationRecord {
 
 export interface BrandKitRecord extends BrandKit {
   userId: string
+}
+
+export type BrandAssetKind = 'logo' | 'image' | 'icon' | 'background' | 'document'
+
+export interface BrandAssetRecord {
+  id: string
+  userId: string
+  brandKitId?: string
+  kind: BrandAssetKind
+  name: string
+  dataUrl: string
+  alt?: string
+  tags: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TemplateFavoriteRecord {
+  userId: string
+  templateId: string
+  createdAt: string
 }
 
 export interface AuditLogRecord {
@@ -190,7 +226,7 @@ export interface FeatureFlagRecord {
 }
 
 export interface AppData {
-  schemaVersion: 5
+  schemaVersion: 6
   users: UserRecord[]
   verificationCodes: VerificationCodeRecord[]
   sessions: SessionRecord[]
@@ -199,6 +235,8 @@ export interface AppData {
   usage: UsageRecord[]
   publications: PublicationRecord[]
   brandKits: BrandKitRecord[]
+  brandAssets: BrandAssetRecord[]
+  templateFavorites: TemplateFavoriteRecord[]
   auditLogs: AuditLogRecord[]
   systemEvents: SystemEventRecord[]
   feedback: FeedbackRecord[]
@@ -218,7 +256,7 @@ export interface DataStoreHealth {
 }
 
 export const createEmptyData = (): AppData => ({
-  schemaVersion: 5,
+  schemaVersion: 6,
   users: [],
   verificationCodes: [],
   sessions: [],
@@ -227,6 +265,8 @@ export const createEmptyData = (): AppData => ({
   usage: [],
   publications: [],
   brandKits: [],
+  brandAssets: [],
+  templateFavorites: [],
   auditLogs: [],
   systemEvents: [],
   feedback: [],
@@ -250,21 +290,39 @@ function normalizeUsers(users: UserRecord[]): UserRecord[] {
   }))
 }
 
+function normalizeProjects(projects: ProjectRecord[]): ProjectRecord[] {
+  return projects.map((project) => ({
+    ...project,
+    status: project.status ?? 'active',
+    starred: project.starred ?? false,
+  }))
+}
+
+function normalizeVersions(versions: ProjectVersionRecord[]): ProjectVersionRecord[] {
+  return versions.map((version) => ({
+    ...version,
+    starred: version.starred ?? false,
+    changeSummary: version.changeSummary ?? [],
+  }))
+}
+
 export function normalizeAppData(input: unknown): AppData {
   const parsed = (input && typeof input === 'object' ? input : {}) as Partial<AppData> & { schemaVersion?: number }
-  if (parsed.schemaVersion !== undefined && ![1, 2, 3, 4, 5].includes(parsed.schemaVersion)) {
+  if (parsed.schemaVersion !== undefined && ![1, 2, 3, 4, 5, 6].includes(parsed.schemaVersion)) {
     throw new Error('UNSUPPORTED_DATA_SCHEMA')
   }
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     users: normalizeUsers(parsed.users ?? []),
     verificationCodes: parsed.verificationCodes ?? [],
     sessions: parsed.sessions ?? [],
-    projects: parsed.projects ?? [],
-    projectVersions: parsed.projectVersions ?? [],
+    projects: normalizeProjects(parsed.projects ?? []),
+    projectVersions: normalizeVersions(parsed.projectVersions ?? []),
     usage: parsed.usage ?? [],
     publications: parsed.publications ?? [],
     brandKits: parsed.brandKits ?? [],
+    brandAssets: parsed.brandAssets ?? [],
+    templateFavorites: parsed.templateFavorites ?? [],
     auditLogs: parsed.auditLogs ?? [],
     systemEvents: parsed.systemEvents ?? [],
     feedback: parsed.feedback ?? [],
@@ -303,7 +361,6 @@ export async function initializeDataStore(): Promise<void> {
     await getMysqlSnapshotStore().initialize()
     return
   }
-  // 文件驱动在首次写入时创建目录；这里先验证已有文件能被读取。
   await readDataFile()
 }
 
@@ -355,7 +412,7 @@ export function mutateData<T>(mutator: (draft: AppData) => T | Promise<T>): Prom
 
 export async function getDataStoreHealth(): Promise<DataStoreHealth> {
   if (env.NODE_ENV === 'test') {
-    return { driver: 'memory', status: 'operational', message: '内存测试适配器', schemaVersion: 5 }
+    return { driver: 'memory', status: 'operational', message: '内存测试适配器', schemaVersion: 6 }
   }
   const startedAt = Date.now()
   if (env.DATA_STORAGE_DRIVER === 'mysql') {
@@ -366,7 +423,7 @@ export async function getDataStoreHealth(): Promise<DataStoreHealth> {
       message: health.message,
       latencyMs: health.latencyMs,
       revision: health.revision,
-      schemaVersion: health.schemaVersion ?? 5,
+      schemaVersion: health.schemaVersion ?? 6,
       updatedAt: health.updatedAt,
     }
   }
@@ -385,12 +442,12 @@ export async function getDataStoreHealth(): Promise<DataStoreHealth> {
       status: 'degraded',
       message: error instanceof Error ? error.message : '文件数据存储不可用',
       latencyMs: Date.now() - startedAt,
-      schemaVersion: 5,
+      schemaVersion: 6,
     }
   }
 }
 
 export function resetDataStoreForTest(seed?: Partial<AppData>): void {
-  memoryData = normalizeAppData({ ...createEmptyData(), ...seed, schemaVersion: 5 })
+  memoryData = normalizeAppData({ ...createEmptyData(), ...seed, schemaVersion: 6 })
   queue = Promise.resolve()
 }
