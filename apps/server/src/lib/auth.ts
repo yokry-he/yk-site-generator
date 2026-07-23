@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import type { MiddlewareHandler } from 'hono'
 import { env } from '../env'
+import { readData } from './data-store'
 
 export interface AccessClaims {
   sub: string
@@ -87,10 +88,24 @@ export function verifyAccessToken(token: string, now = Date.now()): AccessClaims
   }
 }
 
-export const authMiddleware: MiddlewareHandler<AuthEnv> = async (c, next) => {
-  const authorization = c.req.header('authorization')
+/** JWT 校验后继续确认服务端会话没有撤销或过期。 */
+export async function authenticateBearerHeader(authorization?: string): Promise<AccessClaims | null> {
   const token = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]
   const claims = token ? verifyAccessToken(token) : null
+  if (!claims) return null
+  const data = await readData()
+  const session = data.sessions.find(
+    (item) =>
+      item.id === claims.sid &&
+      item.userId === claims.sub &&
+      !item.revokedAt &&
+      Date.parse(item.expiresAt) > Date.now(),
+  )
+  return session ? claims : null
+}
+
+export const authMiddleware: MiddlewareHandler<AuthEnv> = async (c, next) => {
+  const claims = await authenticateBearerHeader(c.req.header('authorization'))
   if (!claims) {
     return c.json({ error: { code: 'UNAUTHORIZED', message: '登录状态无效或已过期' } }, 401)
   }
