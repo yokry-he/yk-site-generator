@@ -16,6 +16,8 @@ import quota from './routes/quota'
 import publications from './routes/publications'
 import brandKits from './routes/brand-kits'
 import templates from './routes/templates'
+import onboarding from './routes/onboarding'
+import feedback from './routes/feedback'
 import admin from './routes/admin'
 import sitePage, { serveSiteFromHost } from './routes/site-page'
 
@@ -51,6 +53,8 @@ export function createApp() {
   app.route('/api/publications', publications)
   app.route('/api/brand-kits', brandKits)
   app.route('/api/templates', templates)
+  app.route('/api/onboarding', onboarding)
+  app.route('/api/feedback', feedback)
   app.route('/api/admin', admin)
   app.route('/s', sharePage)
   app.route('/site', sitePage)
