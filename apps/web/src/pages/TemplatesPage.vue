@@ -10,7 +10,6 @@ import {
   LayoutGrid,
   Loader2,
   Monitor,
-  Palette,
   RefreshCw,
   Search,
   SlidersHorizontal,
