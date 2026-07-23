@@ -3,9 +3,16 @@ import path from 'node:path'
 import type { BrandKit } from 'shared'
 import { env } from '../env'
 
+export type UserRole = 'user' | 'admin' | 'support'
+export type UserStatus = 'active' | 'suspended' | 'deleted'
+
 export interface UserRecord {
   id: string
   email: string
+  /** 旧数据缺省为 user。 */
+  role?: UserRole
+  /** 旧数据缺省为 active。 */
+  status?: UserStatus
   createdAt: string
   updatedAt: string
 }
@@ -83,8 +90,37 @@ export interface BrandKitRecord extends BrandKit {
   userId: string
 }
 
+export interface AuditLogRecord {
+  id: string
+  actorUserId?: string
+  actorRole?: UserRole
+  action: string
+  resourceType: string
+  resourceId?: string
+  requestId?: string
+  ipAddress?: string
+  userAgent?: string
+  outcome: 'success' | 'failure'
+  beforeData?: Record<string, unknown>
+  afterData?: Record<string, unknown>
+  errorCode?: string
+  createdAt: string
+}
+
+export interface SystemEventRecord {
+  id: string
+  level: 'info' | 'warning' | 'error'
+  source: string
+  eventType: string
+  message: string
+  requestId?: string
+  durationMs?: number
+  metadata?: Record<string, unknown>
+  createdAt: string
+}
+
 export interface AppData {
-  schemaVersion: 2
+  schemaVersion: 3
   users: UserRecord[]
   verificationCodes: VerificationCodeRecord[]
   sessions: SessionRecord[]
@@ -93,10 +129,12 @@ export interface AppData {
   usage: UsageRecord[]
   publications: PublicationRecord[]
   brandKits: BrandKitRecord[]
+  auditLogs: AuditLogRecord[]
+  systemEvents: SystemEventRecord[]
 }
 
 const emptyData = (): AppData => ({
-  schemaVersion: 2,
+  schemaVersion: 3,
   users: [],
   verificationCodes: [],
   sessions: [],
@@ -105,6 +143,8 @@ const emptyData = (): AppData => ({
   usage: [],
   publications: [],
   brandKits: [],
+  auditLogs: [],
+  systemEvents: [],
 })
 
 let memoryData: AppData = emptyData()
@@ -112,6 +152,14 @@ let queue: Promise<unknown> = Promise.resolve()
 
 function cloneData(data: AppData): AppData {
   return structuredClone(data)
+}
+
+function normalizeUsers(users: UserRecord[]): UserRecord[] {
+  return users.map((user) => ({
+    ...user,
+    role: user.role ?? 'user',
+    status: user.status ?? 'active',
+  }))
 }
 
 async function readFromDisk(): Promise<AppData> {
@@ -127,11 +175,13 @@ async function readFromDisk(): Promise<AppData> {
       usage?: UsageRecord[]
       publications?: PublicationRecord[]
       brandKits?: BrandKitRecord[]
+      auditLogs?: AuditLogRecord[]
+      systemEvents?: SystemEventRecord[]
     }
-    if (parsed.schemaVersion !== 1 && parsed.schemaVersion !== 2) throw new Error('UNSUPPORTED_DATA_SCHEMA')
+    if (![1, 2, 3].includes(parsed.schemaVersion ?? 0)) throw new Error('UNSUPPORTED_DATA_SCHEMA')
     return {
-      schemaVersion: 2,
-      users: parsed.users ?? [],
+      schemaVersion: 3,
+      users: normalizeUsers(parsed.users ?? []),
       verificationCodes: parsed.verificationCodes ?? [],
       sessions: parsed.sessions ?? [],
       projects: parsed.projects ?? [],
@@ -139,6 +189,8 @@ async function readFromDisk(): Promise<AppData> {
       usage: parsed.usage ?? [],
       publications: parsed.publications ?? [],
       brandKits: parsed.brandKits ?? [],
+      auditLogs: parsed.auditLogs ?? [],
+      systemEvents: parsed.systemEvents ?? [],
     }
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return emptyData()
@@ -176,6 +228,11 @@ export function mutateData<T>(mutator: (draft: AppData) => T | Promise<T>): Prom
 }
 
 export function resetDataStoreForTest(seed?: Partial<AppData>): void {
-  memoryData = { ...emptyData(), ...seed, schemaVersion: 2 }
+  memoryData = {
+    ...emptyData(),
+    ...seed,
+    users: normalizeUsers(seed?.users ?? []),
+    schemaVersion: 3,
+  }
   queue = Promise.resolve()
 }
