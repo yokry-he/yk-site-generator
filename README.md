@@ -66,7 +66,7 @@
 - 审计日志:操作者、目标资源、请求 ID、IP、User-Agent、前后状态和结果
 - 系统事件:HTTP 错误、慢请求、生成成功、解析失败和厂商错误
 - 质量反馈工作区:负向率、待处理队列、高频问题、模型/站点类型筛选和处理状态
-- 基础设施状态:API、单实例数据、邮件、对象存储和 MySQL 适配状态
+- 基础设施状态:API、数据存储、邮件、对象存储和 MySQL 适配状态
 
 ## 目录结构
 
@@ -79,7 +79,7 @@ yk-site-generator/
 │   ├── shared/              # 产物协议、解析器、SEO、品牌 Token 与官方模板渲染器
 │   └── prompts/             # 14 类提示词、迭代提示词与质量评测
 ├── deploy/                  # PR 预览与生产部署说明
-├── apps/server/db/          # MySQL 8 基线结构与增量 migration
+├── apps/server/db/          # MySQL 8 基线结构、增量 migration 与事务状态表
 └── .github/workflows/       # CI 与可选 Vercel Preview
 ```
 
@@ -124,24 +124,78 @@ pnpm --filter web e2e:history
 pnpm --filter prompts eval -- --dry-run
 ```
 
-Draft PR 的 CI 会执行 lint、严格类型检查、全仓构建、全仓单测与生成链路 E2E。失败日志会作为 7 天工件保留。
+Draft PR 的 CI 会执行 frozen-lockfile 安装、lint、严格类型检查、全仓构建、全仓单测与生成链路 E2E。失败日志会作为 7 天工件保留。
 
-## 数据与部署边界
+## 数据存储
 
-开发和单实例 MVP 使用原子 JSON 文件适配器,配置 `DATA_STORAGE_FILE`;临时分享和本地发布目录必须挂载持久卷。正式多实例部署以 `apps/server/db/001_initial.sql` 的 MySQL 8 / InnoDB / utf8mb4 结构为基线,并按编号执行增量 migration。
+### 文件适配器
 
-MySQL 基线已经覆盖:
+开发和单实例环境默认使用原子 JSON 文件:
 
-- 用户、验证码、会话、角色和账号状态
-- 项目、不可变版本、模板来源与发布记录
-- 额度使用事件
-- 品牌套件
-- 官方模板与分类
-- 管理审计日志
-- 用户质量反馈与新手引导进度
-- 功能开关和可观测性事件
+```env
+DATA_STORAGE_DRIVER=file
+DATA_STORAGE_FILE=.data/siteforge.json
+```
 
-当前需要继续完成的是事务型 MySQL 数据适配器、JSON → MySQL 迁移命令和生产连接池健康检查。代码中的单实例 JSON schema 会自动兼容旧版本并迁移至最新结构。
+写入采用进程内串行队列、临时文件和原子重命名。临时分享与本地发布目录仍需要挂载持久卷。
+
+### MySQL 事务适配器
+
+正式多实例环境可切换到 MySQL 8:
+
+```env
+DATA_STORAGE_DRIVER=mysql
+MYSQL_URL=mysql://siteforge:password@127.0.0.1:3306/siteforge
+MYSQL_CONNECTION_LIMIT=10
+MYSQL_SSL_MODE=required
+```
+
+当前第一阶段使用版本化应用快照作为事务迁移桥梁:
+
+- `SELECT ... FOR UPDATE` 保证跨实例写入串行化
+- 每次提交递增 revision
+- SHA-256 校验和检测数据损坏
+- 服务启动前验证连接与表结构
+- SIGTERM / SIGINT 时优雅关闭连接池
+- 现有业务 API 与文件适配器保持一致
+
+数据库先执行 `apps/server/db/001_initial.sql` 及后续编号 migration,事务快照表位于 `004_transactional_state.sql`。
+
+连接与 Schema 检查:
+
+```bash
+MYSQL_URL='mysql://...' pnpm --filter server db:mysql:check
+```
+
+JSON → MySQL 迁移预检:
+
+```bash
+MYSQL_URL='mysql://...' pnpm --filter server db:mysql:import -- --dry-run
+```
+
+首次导入:
+
+```bash
+MYSQL_URL='mysql://...' pnpm --filter server db:mysql:import -- --file=.data/siteforge.json
+```
+
+MySQL 已有数据时默认拒绝覆盖。明确使用 `--force` 前,命令会自动导出覆盖前快照:
+
+```bash
+MYSQL_URL='mysql://...' pnpm --filter server db:mysql:import -- --force
+```
+
+独立导出可用于回滚到文件适配器:
+
+```bash
+MYSQL_URL='mysql://...' pnpm --filter server db:mysql:export -- --output=.data/mysql-rollback.json
+```
+
+然后将 `DATA_STORAGE_DRIVER=file`、`DATA_STORAGE_FILE=.data/mysql-rollback.json` 后重启即可回滚。
+
+MySQL 基线还覆盖用户、会话、项目、版本、额度、发布、品牌、模板、反馈、引导、审计与系统事件的规范化表。后续会在不改变业务 API 的前提下逐域从事务快照迁移至规范化仓库。
+
+## 发布存储
 
 发布存储优先级:
 
@@ -160,6 +214,8 @@ PR Preview 始终构建并上传前端产物;配置 Vercel Secrets 后自动部�
 - 访问令牌短期有效,刷新令牌只保存哈希并支持轮换、撤销
 - 账号限制会立即撤销全部活跃会话
 - 管理员权限每次从服务端数据源读取,角色变化立即生效
+- MySQL 迁移默认禁止覆盖已有快照,强制覆盖前自动生成回滚文件
+- 每个 MySQL 快照都校验 SHA-256,不匹配时拒绝读取
 - 临时分享使用随机 ID 与独立删除令牌,最多保留 7 天
 - 分享与发布页面包含 CSP、Referrer-Policy、nosniff 等隔离头
 - 品牌 Logo 仅接受受支持图片类型并限制体积
@@ -177,8 +233,8 @@ PR Preview 始终构建并上传前端产物;配置 Vercel Secrets 后自动部�
 - [x] 官方模板中心第一阶段
 - [x] 管理后台、审计日志与可观测性第一阶段
 - [x] 新手引导与质量反馈闭环第一阶段
-- [x] MySQL 8 生产数据结构基线与增量 migration
-- [ ] MySQL 事务数据适配器和 JSON → MySQL 迁移命令
+- [x] MySQL 8 Schema、事务适配器、JSON 迁移与回滚工具
+- [ ] 规范化 MySQL 领域仓库与双写迁移
 - [ ] 管理后台模板运营、功能开关与更细粒度权限
 - [ ] 生产邮件、对象存储、CDN 与正式域名接入
 - [ ] 表单线索、访问统计、套餐与支付
