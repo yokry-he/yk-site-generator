@@ -22,6 +22,10 @@ const envSchema = z.object({
   ACCESS_TOKEN_TTL_MIN: z.coerce.number().int().min(5).max(120).default(15),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
   VERIFICATION_CODE_TTL_MIN: z.coerce.number().int().min(3).max(30).default(10),
+  /** 首次登录时自动授予管理员角色的邮箱,逗号分隔。 */
+  ADMIN_EMAILS: z.string().default(''),
+  /** 单实例事件存储上限,避免诊断数据无限增长。 */
+  SYSTEM_EVENT_LIMIT: z.coerce.number().int().min(500).max(50_000).default(5_000),
   EMAIL_WEBHOOK_URL: z.string().url().or(z.literal('')).default(''),
   EMAIL_WEBHOOK_TOKEN: z.string().default(''),
   MONTHLY_GENERATION_LIMIT: z.coerce.number().int().positive().default(100),
@@ -68,5 +72,8 @@ if (configuredS3Values > 0 && configuredS3Values < s3Values.length) {
 export const env = {
   ...parsed.data,
   corsOrigins: parsed.data.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean),
+  adminEmails: new Set(
+    parsed.data.ADMIN_EMAILS.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+  ),
   s3Enabled: configuredS3Values === s3Values.length,
 }
