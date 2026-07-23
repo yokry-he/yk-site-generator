@@ -4,6 +4,7 @@ import NavBar from './components/NavBar.vue'
 import SiteFooter from './components/SiteFooter.vue'
 import ModelSettingsDialog from './components/ModelSettingsDialog.vue'
 import AuthDialog from './components/AuthDialog.vue'
+import CommandPalette from './components/CommandPalette.vue'
 import HistoryMigrationNotice from './components/HistoryMigrationNotice.vue'
 import OnboardingGuide from './components/OnboardingGuide.vue'
 import ProjectFeedbackPrompt from './components/ProjectFeedbackPrompt.vue'
@@ -30,6 +31,7 @@ watch(() => user.value?.id, () => void loadFeatures())
     <SiteFooter />
     <ModelSettingsDialog />
     <AuthDialog />
+    <CommandPalette />
     <HistoryMigrationNotice />
     <OnboardingGuide v-if="enabled('onboarding-guide')" />
     <ProjectFeedbackPrompt v-if="enabled('quality-feedback')" />
