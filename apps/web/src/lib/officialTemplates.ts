@@ -14,8 +14,19 @@ export interface OfficialTemplateCatalogResponse {
   filters: OfficialTemplateFilters
 }
 
+function anonymousId(): string {
+  const key = 'siteforge:anonymous-id'
+  const stored = localStorage.getItem(key)
+  if (stored) return stored
+  const value = crypto.randomUUID()
+  localStorage.setItem(key, value)
+  return value
+}
+
 export async function listOfficialTemplates(): Promise<OfficialTemplateCatalogResponse> {
-  const response = await ensureOk(await fetch('/api/templates'))
+  const response = await ensureOk(await authFetch('/api/templates', {
+    headers: { 'x-anonymous-id': anonymousId() },
+  }))
   return response.json() as Promise<OfficialTemplateCatalogResponse>
 }
 
