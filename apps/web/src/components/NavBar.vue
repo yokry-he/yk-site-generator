@@ -21,14 +21,15 @@ import {
 import ThemeSwitcher from './ThemeSwitcher.vue'
 import { useAuth } from '../composables/useAuth'
 import { useAuthDialog } from '../composables/useAuthDialog'
+import { useFeatures } from '../composables/useFeatures'
 import { useModelConfig } from '../composables/useModelConfig'
 import { useModelDialog } from '../composables/useModelDialog'
 import { useToast } from '../composables/useToast'
 
-const NAV_LINKS = [
+const BASE_NAV_LINKS = [
   { label: '首页', to: '/' },
   { label: '在线体验', to: '/generator' },
-  { label: '模板库', to: '/templates' },
+  { label: '模板库', to: '/templates', feature: 'official-templates' as const },
   { label: '定价', to: '/pricing' },
 ]
 
@@ -40,9 +41,11 @@ const accountOpen = ref(false)
 const { activeProvider } = useModelConfig()
 const { show: showModelSettings } = useModelDialog()
 const { user, isAuthenticated, isAdmin, isOperator, hasPermission, logout } = useAuth()
+const { enabled } = useFeatures()
 const { show: showAuth } = useAuthDialog()
 const toast = useToast()
 const initials = computed(() => user.value?.email.slice(0, 2).toUpperCase() ?? 'SF')
+const navLinks = computed(() => BASE_NAV_LINKS.filter((link) => !('feature' in link) || enabled(link.feature)))
 
 function isActive(to: string) {
   return to === '/' ? route.path === '/' : route.path.startsWith(to)
@@ -98,10 +101,10 @@ onBeforeUnmount(() => {
       <RouterLink to="/" class="flex shrink-0 items-center gap-2"><span class="bg-brand-gradient flex h-8 w-8 items-center justify-center rounded-lg shadow-lg shadow-brand1/25"><Sparkles class="h-4.5 w-4.5 text-white" :stroke-width="2.2" /></span><span class="text-lg font-bold tracking-tight text-ink">SiteForge</span></RouterLink>
 
       <nav class="hidden items-center gap-7 lg:flex">
-        <RouterLink v-for="link in NAV_LINKS" :key="link.to" :to="link.to" class="relative text-sm transition-colors" :class="isActive(link.to) ? 'font-semibold text-ink' : 'text-mut hover:text-ink'">{{ link.label }}<span v-if="isActive(link.to)" class="bg-brand-gradient absolute -bottom-2 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full" /></RouterLink>
+        <RouterLink v-for="link in navLinks" :key="link.to" :to="link.to" class="relative text-sm transition-colors" :class="isActive(link.to) ? 'font-semibold text-ink' : 'text-mut hover:text-ink'">{{ link.label }}<span v-if="isActive(link.to)" class="bg-brand-gradient absolute -bottom-2 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full" /></RouterLink>
         <template v-if="isAuthenticated">
           <RouterLink to="/projects" class="relative text-sm transition-colors" :class="isActive('/projects') ? 'font-semibold text-ink' : 'text-mut hover:text-ink'">我的项目<span v-if="isActive('/projects')" class="bg-brand-gradient absolute -bottom-2 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full" /></RouterLink>
-          <RouterLink to="/brand" class="relative text-sm transition-colors" :class="isActive('/brand') ? 'font-semibold text-ink' : 'text-mut hover:text-ink'">品牌<span v-if="isActive('/brand')" class="bg-brand-gradient absolute -bottom-2 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full" /></RouterLink>
+          <RouterLink v-if="enabled('brand-kits')" to="/brand" class="relative text-sm transition-colors" :class="isActive('/brand') ? 'font-semibold text-ink' : 'text-mut hover:text-ink'">品牌<span v-if="isActive('/brand')" class="bg-brand-gradient absolute -bottom-2 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full" /></RouterLink>
         </template>
       </nav>
 
@@ -114,9 +117,9 @@ onBeforeUnmount(() => {
           <Transition name="menu"><div v-if="accountOpen" role="menu" class="absolute top-[calc(100%+10px)] right-0 w-72 overflow-hidden rounded-2xl border border-line/10 bg-soft/95 p-2 shadow-2xl shadow-black/15 backdrop-blur-xl">
             <div class="border-b border-line/10 px-3 py-2.5"><div class="flex items-center justify-between gap-2"><p class="text-[10px] font-medium tracking-wider text-faint uppercase">当前账号</p><span v-if="isOperator" class="rounded-full px-2 py-0.5 text-[9px] font-bold" :class="isAdmin ? 'bg-violet-500/10 text-violet-500' : 'bg-sky-500/10 text-sky-500'">{{ isAdmin ? 'ADMIN' : 'SUPPORT' }}</span></div><p class="mt-1 truncate text-xs font-medium text-ink">{{ user?.email }}</p></div>
             <RouterLink to="/projects" role="menuitem" class="mt-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><FolderKanban class="h-4 w-4 text-brand1" />我的项目</RouterLink>
-            <RouterLink to="/brand" role="menuitem" class="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><Palette class="h-4 w-4 text-brand2" />品牌套件</RouterLink>
+            <RouterLink v-if="enabled('brand-kits')" to="/brand" role="menuitem" class="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><Palette class="h-4 w-4 text-brand2" />品牌套件</RouterLink>
             <RouterLink to="/usage" role="menuitem" class="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><Gauge class="h-4 w-4 text-brand2" />额度与用量</RouterLink>
-            <button role="menuitem" class="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm text-sub hover:bg-ink/5 hover:text-ink" @click="openOnboarding"><CircleHelp class="h-4 w-4 text-amber-500" />重新打开新手引导</button>
+            <button v-if="enabled('onboarding-guide')" role="menuitem" class="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm text-sub hover:bg-ink/5 hover:text-ink" @click="openOnboarding"><CircleHelp class="h-4 w-4 text-amber-500" />重新打开新手引导</button>
             <div v-if="isOperator" class="my-1 border-t border-line/10 pt-1">
               <RouterLink v-if="isAdmin" to="/admin" role="menuitem" class="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-violet-500 hover:bg-violet-500/[0.07]"><ShieldCheck class="h-4 w-4" />运营总览</RouterLink>
               <RouterLink v-if="hasPermission('templates.read')" to="/admin/templates" role="menuitem" class="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><LayoutTemplate class="h-4 w-4 text-violet-500" />模板运营</RouterLink>
@@ -134,8 +137,8 @@ onBeforeUnmount(() => {
     </div>
 
     <nav v-if="open" class="border-t border-line/8 bg-app/95 px-4 py-4 shadow-xl backdrop-blur-xl lg:hidden"><div class="mx-auto flex max-w-7xl flex-col gap-1">
-      <RouterLink v-for="link in NAV_LINKS" :key="link.to" :to="link.to" class="rounded-lg px-3 py-2.5 text-sm" :class="isActive(link.to) ? 'bg-brand1/12 font-semibold text-ink' : 'text-sub hover:bg-ink/5 hover:text-ink'">{{ link.label }}</RouterLink>
-      <template v-if="isAuthenticated"><RouterLink to="/projects" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><FolderKanban class="h-4 w-4 text-brand1" />我的项目</RouterLink><RouterLink to="/brand" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><Palette class="h-4 w-4 text-brand2" />品牌套件</RouterLink><RouterLink to="/usage" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><Gauge class="h-4 w-4 text-brand2" />额度与用量</RouterLink><button class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-sub hover:bg-ink/5 hover:text-ink" @click="openOnboarding"><CircleHelp class="h-4 w-4 text-amber-500" />新手引导</button><template v-if="isOperator"><RouterLink v-if="isAdmin" to="/admin" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-violet-500 hover:bg-violet-500/[0.07]"><ShieldCheck class="h-4 w-4" />运营总览</RouterLink><RouterLink v-if="hasPermission('templates.read')" to="/admin/templates" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><LayoutTemplate class="h-4 w-4 text-violet-500" />模板运营</RouterLink><RouterLink v-if="hasPermission('feedback.read')" to="/admin/quality" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><MessageSquareText class="h-4 w-4 text-amber-500" />质量反馈</RouterLink><RouterLink v-if="hasPermission('feature_flags.read')" to="/admin/feature-flags" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><FlaskConical class="h-4 w-4 text-cyan-500" />功能开关</RouterLink></template></template>
+      <RouterLink v-for="link in navLinks" :key="link.to" :to="link.to" class="rounded-lg px-3 py-2.5 text-sm" :class="isActive(link.to) ? 'bg-brand1/12 font-semibold text-ink' : 'text-sub hover:bg-ink/5 hover:text-ink'">{{ link.label }}</RouterLink>
+      <template v-if="isAuthenticated"><RouterLink to="/projects" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><FolderKanban class="h-4 w-4 text-brand1" />我的项目</RouterLink><RouterLink v-if="enabled('brand-kits')" to="/brand" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><Palette class="h-4 w-4 text-brand2" />品牌套件</RouterLink><RouterLink to="/usage" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><Gauge class="h-4 w-4 text-brand2" />额度与用量</RouterLink><button v-if="enabled('onboarding-guide')" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-sub hover:bg-ink/5 hover:text-ink" @click="openOnboarding"><CircleHelp class="h-4 w-4 text-amber-500" />新手引导</button><template v-if="isOperator"><RouterLink v-if="isAdmin" to="/admin" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-violet-500 hover:bg-violet-500/[0.07]"><ShieldCheck class="h-4 w-4" />运营总览</RouterLink><RouterLink v-if="hasPermission('templates.read')" to="/admin/templates" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><LayoutTemplate class="h-4 w-4 text-violet-500" />模板运营</RouterLink><RouterLink v-if="hasPermission('feedback.read')" to="/admin/quality" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><MessageSquareText class="h-4 w-4 text-amber-500" />质量反馈</RouterLink><RouterLink v-if="hasPermission('feature_flags.read')" to="/admin/feature-flags" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink"><FlaskConical class="h-4 w-4 text-cyan-500" />功能开关</RouterLink></template></template>
       <button class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-sub hover:bg-ink/5 hover:text-ink" @click="((open = false), showModelSettings())"><Plug class="h-4 w-4" />模型设置<span v-if="activeProvider" class="h-2 w-2 rounded-full bg-emerald-400" /></button>
       <button v-if="!isAuthenticated" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-sub hover:bg-ink/5 hover:text-ink" @click="((open = false), showAuth())"><UserRound class="h-4 w-4" />登录或创建账号</button><button v-else class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-red-500 hover:bg-red-500/[0.07]" @click="signOut"><LogOut class="h-4 w-4" />退出登录</button><RouterLink to="/generator" class="bg-brand-gradient mt-2 rounded-full px-5 py-2.5 text-center text-sm font-semibold text-white">{{ isAuthenticated ? '新建网站' : '免费开始' }}</RouterLink>
     </div></nav>
