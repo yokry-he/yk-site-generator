@@ -21,10 +21,11 @@ pages.get('/:id', async (c) => {
   c.header('X-Content-Type-Options', 'nosniff')
   c.header('Referrer-Policy', 'no-referrer')
   c.header('X-Frame-Options', 'DENY')
+  c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()')
   c.header('Cache-Control', 'private, no-store, max-age=0')
   c.header(
     'Content-Security-Policy',
-    "default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; img-src data:; frame-src 'self'; base-uri 'none'; form-action 'none'",
+    "default-src 'none'; style-src 'unsafe-inline' https:; script-src 'unsafe-inline'; img-src data: blob: https:; font-src data: https:; connect-src 'none'; frame-src 'self'; object-src 'none'; media-src data: blob: https:; base-uri 'none'; form-action 'none'",
   )
   if (!record) return c.html(notFoundPage(), 404)
 
