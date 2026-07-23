@@ -32,6 +32,7 @@ import {
 import VisualEditor from '../components/VisualEditor.vue'
 import ProjectQualityWorkspace from '../components/ProjectQualityWorkspace.vue'
 import VersionVisualDiff from '../components/VersionVisualDiff.vue'
+import MobileVersionDrawer from '../components/MobileVersionDrawer.vue'
 import { useAuth } from '../composables/useAuth'
 import { useAuthDialog } from '../composables/useAuthDialog'
 import { useFeatures } from '../composables/useFeatures'
@@ -86,6 +87,7 @@ const compareLoading = ref(false)
 const actionBusy = ref('')
 const error = ref('')
 const editorOpen = ref(false)
+const mobileVersionsOpen = ref(false)
 const activeTab = ref<WorkspaceTab>((route.query.tab as WorkspaceTab) || 'overview')
 const previewWidth = ref<'desktop' | 'mobile'>('desktop')
 const compareVersionId = ref('')
@@ -331,6 +333,7 @@ onMounted(() => void load())
         <div v-if="detail" class="min-w-0 flex-1"><div class="flex items-center gap-2"><h1 class="truncate text-base font-semibold">{{ detail.project.title }}</h1><span v-if="detail.project.templateId" class="rounded bg-violet-500/10 px-2 py-0.5 text-[9px] text-violet-500">官方模板</span></div><p class="truncate text-xs text-faint">{{ detail.project.requirement || '暂无需求描述' }}</p></div>
         <div class="ml-auto flex flex-wrap items-center justify-end gap-2">
           <button :disabled="loading" class="rounded-lg p-2 text-faint hover:bg-ink/5 hover:text-ink disabled:opacity-40" title="刷新项目" @click="load(selected?.id)"><RefreshCw class="h-4 w-4" :class="loading && 'animate-spin'" /></button>
+          <button class="flex items-center gap-1.5 rounded-xl border border-line/12 bg-ink/[0.04] px-3 py-2.5 text-xs font-medium text-sub lg:hidden" @click="mobileVersionsOpen = true"><History class="h-3.5 w-3.5" />版本</button>
           <button v-if="selected" :disabled="actionBusy === 'export'" class="flex items-center gap-1.5 rounded-xl border border-line/12 bg-ink/[0.04] px-3.5 py-2.5 text-xs font-medium text-sub" @click="exportZip"><Loader2 v-if="actionBusy === 'export'" class="h-3.5 w-3.5 animate-spin" /><Download v-else class="h-3.5 w-3.5" />导出 ZIP</button>
           <button v-if="selected && enabled('brand-kits')" class="flex items-center gap-1.5 rounded-xl border border-brand2/20 bg-brand2/[0.07] px-3.5 py-2.5 text-xs font-semibold text-brand2" @click="openBrandKits"><Palette class="h-3.5 w-3.5" />应用品牌</button>
           <button v-if="selected && enabled('visual-editor')" class="flex items-center gap-1.5 rounded-xl border border-brand1/20 bg-brand1/[0.08] px-3.5 py-2.5 text-xs font-semibold text-brand1" @click="editorOpen = true"><PencilRuler class="h-3.5 w-3.5" />可视化编辑</button>
@@ -342,7 +345,7 @@ onMounted(() => void load())
       <div v-if="loading && !detail" class="flex min-h-[65vh] items-center justify-center"><Loader2 class="h-7 w-7 animate-spin text-brand1" /></div>
 
       <div v-else-if="detail" class="mt-5 grid min-h-[720px] gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
-        <aside class="overflow-hidden rounded-2xl border border-line/10 bg-soft/65">
+        <aside class="hidden overflow-hidden rounded-2xl border border-line/10 bg-soft/65 lg:block">
           <div class="flex items-center justify-between border-b border-line/10 px-4 py-3"><p class="flex items-center gap-2 text-sm font-semibold"><History class="h-4 w-4 text-brand1" />版本历史</p><span class="rounded-full bg-ink/[0.05] px-2 py-0.5 text-[10px] text-faint">{{ versions.length }}</span></div>
           <div v-if="versions.length" class="max-h-[570px] space-y-1 overflow-y-auto p-2">
             <button v-for="version in versions" :key="version.id" class="group w-full rounded-xl border p-3 text-left" :class="selected?.id === version.id ? 'border-brand1/25 bg-brand1/[0.09]' : 'border-transparent hover:border-line/10 hover:bg-ink/[0.035]'" @click="selectVersion(version)">
@@ -399,6 +402,7 @@ onMounted(() => void load())
       </div>
     </div>
 
+    <MobileVersionDrawer :open="mobileVersionsOpen" :versions="versions" :selected-id="selected?.id" :busy="actionBusy" @close="mobileVersionsOpen = false" @select="selectVersion" @rollback="rollback" />
     <VisualEditor v-if="selected" :open="editorOpen" :html="selected.html" :title="`${detail?.project.title ?? '项目'} · ${selected.name || `第 ${selected.version} 版`}`" :draft-key="`${projectId}:${selected.id}`" :site-type="detail?.project.siteType" :brand-kit-id="detail?.project.brandKitId" @close="editorOpen = false" @save="saveEdited" />
   </main>
 </template>
