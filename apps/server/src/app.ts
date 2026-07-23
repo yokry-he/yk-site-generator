@@ -9,6 +9,11 @@ import generate from './routes/generate'
 import providers from './routes/providers'
 import shares from './routes/shares'
 import sharePage from './routes/share-page'
+import auth from './routes/auth'
+import projects from './routes/projects'
+import quota from './routes/quota'
+import publications from './routes/publications'
+import sitePage from './routes/site-page'
 
 export function createApp() {
   const app = new Hono()
@@ -21,6 +26,7 @@ export function createApp() {
     '/api/*',
     cors({
       origin: env.corsOrigins,
+      credentials: true,
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowHeaders: ['Content-Type', 'Authorization', 'X-Share-Delete-Token'],
       exposeHeaders: ['Content-Length'],
@@ -33,7 +39,12 @@ export function createApp() {
   app.route('/api/generate', generate)
   app.route('/api/providers', providers)
   app.route('/api/shares', shares)
+  app.route('/api/auth', auth)
+  app.route('/api/projects', projects)
+  app.route('/api/quota', quota)
+  app.route('/api/publications', publications)
   app.route('/s', sharePage)
+  app.route('/site', sitePage)
 
   // 404:统一错误格式
   app.notFound((c) =>
