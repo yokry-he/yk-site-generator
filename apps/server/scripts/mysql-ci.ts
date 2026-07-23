@@ -5,6 +5,13 @@ import { createConnection } from 'mysql2/promise'
 import { createEmptyData } from '../src/lib/data-store'
 import { getMysqlSnapshotStore } from '../src/lib/mysql-store'
 
+const EXPECTED_SCHEMA_VERSION = 6
+const REQUIRED_MIGRATIONS = [
+  '004_transactional_state.sql',
+  '005_operations_rbac.sql',
+  '006_product_polish.sql',
+] as const
+
 function connectionOptions(urlValue: string) {
   const url = new URL(urlValue)
   return {
@@ -56,16 +63,16 @@ async function main() {
   if (!url) throw new Error('MYSQL_URL_REQUIRED')
   await waitForMysql(url)
   const migrations = await applyMigrations(url)
-  if (!migrations.includes('004_transactional_state.sql')) {
-    throw new Error('TRANSACTIONAL_STATE_MIGRATION_MISSING')
-  }
-  if (!migrations.includes('005_operations_rbac.sql')) {
-    throw new Error('OPERATIONS_MIGRATION_MISSING')
+  for (const required of REQUIRED_MIGRATIONS) {
+    if (!migrations.includes(required)) throw new Error(`REQUIRED_MIGRATION_MISSING ${required}`)
   }
 
   const store = getMysqlSnapshotStore()
   try {
     const seed = createEmptyData()
+    if (seed.schemaVersion !== EXPECTED_SCHEMA_VERSION) {
+      throw new Error(`EMPTY_DATA_SCHEMA_MISMATCH expected=${EXPECTED_SCHEMA_VERSION} actual=${seed.schemaVersion}`)
+    }
     const imported = await store.importSnapshot(seed, { force: true })
     if (imported.revision < 1) throw new Error('INITIAL_REVISION_INVALID')
 
@@ -85,6 +92,9 @@ async function main() {
 
     const afterWrites = await store.read()
     if (!afterWrites) throw new Error('SNAPSHOT_NOT_FOUND')
+    if (afterWrites.data.schemaVersion !== EXPECTED_SCHEMA_VERSION) {
+      throw new Error(`SNAPSHOT_SCHEMA_MISMATCH expected=${EXPECTED_SCHEMA_VERSION} actual=${afterWrites.data.schemaVersion}`)
+    }
     if (afterWrites.data.usage.length !== writes) {
       throw new Error(`CONCURRENT_WRITE_LOSS expected=${writes} actual=${afterWrites.data.usage.length}`)
     }
@@ -101,6 +111,8 @@ async function main() {
           title: 'should rollback',
           siteType: 'test',
           requirement: 'rollback',
+          status: 'active',
+          isFavorite: false,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         })
@@ -116,12 +128,13 @@ async function main() {
     }
 
     const health = await store.health()
-    if (health.status !== 'operational' || health.schemaVersion !== 5) {
+    if (health.status !== 'operational' || health.schemaVersion !== EXPECTED_SCHEMA_VERSION) {
       throw new Error(`MYSQL_HEALTH_FAILED ${JSON.stringify(health)}`)
     }
     console.log(JSON.stringify({
       ok: true,
       migrations: migrations.length,
+      requiredMigrations: REQUIRED_MIGRATIONS,
       concurrentWrites: writes,
       revision: afterFailure.revision,
       schemaVersion: health.schemaVersion,
