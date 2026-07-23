@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, watch } from 'vue'
 import NavBar from './components/NavBar.vue'
 import SiteFooter from './components/SiteFooter.vue'
 import ModelSettingsDialog from './components/ModelSettingsDialog.vue'
@@ -9,9 +9,16 @@ import OnboardingGuide from './components/OnboardingGuide.vue'
 import ProjectFeedbackPrompt from './components/ProjectFeedbackPrompt.vue'
 import ToastHost from './components/ToastHost.vue'
 import { useAuth } from './composables/useAuth'
+import { useFeatures } from './composables/useFeatures'
 
-const { loadAuthSession } = useAuth()
-onMounted(loadAuthSession)
+const { user, loadAuthSession } = useAuth()
+const { enabled, loadFeatures } = useFeatures()
+
+onMounted(async () => {
+  await loadAuthSession()
+  await loadFeatures()
+})
+watch(() => user.value?.id, () => void loadFeatures())
 </script>
 
 <template>
@@ -24,8 +31,8 @@ onMounted(loadAuthSession)
     <ModelSettingsDialog />
     <AuthDialog />
     <HistoryMigrationNotice />
-    <OnboardingGuide />
-    <ProjectFeedbackPrompt />
+    <OnboardingGuide v-if="enabled('onboarding-guide')" />
+    <ProjectFeedbackPrompt v-if="enabled('quality-feedback')" />
     <ToastHost />
   </div>
 </template>
