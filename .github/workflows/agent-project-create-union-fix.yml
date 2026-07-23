@@ -1,0 +1,43 @@
+name: Agent Project Create Union Fix
+
+on:
+  push:
+    branches: [agent/continue-development-20260723]
+    paths:
+      - '.github/workflows/agent-project-create-union-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/continue-development-20260723
+          fetch-depth: 0
+      - name: Narrow project creation error code
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('apps/server/src/routes/projects.ts')
+          text = path.read_text()
+          old = "  if ('error' in result) return c.json(errorBody(result.error, '品牌套件不存在'), 404)"
+          new = "  if ('error' in result && result.error) return c.json(errorBody(result.error, '品牌套件不存在'), 404)"
+          if old not in text:
+              raise SystemExit('Project creation error guard not found')
+          path.write_text(text.replace(old, new, 1))
+          Path('.github/workflows/agent-project-create-union-fix.yml').unlink()
+          PY
+      - name: Commit fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'SiteForge Agent'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(server): narrow project creation error result'
+          git push origin HEAD:agent/continue-development-20260723
