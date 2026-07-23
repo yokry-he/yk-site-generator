@@ -1,3 +1,5 @@
+import { apiUrl } from './api'
+
 /**
  * /api/generate SSE 客户端(SF-1-5)。
  * 框架无关,便于单测:fetch + ReadableStream 手动解析(POST 不能用 EventSource)。
@@ -51,7 +53,6 @@ export async function* readSseEventStream(
       const { done, value } = await reader.read()
       if (done) break
       buffer += decoder.decode(value, { stream: true })
-      // 事件以空行分隔
       let sep: number
       while ((sep = buffer.search(/\r?\n\r?\n/)) >= 0) {
         const rawEvent = buffer.slice(0, sep)
@@ -61,12 +62,8 @@ export async function* readSseEventStream(
         for (const line of rawEvent.split(/\r?\n/)) {
           if (line.startsWith('event:')) event = line.slice(6).replace(/^ /, '')
           else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''))
-          // 其他行(注释/残缺)忽略
         }
-        if (event && dataLines.length > 0) {
-          yield { event, data: dataLines.join('\n') }
-        }
-        // 缺 event 或 data 的残缺事件:跳过
+        if (event && dataLines.length > 0) yield { event, data: dataLines.join('\n') }
       }
     }
   } finally {
@@ -76,17 +73,19 @@ export async function* readSseEventStream(
 
 /**
  * 发起生成请求并产出统一事件流。
- * - HTTP 非 200:解析统一错误体,抛 GenerateHttpError
- * - 事件 JSON 畸形:跳过该行,不中断流
- * - 中断:外部 AbortController 触发时 read() 抛 AbortError,由调用方处理
+ * 登录后自动携带 access token,让服务端记录额度;匿名模式仍可按原逻辑使用自备 Key。
  */
 export async function* generateSite(
   req: GenerateRequest,
   options: { signal?: AbortSignal; endpoint?: string } = {},
 ): AsyncGenerator<GenerateEvent, void, unknown> {
-  const res = await fetch(options.endpoint ?? '/api/generate', {
+  const accessToken = typeof localStorage === 'undefined' ? null : localStorage.getItem('siteforge:access-token')
+  const res = await fetch(options.endpoint ?? apiUrl('/api/generate'), {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+    },
     body: JSON.stringify(req),
     signal: options.signal ?? null,
   })
@@ -134,7 +133,6 @@ export async function* generateSite(
       }
       yield { type: 'error', code, message }
     }
-    // 未知事件类型:忽略
   }
 }
 
@@ -143,7 +141,6 @@ export function extractPartialHtml(text: string): string | null {
   const start = text.search(/<!doctype html|<html[\s>]/i)
   if (start < 0) return null
   let html = text.slice(start)
-  // 去掉可能被截断的结尾代码围栏
   html = html.replace(/\n?```[\s\S]*$/, '')
   return html
 }
