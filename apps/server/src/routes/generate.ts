@@ -5,6 +5,7 @@ import { buildGenerationPrompt, buildIterationPrompt } from 'prompts'
 import { parseModelOutput } from 'shared'
 import { authenticateBearerHeader } from '../lib/auth'
 import { connectTimeoutMs, totalTimeoutMs } from '../lib/config'
+import { recordSystemEvent, requestIdFromContext } from '../lib/observability'
 import { QuotaExceededError, refundUsage, reserveGenerationUsage } from '../lib/quota'
 import { takeToken } from '../lib/rate-limit'
 import {
@@ -117,6 +118,10 @@ generate.post('/', async (c) => {
     }
   }
 
+  const requestId = requestIdFromContext(c)
+  const startedAt = Date.now()
+  const mode = body.history?.length ? 'iterate' : 'generate'
+
   return streamSSE(c, async (stream) => {
     let fullText = ''
     try {
@@ -141,6 +146,23 @@ generate.post('/', async (c) => {
       }
       const pErr =
         err instanceof ProviderError ? err : new ProviderError('INTERNAL', '生成过程中出现内部错误')
+      await recordSystemEvent({
+        level: 'error',
+        source: 'provider',
+        eventType: 'generation.failed',
+        message: `${body.provider}/${body.model}: ${pErr.message}`.slice(0, 500),
+        requestId,
+        durationMs: Date.now() - startedAt,
+        metadata: {
+          code: pErr.code,
+          provider: body.provider,
+          model: body.model,
+          siteType: body.siteType,
+          mode,
+          outputChars: fullText.length,
+          authenticated: Boolean(auth),
+        },
+      })
       await stream.writeSSE({
         event: 'error',
         data: JSON.stringify({ code: pErr.code, message: pErr.message }),
@@ -150,6 +172,26 @@ generate.post('/', async (c) => {
 
     // 流结束:服务端解析产物并给出摘要
     const parsed = parseModelOutput(fullText)
+    await recordSystemEvent({
+      level: parsed ? 'info' : 'warning',
+      source: 'generation',
+      eventType: parsed ? 'generation.completed' : 'generation.parse_failed',
+      message: parsed
+        ? `${body.provider}/${body.model} 生成完成`
+        : `${body.provider}/${body.model} 输出无法解析为产物`,
+      requestId,
+      durationMs: Date.now() - startedAt,
+      metadata: {
+        provider: body.provider,
+        model: body.model,
+        siteType: body.siteType,
+        mode,
+        outputChars: fullText.length,
+        fileCount: parsed?.tree.files.length ?? 0,
+        warningCount: parsed?.warnings.length ?? 1,
+        authenticated: Boolean(auth),
+      },
+    })
     await stream.writeSSE({
       event: 'done',
       data: JSON.stringify({
