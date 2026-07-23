@@ -11,7 +11,6 @@ import {
 import { FEATURE_FLAG_DEFINITIONS, resolveFeatureFlags } from '../lib/feature-flags'
 import { recordAudit, requestMetadata } from '../lib/observability'
 import {
-  hasPermission,
   operatorMiddleware,
   permissionMiddleware,
   permissionsForRole,
@@ -49,8 +48,8 @@ const flagPatchSchema = z.object({
   expectedVersion: z.number().int().min(0),
 }).superRefine((input, ctx) => {
   if (
-    input.startsAt && input.expiresAt &&
-    Date.parse(input.startsAt) >= Date.parse(input.expiresAt)
+    input.startsAt && input.expiresAt
+    && Date.parse(input.startsAt) >= Date.parse(input.expiresAt)
   ) {
     ctx.addIssue({ code: 'custom', path: ['expiresAt'], message: '失效时间必须晚于生效时间' })
   }
@@ -67,6 +66,21 @@ async function actor(c: Parameters<typeof requestMetadata>[0]) {
   return user
 }
 
+function featureFlagAuditData(record: Partial<FeatureFlagRecord> & { key: string }): Record<string, unknown> {
+  return {
+    key: record.key,
+    enabled: record.enabled,
+    rolloutPercent: record.rolloutPercent,
+    description: record.description,
+    rules: record.rules ? structuredClone(record.rules) : {},
+    startsAt: record.startsAt,
+    expiresAt: record.expiresAt,
+    version: record.version,
+    updatedBy: record.updatedBy,
+    updatedAt: record.updatedAt,
+  }
+}
+
 router.get('/access', async (c) => {
   const user = await actor(c)
   return c.json({ role: userRole(user), permissions: permissionsForRole(userRole(user)) })
@@ -81,13 +95,11 @@ router.get('/templates', permissionMiddleware('templates.read'), async (c) => {
   }
   const normalized = query.q.toLowerCase()
   const data = await readData()
-  const rows = operatedTemplates(data, OFFICIAL_TEMPLATES).filter((template) => {
-    return (
-      (query.status === 'all' || template.status === query.status) &&
-      (!normalized || [template.name, template.slug, template.industry, template.category, template.siteType]
-        .some((value) => value.toLowerCase().includes(normalized)))
-    )
-  })
+  const rows = operatedTemplates(data, OFFICIAL_TEMPLATES).filter((template) => (
+    (query.status === 'all' || template.status === query.status)
+    && (!normalized || [template.name, template.slug, template.industry, template.category, template.siteType]
+      .some((value) => value.toLowerCase().includes(normalized)))
+  ))
   return c.json({
     templates: rows,
     summary: {
@@ -194,9 +206,6 @@ router.put('/feature-flags/:key', permissionMiddleware('feature_flags.write'), a
   if (!definition) return c.json(errorBody('FEATURE_FLAG_NOT_FOUND', '功能开关不存在'), 404)
 
   const user = await actor(c)
-  if (!hasPermission(user, 'feature_flags.write')) {
-    return c.json(errorBody('PERMISSION_DENIED', '缺少功能开关写入权限'), 403)
-  }
   const now = new Date().toISOString()
   const result = await mutateData<
     | { ok: true; before: Record<string, unknown>; after: FeatureFlagRecord }
@@ -205,16 +214,14 @@ router.put('/feature-flags/:key', permissionMiddleware('feature_flags.write'), a
     let record = data.featureFlags.find((item) => item.key === definition.key)
     const currentVersion = record?.version ?? 0
     if (currentVersion !== input.expectedVersion) return { ok: false, currentVersion }
-    const before = record
-      ? structuredClone(record)
-      : {
-          key: definition.key,
-          enabled: definition.defaultEnabled,
-          rolloutPercent: 100,
-          description: definition.description,
-          rules: {},
-          version: 0,
-        }
+    const before = featureFlagAuditData(record ?? {
+      key: definition.key,
+      enabled: definition.defaultEnabled,
+      rolloutPercent: 100,
+      description: definition.description,
+      rules: {},
+      version: 0,
+    })
     if (!record) {
       record = {
         key: definition.key,
@@ -256,9 +263,10 @@ router.put('/feature-flags/:key', permissionMiddleware('feature_flags.write'), a
     userAgent: meta.userAgent,
     outcome: 'success',
     beforeData: result.before,
-    afterData: result.after as unknown as Record<string, unknown>,
+    afterData: featureFlagAuditData(result.after),
   })
-  return c.json({ flag: resolveFeatureFlags({ ...(await readData()) }).find((item) => item.key === definition.key) })
+  const data = await readData()
+  return c.json({ flag: resolveFeatureFlags(data).find((item) => item.key === definition.key) })
 })
 
 export default router
