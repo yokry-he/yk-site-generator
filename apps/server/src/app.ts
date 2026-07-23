@@ -16,9 +16,11 @@ import quota from './routes/quota'
 import publications from './routes/publications'
 import brandKits from './routes/brand-kits'
 import templates from './routes/templates'
+import features from './routes/features'
 import onboarding from './routes/onboarding'
 import feedback from './routes/feedback'
 import adminStorageHealth from './routes/admin-storage-health'
+import adminOperations from './routes/admin-operations'
 import admin from './routes/admin'
 import sitePage, { serveSiteFromHost } from './routes/site-page'
 
@@ -37,7 +39,7 @@ export function createApp() {
       origin: env.corsOrigins,
       credentials: true,
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Content-Type', 'Authorization', 'X-Share-Delete-Token', 'X-Request-ID'],
+      allowHeaders: ['Content-Type', 'Authorization', 'X-Share-Delete-Token', 'X-Request-ID', 'X-Anonymous-ID'],
       exposeHeaders: ['Content-Length', 'X-Request-ID'],
       maxAge: 600,
     }),
@@ -54,10 +56,12 @@ export function createApp() {
   app.route('/api/publications', publications)
   app.route('/api/brand-kits', brandKits)
   app.route('/api/templates', templates)
+  app.route('/api/features', features)
   app.route('/api/onboarding', onboarding)
   app.route('/api/feedback', feedback)
-  // 精确路由先于通用管理路由,向控制台返回当前真实存储状态。
+  // 精确路由优先于旧管理通配中间件。
   app.route('/api/admin/health', adminStorageHealth)
+  app.route('/api/admin', adminOperations)
   app.route('/api/admin', admin)
   app.route('/s', sharePage)
   app.route('/site', sitePage)
