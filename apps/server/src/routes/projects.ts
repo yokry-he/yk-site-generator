@@ -60,14 +60,6 @@ function ensureHtmlSize(html?: string): boolean {
   return html === undefined || Buffer.byteLength(html, 'utf8') <= env.MAX_PROJECT_BYTES
 }
 
-async function editorEnabled(c: Parameters<typeof projects.get>[0] extends never ? never : never): Promise<boolean> {
-  return Boolean(c)
-}
-
-async function requireEditorFeature(c: { get(key: 'auth'): import('../lib/auth').AccessClaims }): Promise<boolean> {
-  return authenticatedFeatureEnabled('visual-editor', c.get('auth'))
-}
-
 projects.get('/', async (c) => {
   const userId = c.get('auth').sub
   const data = await readData()
@@ -91,7 +83,7 @@ projects.post('/', async (c) => {
     const message = err instanceof z.ZodError ? err.issues[0]?.message ?? '参数错误' : '请求体不是合法 JSON'
     return c.json(errorBody('BAD_REQUEST', message), 400)
   }
-  if (input.source === 'editor' && !(await requireEditorFeature(c))) {
+  if (input.source === 'editor' && !(await authenticatedFeatureEnabled('visual-editor', c.get('auth')))) {
     return c.json(errorBody('FEATURE_DISABLED', `${featureName('visual-editor')}当前未开放`), 503)
   }
   if (!ensureHtmlSize(input.html)) return c.json(errorBody('PROJECT_TOO_LARGE', '单个项目版本超过大小上限'), 413)
@@ -198,7 +190,7 @@ projects.post('/:id/versions', async (c) => {
     const message = err instanceof z.ZodError ? err.issues[0]?.message ?? '参数错误' : '请求体不是合法 JSON'
     return c.json(errorBody('BAD_REQUEST', message), 400)
   }
-  if (input.source === 'editor' && !(await requireEditorFeature(c))) {
+  if (input.source === 'editor' && !(await authenticatedFeatureEnabled('visual-editor', c.get('auth')))) {
     return c.json(errorBody('FEATURE_DISABLED', `${featureName('visual-editor')}当前未开放`), 503)
   }
   if (!ensureHtmlSize(input.html)) return c.json(errorBody('PROJECT_TOO_LARGE', '单个项目版本超过大小上限'), 413)
