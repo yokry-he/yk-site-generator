@@ -80,7 +80,7 @@ describe('模板 ZIP 与实时预览', () => {
     const result = await generateZip(parsed, { enabled: true, name: 'SiteForge' }, true)
     expect(result.evaluatedConditions).toBe(1)
     expect(result.replacedCount).toBe(1)
-    const output = await JSZip.loadAsync(result.blob)
+    const output = await JSZip.loadAsync(await result.blob.arrayBuffer())
     expect(await output.file('index.html')!.async('string')).toBe('YES SiteForge')
     expect(Array.from(await output.file('logo.bin')!.async('uint8array'))).toEqual([1, 2, 3])
   })
