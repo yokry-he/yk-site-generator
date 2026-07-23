@@ -157,8 +157,40 @@ export interface OnboardingProgressRecord {
   updatedAt: string
 }
 
+export type TemplateOperationStatus = 'draft' | 'published' | 'archived'
+
+export interface TemplateOperationRecord {
+  templateId: string
+  status: TemplateOperationStatus
+  featured: boolean
+  sortOrder: number
+  version: number
+  updatedBy: string
+  updatedAt: string
+}
+
+export interface FeatureFlagRules {
+  userIds?: string[]
+  emails?: string[]
+  roles?: UserRole[]
+}
+
+export interface FeatureFlagRecord {
+  key: string
+  enabled: boolean
+  rolloutPercent: number
+  description: string
+  rules: FeatureFlagRules
+  startsAt?: string
+  expiresAt?: string
+  version: number
+  updatedBy: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface AppData {
-  schemaVersion: 4
+  schemaVersion: 5
   users: UserRecord[]
   verificationCodes: VerificationCodeRecord[]
   sessions: SessionRecord[]
@@ -171,6 +203,8 @@ export interface AppData {
   systemEvents: SystemEventRecord[]
   feedback: FeedbackRecord[]
   onboardingProgress: OnboardingProgressRecord[]
+  templateOperations: TemplateOperationRecord[]
+  featureFlags: FeatureFlagRecord[]
 }
 
 export interface DataStoreHealth {
@@ -184,7 +218,7 @@ export interface DataStoreHealth {
 }
 
 export const createEmptyData = (): AppData => ({
-  schemaVersion: 4,
+  schemaVersion: 5,
   users: [],
   verificationCodes: [],
   sessions: [],
@@ -197,6 +231,8 @@ export const createEmptyData = (): AppData => ({
   systemEvents: [],
   feedback: [],
   onboardingProgress: [],
+  templateOperations: [],
+  featureFlags: [],
 })
 
 let memoryData: AppData = createEmptyData()
@@ -216,11 +252,11 @@ function normalizeUsers(users: UserRecord[]): UserRecord[] {
 
 export function normalizeAppData(input: unknown): AppData {
   const parsed = (input && typeof input === 'object' ? input : {}) as Partial<AppData> & { schemaVersion?: number }
-  if (parsed.schemaVersion !== undefined && ![1, 2, 3, 4].includes(parsed.schemaVersion)) {
+  if (parsed.schemaVersion !== undefined && ![1, 2, 3, 4, 5].includes(parsed.schemaVersion)) {
     throw new Error('UNSUPPORTED_DATA_SCHEMA')
   }
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     users: normalizeUsers(parsed.users ?? []),
     verificationCodes: parsed.verificationCodes ?? [],
     sessions: parsed.sessions ?? [],
@@ -233,6 +269,8 @@ export function normalizeAppData(input: unknown): AppData {
     systemEvents: parsed.systemEvents ?? [],
     feedback: parsed.feedback ?? [],
     onboardingProgress: parsed.onboardingProgress ?? [],
+    templateOperations: parsed.templateOperations ?? [],
+    featureFlags: parsed.featureFlags ?? [],
   }
 }
 
@@ -317,7 +355,7 @@ export function mutateData<T>(mutator: (draft: AppData) => T | Promise<T>): Prom
 
 export async function getDataStoreHealth(): Promise<DataStoreHealth> {
   if (env.NODE_ENV === 'test') {
-    return { driver: 'memory', status: 'operational', message: '内存测试适配器', schemaVersion: 4 }
+    return { driver: 'memory', status: 'operational', message: '内存测试适配器', schemaVersion: 5 }
   }
   const startedAt = Date.now()
   if (env.DATA_STORAGE_DRIVER === 'mysql') {
@@ -328,7 +366,7 @@ export async function getDataStoreHealth(): Promise<DataStoreHealth> {
       message: health.message,
       latencyMs: health.latencyMs,
       revision: health.revision,
-      schemaVersion: health.schemaVersion ?? 4,
+      schemaVersion: health.schemaVersion ?? 5,
       updatedAt: health.updatedAt,
     }
   }
@@ -347,12 +385,12 @@ export async function getDataStoreHealth(): Promise<DataStoreHealth> {
       status: 'degraded',
       message: error instanceof Error ? error.message : '文件数据存储不可用',
       latencyMs: Date.now() - startedAt,
-      schemaVersion: 4,
+      schemaVersion: 5,
     }
   }
 }
 
 export function resetDataStoreForTest(seed?: Partial<AppData>): void {
-  memoryData = normalizeAppData({ ...createEmptyData(), ...seed, schemaVersion: 4 })
+  memoryData = normalizeAppData({ ...createEmptyData(), ...seed, schemaVersion: 5 })
   queue = Promise.resolve()
 }
