@@ -10,6 +10,7 @@ import {
   type ProjectVersionRecord,
   type ProjectVersionSource,
 } from '../lib/data-store'
+import { authenticatedFeatureEnabled, featureName } from '../lib/feature-flags'
 import { removePublishedArtifact } from '../lib/publication-store'
 import { errorBody } from '../types'
 
@@ -59,6 +60,14 @@ function ensureHtmlSize(html?: string): boolean {
   return html === undefined || Buffer.byteLength(html, 'utf8') <= env.MAX_PROJECT_BYTES
 }
 
+async function editorEnabled(c: Parameters<typeof projects.get>[0] extends never ? never : never): Promise<boolean> {
+  return Boolean(c)
+}
+
+async function requireEditorFeature(c: { get(key: 'auth'): import('../lib/auth').AccessClaims }): Promise<boolean> {
+  return authenticatedFeatureEnabled('visual-editor', c.get('auth'))
+}
+
 projects.get('/', async (c) => {
   const userId = c.get('auth').sub
   const data = await readData()
@@ -81,6 +90,9 @@ projects.post('/', async (c) => {
   } catch (err) {
     const message = err instanceof z.ZodError ? err.issues[0]?.message ?? '参数错误' : '请求体不是合法 JSON'
     return c.json(errorBody('BAD_REQUEST', message), 400)
+  }
+  if (input.source === 'editor' && !(await requireEditorFeature(c))) {
+    return c.json(errorBody('FEATURE_DISABLED', `${featureName('visual-editor')}当前未开放`), 503)
   }
   if (!ensureHtmlSize(input.html)) return c.json(errorBody('PROJECT_TOO_LARGE', '单个项目版本超过大小上限'), 413)
 
@@ -186,6 +198,9 @@ projects.post('/:id/versions', async (c) => {
     const message = err instanceof z.ZodError ? err.issues[0]?.message ?? '参数错误' : '请求体不是合法 JSON'
     return c.json(errorBody('BAD_REQUEST', message), 400)
   }
+  if (input.source === 'editor' && !(await requireEditorFeature(c))) {
+    return c.json(errorBody('FEATURE_DISABLED', `${featureName('visual-editor')}当前未开放`), 503)
+  }
   if (!ensureHtmlSize(input.html)) return c.json(errorBody('PROJECT_TOO_LARGE', '单个项目版本超过大小上限'), 413)
   const userId = c.get('auth').sub
   const now = new Date().toISOString()
@@ -225,9 +240,9 @@ projects.get('/:id/versions/:versionId', async (c) => {
   if (!project) return c.json(errorBody('PROJECT_NOT_FOUND', '项目不存在'), 404)
   const version = data.projectVersions.find(
     (item) =>
-      item.id === c.req.param('versionId') &&
-      item.projectId === project.id &&
-      item.userId === userId,
+      item.id === c.req.param('versionId')
+      && item.projectId === project.id
+      && item.userId === userId,
   )
   if (!version) return c.json(errorBody('VERSION_NOT_FOUND', '项目版本不存在'), 404)
   return c.json({ version })
