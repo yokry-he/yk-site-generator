@@ -16,8 +16,14 @@ const envSchema = z.object({
   MAX_SHARE_BYTES: z.coerce.number().int().positive().default(2 * 1024 * 1024),
   /** 对外可访问的服务根地址;为空时前端使用当前 origin */
   PUBLIC_BASE_URL: z.string().url().or(z.literal('')).default(''),
-  /** V1 账号、项目、额度和发布元数据文件;生产环境可替换为共享数据库适配器 */
+  /** 数据适配器:file 用于开发/单实例,mysql 用于正式多实例部署。 */
+  DATA_STORAGE_DRIVER: z.enum(['file', 'mysql']).default('file'),
   DATA_STORAGE_FILE: z.string().min(1).default('.data/siteforge.json'),
+  /** MySQL 8 连接配置;仅在启用 mysql 适配器或执行迁移命令时使用。 */
+  MYSQL_URL: z.string().url().or(z.literal('')).default(''),
+  MYSQL_CONNECTION_LIMIT: z.coerce.number().int().min(2).max(100).default(10),
+  MYSQL_SSL_MODE: z.enum(['disabled', 'preferred', 'required']).default('disabled'),
+  MYSQL_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(10_000),
   AUTH_JWT_SECRET: z.string().min(32).default(DEV_JWT_SECRET),
   ACCESS_TOKEN_TTL_MIN: z.coerce.number().int().min(5).max(120).default(15),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
@@ -54,6 +60,11 @@ if (!parsed.success) {
 
 if (parsed.data.NODE_ENV === 'production' && parsed.data.AUTH_JWT_SECRET === DEV_JWT_SECRET) {
   console.error('[env] 生产环境必须配置独立的 AUTH_JWT_SECRET(至少 32 字符)')
+  process.exit(1)
+}
+
+if (parsed.data.DATA_STORAGE_DRIVER === 'mysql' && !parsed.data.MYSQL_URL) {
+  console.error('[env] DATA_STORAGE_DRIVER=mysql 时必须配置 MYSQL_URL')
   process.exit(1)
 }
 
