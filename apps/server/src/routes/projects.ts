@@ -186,7 +186,7 @@ projects.post('/', async (c) => {
     }
     return { project, version }
   })
-  if ('error' in result) return c.json(errorBody(result.error, '品牌套件不存在'), 404)
+  if ('error' in result && result.error) return c.json(errorBody(result.error, '品牌套件不存在'), 404)
   return c.json({ project: publicProject(result.project, result.version) }, 201)
 })
 
