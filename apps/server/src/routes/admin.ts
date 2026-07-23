@@ -1,8 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { OFFICIAL_TEMPLATES } from 'shared'
-import { env } from '../env'
-import { adminMiddleware, type AuthEnv } from '../lib/auth'
+import { authMiddleware, type AuthEnv } from '../lib/auth'
 import {
   mutateData,
   readData,
@@ -12,6 +11,13 @@ import {
   type UserStatus,
 } from '../lib/data-store'
 import { recordAudit, requestMetadata } from '../lib/observability'
+import {
+  currentAuthorizedUser,
+  hasPermission,
+  operatorMiddleware,
+  permissionMiddleware,
+  userRole,
+} from '../lib/rbac'
 import { errorBody } from '../types'
 
 const usersQuerySchema = z.object({
@@ -53,7 +59,8 @@ const feedbackStatusSchema = z.object({
 })
 
 const admin = new Hono<AuthEnv>()
-admin.use('*', adminMiddleware)
+admin.use('*', authMiddleware)
+admin.use('*', operatorMiddleware)
 
 function roleOf(user: UserRecord): UserRole {
   return user.role ?? 'user'
@@ -69,10 +76,12 @@ function startOfDaysAgo(days: number): number {
 
 function feedbackSummary(data: Awaited<ReturnType<typeof readData>>) {
   const negative = data.feedback.filter((item) => item.sentiment === 'negative')
-  const categoryCounts = negative.flatMap((item) => item.categories).reduce<Record<string, number>>((acc, category) => {
-    acc[category] = (acc[category] ?? 0) + 1
-    return acc
-  }, {})
+  const categoryCounts = negative
+    .flatMap((item) => item.categories)
+    .reduce<Record<string, number>>((acc, category) => {
+      acc[category] = (acc[category] ?? 0) + 1
+      return acc
+    }, {})
   return {
     total: data.feedback.length,
     positive: data.feedback.length - negative.length,
@@ -88,15 +97,15 @@ function feedbackSummary(data: Awaited<ReturnType<typeof readData>>) {
 
 async function auditBlockedUserAction(
   c: Parameters<typeof requestMetadata>[0],
-  actorUserId: string,
+  actor: UserRecord,
   targetId: string,
   errorCode: string,
   input: Record<string, unknown>,
 ): Promise<void> {
   const meta = requestMetadata(c)
   await recordAudit({
-    actorUserId,
-    actorRole: 'admin',
+    actorUserId: actor.id,
+    actorRole: userRole(actor),
     action: 'admin.user.update',
     resourceType: 'user',
     resourceId: targetId,
@@ -109,7 +118,7 @@ async function auditBlockedUserAction(
   })
 }
 
-admin.get('/overview', async (c) => {
+admin.get('/overview', permissionMiddleware('admin.overview.read'), async (c) => {
   const data = await readData()
   const last30Days = startOfDaysAgo(30)
   const last24Hours = startOfDaysAgo(1)
@@ -181,7 +190,7 @@ admin.get('/overview', async (c) => {
   })
 })
 
-admin.get('/users', async (c) => {
+admin.get('/users', permissionMiddleware('users.read'), async (c) => {
   let query: z.infer<typeof usersQuerySchema>
   try {
     query = usersQuerySchema.parse(c.req.query())
@@ -192,13 +201,11 @@ admin.get('/users', async (c) => {
   const data = await readData()
   const normalized = query.q.toLowerCase()
   const rows = data.users
-    .filter((user) => {
-      return (
-        (!normalized || user.email.toLowerCase().includes(normalized) || user.id.includes(normalized)) &&
-        (query.status === 'all' || statusOf(user) === query.status) &&
-        (query.role === 'all' || roleOf(user) === query.role)
-      )
-    })
+    .filter((user) => (
+      (!normalized || user.email.toLowerCase().includes(normalized) || user.id.includes(normalized))
+      && (query.status === 'all' || statusOf(user) === query.status)
+      && (query.role === 'all' || roleOf(user) === query.role)
+    ))
     .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
   const start = (query.page - 1) * query.limit
   const paged = rows.slice(start, start + query.limit).map((user) => {
@@ -241,13 +248,22 @@ admin.patch('/users/:id', async (c) => {
   }
 
   const claims = c.get('auth')
+  const actor = await currentAuthorizedUser(claims.sub)
+  if (!actor) return c.json(errorBody('UNAUTHORIZED', '登录状态无效'), 401)
+  if (input.status !== undefined && !hasPermission(actor, 'users.update_status')) {
+    return c.json(errorBody('PERMISSION_DENIED', '缺少用户状态修改权限'), 403)
+  }
+  if (input.role !== undefined && !hasPermission(actor, 'users.update_role')) {
+    return c.json(errorBody('PERMISSION_DENIED', '缺少用户角色修改权限'), 403)
+  }
+
   const targetId = c.req.param('id')
-  if (targetId === claims.sub && (input.status && input.status !== 'active')) {
-    await auditBlockedUserAction(c, claims.sub, targetId, 'SELF_LOCKOUT_BLOCKED', input)
+  if (targetId === claims.sub && input.status && input.status !== 'active') {
+    await auditBlockedUserAction(c, actor, targetId, 'SELF_LOCKOUT_BLOCKED', input)
     return c.json(errorBody('SELF_LOCKOUT_BLOCKED', '不能限制当前登录账号'), 409)
   }
   if (targetId === claims.sub && input.role && input.role !== 'admin') {
-    await auditBlockedUserAction(c, claims.sub, targetId, 'SELF_DEMOTION_BLOCKED', input)
+    await auditBlockedUserAction(c, actor, targetId, 'SELF_DEMOTION_BLOCKED', input)
     return c.json(errorBody('SELF_DEMOTION_BLOCKED', '不能降低当前登录账号权限'), 409)
   }
 
@@ -273,14 +289,14 @@ admin.patch('/users/:id', async (c) => {
     }
   })
   if (!result.ok) {
-    await auditBlockedUserAction(c, claims.sub, targetId, 'USER_NOT_FOUND', input)
+    await auditBlockedUserAction(c, actor, targetId, 'USER_NOT_FOUND', input)
     return c.json(errorBody('USER_NOT_FOUND', '用户不存在'), 404)
   }
 
   const meta = requestMetadata(c)
   await recordAudit({
-    actorUserId: claims.sub,
-    actorRole: 'admin',
+    actorUserId: actor.id,
+    actorRole: userRole(actor),
     action: 'admin.user.update',
     resourceType: 'user',
     resourceId: targetId,
@@ -294,7 +310,7 @@ admin.patch('/users/:id', async (c) => {
   return c.json({ user: result.after })
 })
 
-admin.get('/feedback', async (c) => {
+admin.get('/feedback', permissionMiddleware('feedback.read'), async (c) => {
   let query: z.infer<typeof feedbackQuerySchema>
   try {
     query = feedbackQuerySchema.parse(c.req.query())
@@ -303,18 +319,18 @@ admin.get('/feedback', async (c) => {
   }
   const data = await readData()
   const rows = data.feedback
-    .filter((item) =>
-      (query.status === 'all' || item.status === query.status) &&
-      (query.sentiment === 'all' || item.sentiment === query.sentiment) &&
-      (!query.siteType || item.siteType.includes(query.siteType)) &&
-      (!query.model || item.model?.includes(query.model)),
-    )
+    .filter((item) => (
+      (query.status === 'all' || item.status === query.status)
+      && (query.sentiment === 'all' || item.sentiment === query.sentiment)
+      && (!query.siteType || item.siteType.includes(query.siteType))
+      && (!query.model || item.model?.includes(query.model))
+    ))
     .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
     .slice(0, query.limit)
   return c.json({ feedback: rows, summary: feedbackSummary(data) })
 })
 
-admin.patch('/feedback/:id', async (c) => {
+admin.patch('/feedback/:id', permissionMiddleware('feedback.resolve'), async (c) => {
   let input: z.infer<typeof feedbackStatusSchema>
   try {
     input = feedbackStatusSchema.parse(await c.req.json())
@@ -322,6 +338,8 @@ admin.patch('/feedback/:id', async (c) => {
     return c.json(errorBody('BAD_REQUEST', '反馈状态无效'), 400)
   }
   const claims = c.get('auth')
+  const actor = await currentAuthorizedUser(claims.sub)
+  if (!actor) return c.json(errorBody('UNAUTHORIZED', '登录状态无效'), 401)
   const id = c.req.param('id')
   const result = await mutateData<
     | { ok: true; before: { status: FeedbackStatus }; after: { status: FeedbackStatus } }
@@ -337,8 +355,8 @@ admin.patch('/feedback/:id', async (c) => {
   if (!result.ok) return c.json(errorBody('FEEDBACK_NOT_FOUND', '反馈不存在'), 404)
   const meta = requestMetadata(c)
   await recordAudit({
-    actorUserId: claims.sub,
-    actorRole: 'admin',
+    actorUserId: actor.id,
+    actorRole: userRole(actor),
     action: 'admin.feedback.status.update',
     resourceType: 'feedback',
     resourceId: id,
@@ -352,7 +370,7 @@ admin.patch('/feedback/:id', async (c) => {
   return c.json({ id, status: input.status })
 })
 
-admin.get('/audit', async (c) => {
+admin.get('/audit', permissionMiddleware('audit.read'), async (c) => {
   let query: z.infer<typeof logQuerySchema>
   try {
     query = logQuerySchema.parse(c.req.query())
@@ -361,17 +379,17 @@ admin.get('/audit', async (c) => {
   }
   const data = await readData()
   const rows = data.auditLogs
-    .filter((item) =>
-      (!query.action || item.action.includes(query.action)) &&
-      (!query.resourceType || item.resourceType.includes(query.resourceType)) &&
-      (query.outcome === 'all' || item.outcome === query.outcome),
-    )
+    .filter((item) => (
+      (!query.action || item.action.includes(query.action))
+      && (!query.resourceType || item.resourceType.includes(query.resourceType))
+      && (query.outcome === 'all' || item.outcome === query.outcome)
+    ))
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
     .slice(0, query.limit)
   return c.json({ auditLogs: rows })
 })
 
-admin.get('/events', async (c) => {
+admin.get('/events', permissionMiddleware('events.read'), async (c) => {
   let query: z.infer<typeof eventQuerySchema>
   try {
     query = eventQuerySchema.parse(c.req.query())
@@ -380,50 +398,13 @@ admin.get('/events', async (c) => {
   }
   const data = await readData()
   const rows = data.systemEvents
-    .filter((item) =>
-      (query.level === 'all' || item.level === query.level) &&
-      (!query.source || item.source.includes(query.source)),
-    )
+    .filter((item) => (
+      (query.level === 'all' || item.level === query.level)
+      && (!query.source || item.source.includes(query.source))
+    ))
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
     .slice(0, query.limit)
   return c.json({ systemEvents: rows })
-})
-
-admin.get('/health', async (c) => {
-  const data = await readData()
-  return c.json({
-    health: {
-      status: 'operational',
-      checkedAt: new Date().toISOString(),
-      components: [
-        { id: 'api', name: 'API 服务', status: 'operational', detail: 'Hono 服务正常响应' },
-        {
-          id: 'data',
-          name: '数据存储',
-          status: 'operational',
-          detail: `JSON 单实例适配器 · ${data.projects.length} 个项目`,
-        },
-        {
-          id: 'email',
-          name: '邮件服务',
-          status: env.EMAIL_WEBHOOK_URL ? 'operational' : 'not_configured',
-          detail: env.EMAIL_WEBHOOK_URL ? 'Webhook 已配置' : '尚未配置生产邮件 Webhook',
-        },
-        {
-          id: 'object-storage',
-          name: '对象存储',
-          status: env.s3Enabled ? 'operational' : 'fallback',
-          detail: env.s3Enabled ? 'S3 兼容存储已启用' : '当前使用本地发布目录',
-        },
-        {
-          id: 'mysql',
-          name: 'MySQL',
-          status: 'not_configured',
-          detail: 'MySQL 8 Schema 已就绪，事务适配器尚未启用',
-        },
-      ],
-    },
-  })
 })
 
 export default admin
