@@ -18,6 +18,7 @@ import brandKits from './routes/brand-kits'
 import templates from './routes/templates'
 import onboarding from './routes/onboarding'
 import feedback from './routes/feedback'
+import adminStorageHealth from './routes/admin-storage-health'
 import admin from './routes/admin'
 import sitePage, { serveSiteFromHost } from './routes/site-page'
 
@@ -55,6 +56,8 @@ export function createApp() {
   app.route('/api/templates', templates)
   app.route('/api/onboarding', onboarding)
   app.route('/api/feedback', feedback)
+  // 精确路由先于通用管理路由,向控制台返回当前真实存储状态。
+  app.route('/api/admin/health', adminStorageHealth)
   app.route('/api/admin', admin)
   app.route('/s', sharePage)
   app.route('/site', sitePage)
