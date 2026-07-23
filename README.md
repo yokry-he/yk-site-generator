@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/yokry-he/yk-site-generator/actions/workflows/ci.yml/badge.svg)
 
-一句话描述需求,AI 帮你生成、迭代、编辑、导出并发布完整网站。仓库采用 pnpm monorepo,覆盖 14 类站点、多模型 SSE 生成、模板引擎、版本历史和发布管理。
+一句话描述需求,AI 帮你生成、迭代、编辑、统一品牌、导出并发布完整网站。仓库采用 pnpm monorepo,覆盖 14 类站点、多模型 SSE 生成、模板引擎、品牌套件、版本历史和发布管理。
 
 - 任务总览:Issue #1
 - 当前开发分支:`agent/continue-development-20260723`
@@ -26,6 +26,8 @@
 - 本地历史主动迁移为云端项目,保留全部迭代轮次
 - 项目 CRUD、不可变版本快照、预览和回滚
 - 可视化编辑器:点选文案、图片、链接、品牌色、背景、字体、撤销重做
+- 品牌套件:Logo、颜色、字体、圆角、按钮、阴影、实时多设备预览与可读性检查
+- 品牌套件云端 CRUD、默认套件与跨项目复用;应用时创建不可变新版本
 - 月度生成额度、使用记录、失败请求自动退回
 - 一键发布、下线、重新发布,支持本地目录或 S3 兼容对象存储
 
@@ -42,12 +44,12 @@
 yk-site-generator/
 ├── apps/
 │   ├── web/                 # Vue 3 + TypeScript + Vite + Vue Router + Tailwind
-│   └── server/              # Hono(Node.js) API、认证、项目、额度、分享与发布
+│   └── server/              # Hono(Node.js) API、认证、项目、品牌、额度、分享与发布
 ├── packages/
-│   ├── shared/              # 产物协议、解析器、SEO 注入与完整性检查
+│   ├── shared/              # 产物协议、解析器、SEO、品牌 Token 与主题应用引擎
 │   └── prompts/             # 14 类提示词、迭代提示词与质量评测
 ├── deploy/                  # PR 预览与生产部署说明
-├── apps/server/db/          # PostgreSQL 正式环境基线结构
+├── apps/server/db/          # MySQL 8 正式环境基线结构
 └── .github/workflows/       # CI 与可选 Vercel Preview
 ```
 
@@ -86,11 +88,22 @@ pnpm --filter web e2e:history
 pnpm --filter prompts eval -- --dry-run
 ```
 
-Draft PR 的 CI 会执行 lint、严格类型检查、全仓构建、全仓单测与三条生成链路 E2E。失败日志会作为 7 天工件保留。
+Draft PR 的 CI 会执行 lint、严格类型检查、全仓构建、全仓单测与生成链路 E2E。失败日志会作为 7 天工件保留。
 
 ## 数据与部署边界
 
-开发和单实例 MVP 使用原子 JSON 文件适配器,配置 `DATA_STORAGE_FILE`;临时分享和本地发布目录必须挂载持久卷。正式多实例部署建议按 `apps/server/db/001_initial.sql` 迁移 PostgreSQL,并将数据仓库替换为数据库适配器。
+开发和单实例 MVP 使用原子 JSON 文件适配器,配置 `DATA_STORAGE_FILE`;临时分享和本地发布目录必须挂载持久卷。正式多实例部署以 `apps/server/db/001_initial.sql` 的 MySQL 8 / InnoDB / utf8mb4 结构为基线,并逐步将数据仓库替换为事务型 MySQL 适配器。
+
+MySQL 基线已经覆盖:
+
+- 用户、验证码与会话
+- 项目、不可变版本与发布记录
+- 额度使用事件
+- 品牌套件
+- 官方模板与分类
+- 管理审计日志
+- 用户质量反馈与新手引导进度
+- 功能开关和可观测性事件
 
 发布存储优先级:
 
@@ -109,6 +122,7 @@ PR Preview 始终构建并上传前端产物;配置 Vercel Secrets 后自动部�
 - 访问令牌短期有效,刷新令牌只保存哈希并支持轮换、撤销
 - 临时分享使用随机 ID 与独立删除令牌,最多保留 7 天
 - 分享与发布页面包含 CSP、Referrer-Policy、nosniff 等隔离头
+- 品牌 Logo 仅接受受支持图片类型并限制体积
 - 生成产物可能包含第三方内容,正式上线前仍需人工审核
 
 ## 阶段进度
@@ -116,5 +130,9 @@ PR Preview 始终构建并上传前端产物;配置 Vercel Secrets 后自动部�
 - [x] P0 工程骨架与严格 CI
 - [x] P1 真实生成、迭代、本地历史、SEO、ZIP 和临时分享
 - [x] P2 核心账号、项目版本、模板条件、可视化编辑、发布和额度能力
-- [ ] 外部基础设施接入:生产数据库、邮件服务、对象存储、CDN、正式域名
-- [ ] P3 模板市场、自定义域名、支付订阅、主题云同步与访问统计
+- [x] 品牌套件与主题编辑器第一阶段
+- [x] MySQL 8 生产数据结构基线
+- [ ] MySQL 事务数据适配器和 JSON → MySQL 迁移命令
+- [ ] 官方模板中心、管理后台、审计与可观测性
+- [ ] 新手引导与质量反馈闭环
+- [ ] 外部基础设施接入:生产邮件、对象存储、CDN、正式域名
