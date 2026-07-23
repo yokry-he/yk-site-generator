@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { env } from '../env'
 import { authMiddleware, type AuthEnv } from '../lib/auth'
 import { mutateData, readData, type PublicationRecord } from '../lib/data-store'
-import { featureFlagMiddleware } from '../lib/feature-flags'
+import { authenticatedFeatureEnabled, featureName } from '../lib/feature-flags'
 import {
   normalizeSlug,
   publicationUrl,
@@ -36,7 +36,14 @@ const republishSchema = z.object({
 
 const publications = new Hono<AuthEnv>()
 publications.use('*', authMiddleware)
-publications.use('*', featureFlagMiddleware('site-publishing'))
+
+async function publishingEnabled(c: { get(key: 'auth'): import('../lib/auth').AccessClaims }): Promise<boolean> {
+  return authenticatedFeatureEnabled('site-publishing', c.get('auth'))
+}
+
+function publishingDisabled(c: Parameters<typeof errorBody>[0] extends never ? never : never) {
+  return c
+}
 
 function publicRecord(record: PublicationRecord) {
   const { html: _html, ...meta } = record
@@ -69,6 +76,9 @@ publications.get('/', async (c) => {
 })
 
 publications.post('/', async (c) => {
+  if (!(await publishingEnabled(c))) {
+    return c.json(errorBody('FEATURE_DISABLED', `${featureName('site-publishing')}当前未开放`), 503)
+  }
   let input: z.infer<typeof createSchema>
   try {
     input = createSchema.parse(await c.req.json())
@@ -142,6 +152,9 @@ publications.patch('/:id', async (c) => {
     const message = err instanceof z.ZodError ? err.issues[0]?.message ?? '参数错误' : '请求体不是合法 JSON'
     return c.json(errorBody('BAD_REQUEST', message), 400)
   }
+  if (input.status === 'published' && !(await publishingEnabled(c))) {
+    return c.json(errorBody('FEATURE_DISABLED', `${featureName('site-publishing')}当前未开放`), 503)
+  }
   const userId = c.get('auth').sub
   const current = (await readData()).publications.find(
     (item) => item.id === c.req.param('id') && item.userId === userId,
@@ -165,6 +178,9 @@ publications.patch('/:id', async (c) => {
 })
 
 publications.post('/:id/republish', async (c) => {
+  if (!(await publishingEnabled(c))) {
+    return c.json(errorBody('FEATURE_DISABLED', `${featureName('site-publishing')}当前未开放`), 503)
+  }
   let input: z.infer<typeof republishSchema>
   try {
     input = republishSchema.parse(await c.req.json())
