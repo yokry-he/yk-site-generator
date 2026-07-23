@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import {
-  AlertTriangle,
   ArrowLeft,
   BadgeCheck,
   CalendarClock,
@@ -46,6 +45,7 @@ const loading = ref(false)
 const savingKey = ref('')
 const error = ref('')
 const category = ref('all')
+const roleOptions: UserRole[] = ['user', 'support', 'admin']
 
 const canWrite = computed(() => hasPermission('feature_flags.write'))
 const visibleFlags = computed(() => category.value === 'all'
@@ -211,7 +211,7 @@ onMounted(() => void load())
           <div class="space-y-5 p-5 sm:p-6">
             <section><div class="flex items-center justify-between gap-3"><div><h3 class="flex items-center gap-2 text-xs font-semibold"><SlidersHorizontal class="h-3.5 w-3.5 text-brand1" />灰度比例</h3><p class="mt-1 text-[10px] text-faint">未命中定向规则的用户按稳定哈希分桶。</p></div><strong class="text-lg">{{ drafts[flag.key].rolloutPercent }}%</strong></div><input v-model.number="drafts[flag.key].rolloutPercent" type="range" min="0" max="100" step="5" :disabled="!canWrite || !drafts[flag.key].enabled" class="mt-4 w-full accent-brand1 disabled:opacity-45" /></section>
 
-            <section><h3 class="flex items-center gap-2 text-xs font-semibold"><UsersRound class="h-3.5 w-3.5 text-violet-500" />定向角色</h3><div class="mt-3 flex flex-wrap gap-2"><button v-for="role in ['user','support','admin'] as UserRole[]" :key="role" :disabled="!canWrite" class="rounded-full border px-3 py-1.5 text-[10px] font-semibold disabled:opacity-45" :class="drafts[flag.key].roles.includes(role) ? 'border-violet-500/35 bg-violet-500/10 text-violet-500' : 'border-line/10 text-faint'" @click="toggleRole(flag,role)">{{ role }}</button></div></section>
+            <section><h3 class="flex items-center gap-2 text-xs font-semibold"><UsersRound class="h-3.5 w-3.5 text-violet-500" />定向角色</h3><div class="mt-3 flex flex-wrap gap-2"><button v-for="role in roleOptions" :key="role" :disabled="!canWrite" class="rounded-full border px-3 py-1.5 text-[10px] font-semibold disabled:opacity-45" :class="drafts[flag.key].roles.includes(role) ? 'border-violet-500/35 bg-violet-500/10 text-violet-500' : 'border-line/10 text-faint'" @click="toggleRole(flag,role)">{{ role }}</button></div></section>
 
             <section class="grid gap-3 sm:grid-cols-2"><label><span class="text-[10px] font-semibold text-sub">定向邮箱</span><textarea v-model="drafts[flag.key].emails" :disabled="!canWrite" rows="3" placeholder="每行一个邮箱" class="mt-2 w-full resize-none rounded-xl border border-line/10 bg-app/55 px-3 py-2.5 text-xs outline-none placeholder:text-faint focus:border-brand1/35 disabled:opacity-45" /></label><label><span class="text-[10px] font-semibold text-sub">定向用户 ID</span><textarea v-model="drafts[flag.key].userIds" :disabled="!canWrite" rows="3" placeholder="每行一个 UUID" class="mt-2 w-full resize-none rounded-xl border border-line/10 bg-app/55 px-3 py-2.5 font-mono text-[10px] outline-none placeholder:text-faint focus:border-brand1/35 disabled:opacity-45" /></label></section>
 
