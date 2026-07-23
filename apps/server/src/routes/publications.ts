@@ -111,7 +111,13 @@ publications.post('/', async (c) => {
   })
   if (!result.record) {
     const status = result.error === 'PUBLICATION_TOO_LARGE' ? 413 : 404
-    return c.json(errorBody(result.error ?? 'PUBLISH_FAILED', result.error === 'PUBLICATION_TOO_LARGE' ? '发布产物超过大小上限' : '项目或版本不存在'), status)
+    return c.json(
+      errorBody(
+        result.error ?? 'PUBLISH_FAILED',
+        result.error === 'PUBLICATION_TOO_LARGE' ? '发布产物超过大小上限' : '项目或版本不存在',
+      ),
+      status,
+    )
   }
 
   try {
@@ -140,6 +146,7 @@ publications.patch('/:id', async (c) => {
   )
   if (!current) return c.json(errorBody('PUBLICATION_NOT_FOUND', '发布记录不存在'), 404)
 
+  // 对外存储先成功,再提交元数据状态,避免“数据库显示在线但对象不存在”。
   if (input.status === 'offline') await removePublishedArtifact(current.slug)
   if (input.status === 'published') await writePublishedArtifact(current.slug, current.html)
 
@@ -164,40 +171,65 @@ publications.post('/:id/republish', async (c) => {
     return c.json(errorBody('BAD_REQUEST', message), 400)
   }
   const userId = c.get('auth').sub
-  const updated = await mutateData<PublicationRecord | null>((data) => {
-    const row = data.publications.find((item) => item.id === c.req.param('id') && item.userId === userId)
-    if (!row) return null
-    let html = input.html
-    let versionId = input.versionId
-    if (versionId) {
-      const version = data.projectVersions.find((item) => item.id === versionId && item.userId === userId)
-      if (!version || (row.projectId && version.projectId !== row.projectId)) return null
-      html = version.html
+  const data = await readData()
+  const current = data.publications.find(
+    (item) => item.id === c.req.param('id') && item.userId === userId,
+  )
+  if (!current) return c.json(errorBody('PUBLICATION_NOT_FOUND', '发布记录不存在'), 404)
+
+  let html = input.html
+  let versionId = input.versionId
+  if (versionId) {
+    const version = data.projectVersions.find((item) => item.id === versionId && item.userId === userId)
+    if (!version || (current.projectId && version.projectId !== current.projectId)) {
+      return c.json(errorBody('VERSION_NOT_FOUND', '项目版本不存在或不属于当前项目'), 404)
     }
-    if (!html || Buffer.byteLength(html, 'utf8') > env.MAX_PROJECT_BYTES) return null
+    html = version.html
+  }
+  if (!html) return c.json(errorBody('HTML_REQUIRED', '缺少可发布产物'), 400)
+  if (Buffer.byteLength(html, 'utf8') > env.MAX_PROJECT_BYTES) {
+    return c.json(errorBody('PUBLICATION_TOO_LARGE', '发布产物超过大小上限'), 413)
+  }
+
+  // 先写对象存储;失败时数据库仍指向上一版,线上不会进入半提交状态。
+  await writePublishedArtifact(current.slug, html)
+  const now = new Date().toISOString()
+  const updated = await mutateData<PublicationRecord | null>((draft) => {
+    const row = draft.publications.find((item) => item.id === current.id && item.userId === userId)
+    if (!row) return null
     row.html = html
     row.versionId = versionId ?? row.versionId
     row.status = 'published'
-    row.updatedAt = new Date().toISOString()
-    row.publishedAt = row.updatedAt
+    row.updatedAt = now
+    row.publishedAt = now
     return structuredClone(row)
   })
-  if (!updated) return c.json(errorBody('PUBLICATION_NOT_FOUND', '发布记录、版本不存在或产物过大'), 404)
-  await writePublishedArtifact(updated.slug, updated.html)
+  if (!updated) {
+    // 极小概率下记录在对象写入后被并发删除;移除对象避免孤儿。
+    await removePublishedArtifact(current.slug)
+    return c.json(errorBody('PUBLICATION_NOT_FOUND', '发布记录已被删除'), 404)
+  }
   await recordPublishUsage({ userId })
   return c.json({ publication: publicRecord(updated) })
 })
 
 publications.delete('/:id', async (c) => {
   const userId = c.get('auth').sub
-  const removed = await mutateData<PublicationRecord | null>((data) => {
-    const row = data.publications.find((item) => item.id === c.req.param('id') && item.userId === userId)
-    if (!row) return null
-    data.publications = data.publications.filter((item) => item.id !== row.id)
-    return structuredClone(row)
+  const current = (await readData()).publications.find(
+    (item) => item.id === c.req.param('id') && item.userId === userId,
+  )
+  if (!current) return c.json(errorBody('PUBLICATION_NOT_FOUND', '发布记录不存在'), 404)
+
+  // 先清理对外对象,再删除可追踪的元数据。
+  await removePublishedArtifact(current.slug)
+  const removed = await mutateData((data) => {
+    const before = data.publications.length
+    data.publications = data.publications.filter(
+      (item) => item.id !== current.id || item.userId !== userId,
+    )
+    return data.publications.length < before
   })
-  if (!removed) return c.json(errorBody('PUBLICATION_NOT_FOUND', '发布记录不存在'), 404)
-  await removePublishedArtifact(removed.slug)
+  if (!removed) return c.json(errorBody('PUBLICATION_NOT_FOUND', '发布记录已被删除'), 404)
   return c.json({ ok: true })
 })
 
