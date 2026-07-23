@@ -1,10 +1,11 @@
 import { computed, readonly, ref } from 'vue'
 import { apiUrl, ApiError, ensureOk } from '../lib/api'
+import { permissionsForRole, roleHasPermission, type Permission, type UserRole } from '../lib/rbac'
 
 export interface AuthUser {
   id: string
   email: string
-  role: 'user' | 'admin' | 'support'
+  role: UserRole
   status: 'active' | 'suspended' | 'deleted'
   createdAt: string
 }
@@ -145,6 +146,7 @@ export function requireAuth(): AuthUser {
 }
 
 export function useAuth() {
+  const permissions = computed(() => user.value ? permissionsForRole(user.value.role) : [])
   return {
     user: readonly(user),
     accessToken: readonly(accessToken),
@@ -152,6 +154,9 @@ export function useAuth() {
     initialized: readonly(initialized),
     isAuthenticated: computed(() => Boolean(user.value)),
     isAdmin: computed(() => user.value?.role === 'admin'),
+    isOperator: computed(() => Boolean(user.value && permissionsForRole(user.value.role).length)),
+    permissions,
+    hasPermission: (permission: Permission) => Boolean(user.value && roleHasPermission(user.value.role, permission)),
     requestLoginCode,
     verifyLoginCode,
     loadAuthSession,
