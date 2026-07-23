@@ -10,6 +10,7 @@ export const router = createRouter({
     { path: '/templates', name: 'templates', component: () => import('../pages/TemplatesPage.vue') },
     { path: '/projects', name: 'projects', component: () => import('../pages/ProjectsPage.vue') },
     { path: '/projects/:id', name: 'project-detail', component: () => import('../pages/ProjectPage.vue') },
+    { path: '/brand', name: 'brand-kits', component: () => import('../pages/BrandKitsPage.vue') },
     { path: '/usage', name: 'usage', component: () => import('../pages/QuotaPage.vue') },
     { path: '/pricing', name: 'pricing', component: () => import('../pages/PricingPage.vue') },
     { path: '/docs', name: 'docs', component: () => import('../pages/DocsPage.vue') },
