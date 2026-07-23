@@ -21,15 +21,21 @@ import {
 import ThemeSwitcher from './ThemeSwitcher.vue'
 import { useAuth } from '../composables/useAuth'
 import { useAuthDialog } from '../composables/useAuthDialog'
-import { useFeatures } from '../composables/useFeatures'
+import { useFeatures, type FeatureKey } from '../composables/useFeatures'
 import { useModelConfig } from '../composables/useModelConfig'
 import { useModelDialog } from '../composables/useModelDialog'
 import { useToast } from '../composables/useToast'
 
-const BASE_NAV_LINKS = [
+interface NavigationLink {
+  label: string
+  to: string
+  feature?: FeatureKey
+}
+
+const BASE_NAV_LINKS: NavigationLink[] = [
   { label: '首页', to: '/' },
   { label: '在线体验', to: '/generator' },
-  { label: '模板库', to: '/templates', feature: 'official-templates' as const },
+  { label: '模板库', to: '/templates', feature: 'official-templates' },
   { label: '定价', to: '/pricing' },
 ]
 
@@ -45,7 +51,7 @@ const { enabled } = useFeatures()
 const { show: showAuth } = useAuthDialog()
 const toast = useToast()
 const initials = computed(() => user.value?.email.slice(0, 2).toUpperCase() ?? 'SF')
-const navLinks = computed(() => BASE_NAV_LINKS.filter((link) => !('feature' in link) || enabled(link.feature)))
+const navLinks = computed(() => BASE_NAV_LINKS.filter((link) => !link.feature || enabled(link.feature)))
 
 function isActive(to: string) {
   return to === '/' ? route.path === '/' : route.path.startsWith(to)
