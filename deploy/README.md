@@ -30,6 +30,7 @@ MONTHLY_GENERATION_LIMIT=100
 适合内测或单实例 MVP:
 
 ```env
+DATA_STORAGE_DRIVER=file
 DATA_STORAGE_FILE=/data/siteforge/siteforge.json
 SHARE_STORAGE_DIR=/data/siteforge/shares
 PUBLISH_STORAGE_DIR=/data/siteforge/published
@@ -37,9 +38,54 @@ PUBLISH_STORAGE_DIR=/data/siteforge/published
 
 三个路径都必须挂载持久卷。文件数据仓库使用进程内串行队列和原子 rename 防止同一实例内并发写损坏,但不适合多个服务实例共享写入。
 
-### 正式数据库
+### MySQL 8 多实例模式
 
-`apps/server/db/001_initial.sql` 提供用户、验证码、会话、项目、不可变版本、用量和发布记录的 PostgreSQL 基线结构。多实例正式部署应将 `data-store.ts` 替换为数据库适配器,并保持现有路由返回结构不变。
+正式多实例部署使用:
+
+```env
+DATA_STORAGE_DRIVER=mysql
+MYSQL_URL=mysql://siteforge:<password>@mysql.internal:3306/siteforge
+MYSQL_CONNECTION_LIMIT=10
+MYSQL_SSL_MODE=required
+MYSQL_CONNECT_TIMEOUT_MS=10000
+```
+
+按顺序执行 `apps/server/db/001_initial.sql` 以及后续编号 migration。`004_transactional_state.sql` 提供当前事务快照表。服务启动前会验证 MySQL 连接和表结构,失败时拒绝监听端口。
+
+迁移建议严格遵循以下顺序:
+
+1. 对现有 JSON 文件做独立备份。
+2. 执行 `db:mysql:check` 验证连接、TLS 和表结构。
+3. 执行 `db:mysql:import -- --dry-run` 查看来源计数、校验和和目标状态。
+4. 首次导入且目标为空时执行 `db:mysql:import`。
+5. 重新执行 `db:mysql:check`,记录 revision 与 checksum。
+6. 将服务配置切换为 `DATA_STORAGE_DRIVER=mysql`。
+7. 单实例启动并完成登录、项目、发布等冒烟测试。
+8. 再扩容至多个实例。
+
+```bash
+MYSQL_URL='mysql://...' pnpm --filter server db:mysql:check
+MYSQL_URL='mysql://...' pnpm --filter server db:mysql:import -- --dry-run
+MYSQL_URL='mysql://...' pnpm --filter server db:mysql:import -- --file=/data/siteforge/siteforge.json
+```
+
+目标 MySQL 已存在快照时命令默认拒绝覆盖。明确使用 `--force` 时,覆盖前会自动生成 JSON 回滚快照。不要在多个应用实例仍持续写入时执行强制导入。
+
+独立备份:
+
+```bash
+MYSQL_URL='mysql://...' pnpm --filter server db:mysql:export -- --output=/backup/siteforge-rollback.json
+```
+
+当前 MySQL 事务桥梁使用:
+
+- InnoDB 事务
+- `SELECT ... FOR UPDATE` 跨实例写锁
+- 单调递增 revision
+- SHA-256 payload 校验和
+- 连接池和优雅关闭
+
+规范化领域表已经在 MySQL 基线中定义,后续可在保持 API 不变的情况下逐域迁移。
 
 ## S3 兼容发布
 
@@ -111,20 +157,34 @@ VITE_API_BASE_URL=https://api.example.com
 6. `pnpm --filter web e2e`
 7. `pnpm --filter web e2e:iterate`
 8. `pnpm --filter web e2e:history`
-9. 请求 `/api/health`
-10. 完成一次验证码登录、项目版本新增、回滚、发布和下线
-11. 创建临时分享并确认 `/s/:id`、过期页和删除令牌正常
-12. 核对 CORS、Cookie Secure/SameSite、CSP 和日志脱敏
+9. MySQL 模式执行 `db:mysql:check`
+10. 请求 `/api/health`,确认 `dataStore.status=operational`
+11. 管理后台确认数据驱动、Schema、revision 和延迟正确
+12. 完成一次验证码登录、项目版本新增、回滚、发布和下线
+13. 创建临时分享并确认 `/s/:id`、过期页和删除令牌正常
+14. 核对 CORS、Cookie Secure/SameSite、CSP 和日志脱敏
 
 ## 监控建议
 
-- `/api/health` 成功率和响应时间
+- `/api/health` 成功率、数据驱动状态和响应时间
+- MySQL 连接池错误、revision 停滞和 checksum 不匹配
 - 登录验证码发送失败率与错误尝试次数
 - 模型厂商错误分类、生成延迟和 SSE 中断率
 - 月度额度预占与退回数量
 - 分享/发布写入失败和对象存储 4xx/5xx
-- 数据文件或数据库备份、恢复演练
+- 数据库定期导出与恢复演练
 
 ## 回滚
 
-前端使用 Vercel 上一个成功 Deployment 回滚。服务端保持镜像/构建版本不可变;回滚服务版本时不要删除数据持久卷或对象存储。数据库结构变更必须提供向后兼容读取或独立迁移/回滚脚本。
+前端使用 Vercel 上一个成功 Deployment 回滚。服务端保持镜像/构建版本不可变。
+
+MySQL → 文件回滚流程:
+
+1. 停止写流量或缩容至零。
+2. 执行 `db:mysql:export` 导出当前一致快照。
+3. 配置 `DATA_STORAGE_DRIVER=file`。
+4. 将 `DATA_STORAGE_FILE` 指向导出的 JSON。
+5. 启动单实例并完成健康和业务冒烟测试。
+6. 确认数据后恢复流量。
+
+回滚服务版本时不要删除数据持久卷、MySQL 数据库或对象存储。数据库结构变更必须保持向后兼容读取或提供独立迁移脚本。
