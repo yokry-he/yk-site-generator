@@ -32,7 +32,7 @@ interface CommandItem {
   group: '快速操作' | '最近项目' | '品牌与内容' | '运营'
   icon: typeof Search
   keywords: string
-  run: () => void | Promise<void>
+  run: () => unknown | Promise<unknown>
 }
 
 const router = useRouter()
@@ -150,7 +150,6 @@ onBeforeUnmount(() => {
 
 <template>
   <button class="fixed right-5 bottom-5 z-40 hidden items-center gap-2 rounded-full border border-line/10 bg-soft/90 px-3.5 py-2 text-xs text-mut shadow-xl backdrop-blur transition hover:border-brand1/25 hover:text-brand1 lg:flex" title="打开命令面板" @click="show"><Command class="h-3.5 w-3.5" /><span>快速操作</span><kbd class="rounded bg-ink/5 px-1.5 py-0.5 text-[9px]">⌘K</kbd></button>
-
   <Teleport to="body"><Transition name="command"><div v-if="open" class="fixed inset-0 z-[200] bg-black/55 p-3 pt-[9vh] backdrop-blur-sm" @mousedown.self="close"><section role="dialog" aria-modal="true" aria-label="全局命令面板" class="mx-auto flex max-h-[76vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-app shadow-2xl"><header class="flex items-center gap-3 border-b border-line/10 px-4 py-3"><Search class="h-5 w-5 text-faint" /><input ref="inputRef" v-model="query" placeholder="搜索命令、项目或工作区…" class="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-faint" /><kbd class="rounded-lg border border-line/10 bg-ink/5 px-2 py-1 text-[10px] text-faint">ESC</kbd><button class="rounded-lg p-1.5 text-faint hover:bg-ink/5 hover:text-ink" aria-label="关闭命令面板" @click="close"><X class="h-4 w-4" /></button></header>
       <div class="min-h-0 flex-1 overflow-y-auto p-2"><div v-if="loadingProjects && !projects.length" class="flex items-center justify-center gap-2 p-4 text-xs text-faint"><Loader2 class="h-4 w-4 animate-spin" />正在载入最近项目</div><template v-for="entry in groups" :key="entry.group"><p class="px-3 pt-3 pb-1.5 text-[9px] font-semibold tracking-wider text-faint uppercase">{{ entry.group }}</p><button v-for="item in entry.items" :key="item.id" class="flex w-full items-center gap-3 rounded-xl p-3 text-left" :class="results[activeIndex]?.id === item.id ? 'bg-brand1/[0.08] text-brand1' : 'text-sub hover:bg-ink/[0.04]'" @mouseenter="activeIndex = results.findIndex(result => result.id === item.id)" @click="run(item)"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl" :class="results[activeIndex]?.id === item.id ? 'bg-brand1/12' : 'bg-ink/5'"><component :is="item.icon" class="h-4 w-4" /></span><span class="min-w-0 flex-1"><strong class="block truncate text-sm">{{ item.label }}</strong><span class="mt-0.5 block truncate text-[10px] text-faint">{{ item.description }}</span></span><ArrowRight class="h-3.5 w-3.5 shrink-0 opacity-50" /></button></template><div v-if="!results.length" class="flex min-h-52 flex-col items-center justify-center text-center"><FileSearch class="h-8 w-8 text-faint" /><h3 class="mt-4 text-sm font-semibold">没有匹配的命令</h3><p class="mt-2 text-xs text-mut">尝试搜索“项目”“品牌”“模板”或项目名称。</p></div></div>
       <footer class="flex items-center justify-between border-t border-line/10 bg-soft/45 px-4 py-2.5 text-[9px] text-faint"><span class="flex items-center gap-1.5"><Sparkles class="h-3 w-3 text-brand1" />命令会根据账号权限和功能开关自动变化</span><span>↑↓ 选择 · Enter 执行</span></footer></section></div></Transition></Teleport>
