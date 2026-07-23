@@ -21,6 +21,16 @@ const refreshSchema = z.object({ refreshToken: z.string().min(20).optional() })
 
 const auth = new Hono<AuthEnv>()
 
+function publicUser(user: UserRecord) {
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role ?? 'user',
+    status: user.status ?? 'active',
+    createdAt: user.createdAt,
+  }
+}
+
 function setRefreshCookie(c: Parameters<typeof setCookie>[0], token: string): void {
   setCookie(c, 'sf_refresh', token, {
     httpOnly: true,
@@ -72,6 +82,11 @@ auth.post('/request-code', async (c) => {
   } catch (err) {
     const message = err instanceof z.ZodError ? err.issues[0]?.message ?? '邮箱格式错误' : '请求体不是合法 JSON'
     return c.json(errorBody('BAD_REQUEST', message), 400)
+  }
+
+  const existing = (await readData()).users.find((item) => item.email === input.email)
+  if (existing && (existing.status ?? 'active') !== 'active') {
+    return c.json(errorBody('ACCOUNT_RESTRICTED', '账号当前不可登录，请联系管理员'), 403)
   }
 
   const code = String(randomInt(100_000, 1_000_000))
@@ -147,9 +162,18 @@ auth.post('/verify', async (c) => {
     let user = data.users.find((item) => item.email === input.email)
     const iso = new Date(now).toISOString()
     if (!user) {
-      user = { id: randomUUID(), email: input.email, createdAt: iso, updatedAt: iso }
+      user = {
+        id: randomUUID(),
+        email: input.email,
+        role: env.adminEmails.has(input.email) ? 'admin' : 'user',
+        status: 'active',
+        createdAt: iso,
+        updatedAt: iso,
+      }
       data.users.push(user)
     } else {
+      if ((user.status ?? 'active') !== 'active') return { error: 'ACCOUNT_RESTRICTED' }
+      if (env.adminEmails.has(input.email)) user.role = 'admin'
       user.updatedAt = iso
     }
     const session: SessionRecord = {
@@ -169,8 +193,10 @@ auth.post('/verify', async (c) => {
       CODE_EXPIRED: '验证码不存在或已过期',
       CODE_INVALID: '验证码不正确',
       CODE_ATTEMPTS_EXCEEDED: '验证码错误次数过多,请重新获取',
+      ACCOUNT_RESTRICTED: '账号当前不可登录，请联系管理员',
     }
-    return c.json(errorBody(result.error ?? 'CODE_INVALID', messages[result.error ?? ''] ?? '验证码校验失败'), 400)
+    const status = result.error === 'ACCOUNT_RESTRICTED' ? 403 : 400
+    return c.json(errorBody(result.error ?? 'CODE_INVALID', messages[result.error ?? ''] ?? '验证码校验失败'), status)
   }
 
   const access = createAccessToken({
@@ -180,7 +206,7 @@ auth.post('/verify', async (c) => {
   })
   setRefreshCookie(c, refreshToken)
   return c.json({
-    user: { id: result.user.id, email: result.user.email, createdAt: result.user.createdAt },
+    user: publicUser(result.user),
     accessToken: access.token,
     accessTokenExpiresAt: access.expiresAt,
   })
@@ -207,14 +233,14 @@ auth.post('/refresh', async (c) => {
     )
     if (!session) return {}
     const user = data.users.find((item) => item.id === session.userId)
-    if (!user) return {}
+    if (!user || (user.status ?? 'active') !== 'active') return {}
     session.refreshTokenHash = hashToken(nextRefreshToken)
     session.lastUsedAt = new Date(now).toISOString()
     return { user, session }
   })
   if (!result.user || !result.session) {
     deleteCookie(c, 'sf_refresh', { path: '/api/auth' })
-    return c.json(errorBody('REFRESH_TOKEN_INVALID', '刷新令牌无效或已过期'), 401)
+    return c.json(errorBody('REFRESH_TOKEN_INVALID', '刷新令牌无效、账号受限或已过期'), 401)
   }
 
   const access = createAccessToken({
@@ -224,7 +250,7 @@ auth.post('/refresh', async (c) => {
   })
   setRefreshCookie(c, nextRefreshToken)
   return c.json({
-    user: { id: result.user.id, email: result.user.email, createdAt: result.user.createdAt },
+    user: publicUser(result.user),
     accessToken: access.token,
     accessTokenExpiresAt: access.expiresAt,
   })
@@ -236,7 +262,7 @@ auth.get('/me', async (c) => {
   const data = await readData()
   const user = data.users.find((item) => item.id === claims.sub)
   if (!user) return c.json(errorBody('USER_NOT_FOUND', '用户不存在'), 404)
-  return c.json({ user: { id: user.id, email: user.email, createdAt: user.createdAt } })
+  return c.json({ user: publicUser(user) })
 })
 
 auth.use('/logout', authMiddleware)
