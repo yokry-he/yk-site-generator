@@ -7,6 +7,7 @@ import {
   Gauge,
   LogOut,
   Menu,
+  Palette,
   Plug,
   Sparkles,
   UserRound,
@@ -51,7 +52,7 @@ async function signOut() {
   open.value = false
   await logout()
   toast.success('已安全退出账号')
-  if (route.path.startsWith('/projects') || route.path === '/usage') await router.push('/')
+  if (route.path.startsWith('/projects') || route.path === '/usage' || route.path === '/brand') await router.push('/')
 }
 
 function onDocumentClick(event: MouseEvent) {
@@ -102,18 +103,24 @@ onBeforeUnmount(() => {
             class="bg-brand-gradient absolute -bottom-2 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full"
           />
         </RouterLink>
-        <RouterLink
-          v-if="isAuthenticated"
-          to="/projects"
-          class="relative text-sm transition-colors"
-          :class="isActive('/projects') ? 'font-semibold text-ink' : 'text-mut hover:text-ink'"
-        >
-          我的项目
-          <span
-            v-if="isActive('/projects')"
-            class="bg-brand-gradient absolute -bottom-2 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full"
-          />
-        </RouterLink>
+        <template v-if="isAuthenticated">
+          <RouterLink
+            to="/projects"
+            class="relative text-sm transition-colors"
+            :class="isActive('/projects') ? 'font-semibold text-ink' : 'text-mut hover:text-ink'"
+          >
+            我的项目
+            <span v-if="isActive('/projects')" class="bg-brand-gradient absolute -bottom-2 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full" />
+          </RouterLink>
+          <RouterLink
+            to="/brand"
+            class="relative text-sm transition-colors"
+            :class="isActive('/brand') ? 'font-semibold text-ink' : 'text-mut hover:text-ink'"
+          >
+            品牌
+            <span v-if="isActive('/brand')" class="bg-brand-gradient absolute -bottom-2 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full" />
+          </RouterLink>
+        </template>
       </nav>
 
       <div class="flex items-center gap-2">
@@ -129,8 +136,9 @@ onBeforeUnmount(() => {
 
         <div v-if="isAuthenticated" data-account-menu class="relative hidden sm:block">
           <button
-            class="flex max-w-52 items-center gap-2 rounded-full border border-line/10 bg-soft/70 p-1 pr-2.5 text-xs text-sub shadow-sm transition-colors hover:border-brand1/25 hover:text-ink"
+            class="flex max-w-52 items-center gap-2 rounded-full border border-line/10 bg-soft/70 p-1 pr-2.5 text-xs text-sub shadow-sm transition-colors hover:border-brand1/25 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand1/45"
             :aria-expanded="accountOpen"
+            aria-haspopup="menu"
             @click.stop="accountOpen = !accountOpen"
           >
             <span class="bg-brand-gradient flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white">
@@ -143,21 +151,26 @@ onBeforeUnmount(() => {
           <Transition name="menu">
             <div
               v-if="accountOpen"
+              role="menu"
               class="absolute top-[calc(100%+10px)] right-0 w-64 overflow-hidden rounded-2xl border border-line/10 bg-soft/95 p-2 shadow-2xl shadow-black/15 backdrop-blur-xl"
             >
               <div class="border-b border-line/10 px-3 py-2.5">
                 <p class="text-[10px] font-medium tracking-wider text-faint uppercase">当前账号</p>
                 <p class="mt-1 truncate text-xs font-medium text-ink">{{ user?.email }}</p>
               </div>
-              <RouterLink to="/projects" class="mt-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink">
+              <RouterLink to="/projects" role="menuitem" class="mt-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink">
                 <FolderKanban class="h-4 w-4 text-brand1" />
                 我的项目
               </RouterLink>
-              <RouterLink to="/usage" class="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink">
+              <RouterLink to="/brand" role="menuitem" class="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink">
+                <Palette class="h-4 w-4 text-brand2" />
+                品牌套件
+              </RouterLink>
+              <RouterLink to="/usage" role="menuitem" class="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink">
                 <Gauge class="h-4 w-4 text-brand2" />
                 额度与用量
               </RouterLink>
-              <button class="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm text-red-500 hover:bg-red-500/[0.07]" @click="signOut">
+              <button role="menuitem" class="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm text-red-500 hover:bg-red-500/[0.07]" @click="signOut">
                 <LogOut class="h-4 w-4" />
                 退出登录
               </button>
@@ -205,6 +218,9 @@ onBeforeUnmount(() => {
         <template v-if="isAuthenticated">
           <RouterLink to="/projects" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink">
             <FolderKanban class="h-4 w-4 text-brand1" />我的项目
+          </RouterLink>
+          <RouterLink to="/brand" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink">
+            <Palette class="h-4 w-4 text-brand2" />品牌套件
           </RouterLink>
           <RouterLink to="/usage" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink">
             <Gauge class="h-4 w-4 text-brand2" />额度与用量
