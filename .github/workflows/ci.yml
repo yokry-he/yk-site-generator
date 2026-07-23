@@ -44,7 +44,18 @@ jobs:
         run: pnpm build
 
       - name: 全仓单元测试
-        run: pnpm test
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm test 2>&1 | tee test.log
+
+      - name: 上传单元测试诊断
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-log
+          path: test.log
+          retention-days: 7
 
       - name: 前端生成链路 E2E
         run: pnpm --filter web e2e
