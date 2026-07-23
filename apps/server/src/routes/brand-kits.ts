@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { authMiddleware, type AuthEnv } from '../lib/auth'
 import { mutateData, readData, type BrandKitRecord } from '../lib/data-store'
+import { featureFlagMiddleware } from '../lib/feature-flags'
 import { errorBody } from '../types'
 
 const color = z.string().regex(/^#[0-9a-f]{6}$/i, '颜色必须是 6 位十六进制值')
@@ -49,6 +50,7 @@ const updateSchema = tokenSchema.partial().extend({
 
 const brandKits = new Hono<AuthEnv>()
 brandKits.use('*', authMiddleware)
+brandKits.use('*', featureFlagMiddleware('brand-kits'))
 
 function sorted(rows: BrandKitRecord[]): BrandKitRecord[] {
   return [...rows].sort((a, b) => {
