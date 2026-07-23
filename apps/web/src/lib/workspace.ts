@@ -23,6 +23,7 @@ export interface CloudProject {
   title: string
   siteType: string
   requirement: string
+  templateId?: string
   createdAt: string
   updatedAt: string
   latestVersion: ProjectVersionSummary | null
