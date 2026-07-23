@@ -32,5 +32,14 @@ jobs:
       - name: Build(web + server + shared)
         run: pnpm build
 
-      - name: Server 单元测试
-        run: pnpm --filter server test
+      - name: 全仓单元测试
+        run: pnpm test
+
+      - name: 前端生成链路 E2E
+        run: pnpm --filter web e2e
+
+      - name: 前端迭代链路 E2E
+        run: pnpm --filter web e2e:iterate
+
+      - name: 前端历史恢复 E2E
+        run: pnpm --filter web e2e:history
