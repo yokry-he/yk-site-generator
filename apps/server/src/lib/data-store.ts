@@ -93,6 +93,8 @@ export interface AppData {
   brandKits: BrandKitRecord[]
 }
 
+type StoredAppData = Omit<Partial<AppData>, 'schemaVersion'> & { schemaVersion?: 1 | 2 }
+
 const emptyData = (): AppData => ({
   schemaVersion: 2,
   users: [],
@@ -115,7 +117,7 @@ function cloneData(data: AppData): AppData {
 async function readFromDisk(): Promise<AppData> {
   try {
     const raw = await readFile(env.DATA_STORAGE_FILE, 'utf8')
-    const parsed = JSON.parse(raw) as Partial<AppData> & { schemaVersion?: number }
+    const parsed = JSON.parse(raw) as StoredAppData
     if (parsed.schemaVersion !== 1 && parsed.schemaVersion !== 2) throw new Error('UNSUPPORTED_DATA_SCHEMA')
     return {
       schemaVersion: 2,
