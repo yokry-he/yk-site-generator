@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import GenerationBrief from '../components/GenerationBrief.vue'
 import GeneratorDemo from '../components/GeneratorDemo.vue'
 import GeneratorArtifactBar from '../components/GeneratorArtifactBar.vue'
 import { SITE_TYPES } from '../data/siteTypes'
@@ -13,7 +14,6 @@ const siteType = ref('website')
 let observer: MutationObserver | null = null
 let scanTimer: ReturnType<typeof setInterval> | null = null
 
-// 从首页 Hero 带过来的需求文本(query.q,刷新/分享链接也能保留)
 const prompt = ref(
   typeof route.query.q === 'string' && route.query.q
     ? route.query.q
@@ -57,25 +57,15 @@ function applyEditedHtml(html: string) {
   }
 }
 
-watch(
-  () => route.query.q,
-  (value) => {
-    if (typeof value === 'string' && value) prompt.value = value
-  },
-)
+watch(() => route.query.q, (value) => {
+  if (typeof value === 'string' && value) prompt.value = value
+})
 
 onMounted(async () => {
   await nextTick()
   scanArtifact()
   observer = new MutationObserver(scanArtifact)
-  if (hostRef.value) {
-    observer.observe(hostRef.value, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['srcdoc'],
-    })
-  }
+  if (hostRef.value) observer.observe(hostRef.value, { childList: true, subtree: true, attributes: true, attributeFilter: ['srcdoc'] })
   scanTimer = setInterval(scanArtifact, 500)
 })
 
@@ -87,6 +77,7 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="pt-8">
+    <GenerationBrief :prompt="prompt" @update:prompt="prompt = $event" />
     <div ref="hostRef">
       <GeneratorDemo v-model:prompt="prompt" />
     </div>
