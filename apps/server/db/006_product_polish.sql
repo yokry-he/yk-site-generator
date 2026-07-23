@@ -1,5 +1,6 @@
 -- Schema v6 product-completion metadata for the editor, workspace, brand library and template center.
 -- Numbered migrations run exactly once in order, so standard MySQL 8.4 ADD COLUMN syntax is used.
+-- This batch is validated by the real MySQL CI migration, concurrency and rollback job.
 SET NAMES utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 SET time_zone = '+00:00';
 
