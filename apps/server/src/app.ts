@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { HTTPException } from 'hono/http-exception'
 import { env } from './env'
+import { requestTelemetryMiddleware } from './lib/observability'
 import { errorBody } from './types'
 import health from './routes/health'
 import generate from './routes/generate'
@@ -15,11 +16,14 @@ import quota from './routes/quota'
 import publications from './routes/publications'
 import brandKits from './routes/brand-kits'
 import templates from './routes/templates'
+import admin from './routes/admin'
 import sitePage, { serveSiteFromHost } from './routes/site-page'
 
 export function createApp() {
   const app = new Hono()
 
+  // 稳定 request id + 慢请求/服务端错误事件。
+  app.use('*', requestTelemetryMiddleware)
   // 结构化请求日志
   app.use('*', logger())
 
@@ -30,8 +34,8 @@ export function createApp() {
       origin: env.corsOrigins,
       credentials: true,
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Content-Type', 'Authorization', 'X-Share-Delete-Token'],
-      exposeHeaders: ['Content-Length'],
+      allowHeaders: ['Content-Type', 'Authorization', 'X-Share-Delete-Token', 'X-Request-ID'],
+      exposeHeaders: ['Content-Length', 'X-Request-ID'],
       maxAge: 600,
     }),
   )
@@ -47,6 +51,7 @@ export function createApp() {
   app.route('/api/publications', publications)
   app.route('/api/brand-kits', brandKits)
   app.route('/api/templates', templates)
+  app.route('/api/admin', admin)
   app.route('/s', sharePage)
   app.route('/site', sitePage)
 
