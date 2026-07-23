@@ -1,26 +1,32 @@
 -- Product-completion metadata for the editor, workspace, brand library and template center.
+-- Numbered migrations run exactly once in order, so standard ADD COLUMN syntax is used.
 SET NAMES utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 SET time_zone = '+00:00';
 
 ALTER TABLE projects
-  ADD COLUMN IF NOT EXISTS lifecycle_status VARCHAR(24) NOT NULL DEFAULT 'active' AFTER requirement,
-  ADD COLUMN IF NOT EXISTS starred BOOLEAN NOT NULL DEFAULT FALSE AFTER lifecycle_status,
-  ADD COLUMN IF NOT EXISTS opened_at DATETIME(3) NULL AFTER starred,
-  ADD COLUMN IF NOT EXISTS duplicated_from_id CHAR(36) NULL AFTER opened_at,
-  ADD COLUMN IF NOT EXISTS brand_kit_id CHAR(36) NULL AFTER duplicated_from_id,
-  ADD COLUMN IF NOT EXISTS cover_data MEDIUMTEXT NULL AFTER brand_kit_id;
-
-CREATE INDEX projects_user_status_updated_idx ON projects (user_id, lifecycle_status, updated_at DESC);
-CREATE INDEX projects_user_starred_updated_idx ON projects (user_id, starred, updated_at DESC);
+  ADD COLUMN lifecycle_status VARCHAR(24) NOT NULL DEFAULT 'active' AFTER requirement,
+  ADD COLUMN starred BOOLEAN NOT NULL DEFAULT FALSE AFTER lifecycle_status,
+  ADD COLUMN opened_at DATETIME(3) NULL AFTER starred,
+  ADD COLUMN duplicated_from_id CHAR(36) NULL AFTER opened_at,
+  ADD COLUMN brand_kit_id CHAR(36) NULL AFTER duplicated_from_id,
+  ADD COLUMN cover_data MEDIUMTEXT NULL AFTER brand_kit_id,
+  ADD KEY projects_user_status_updated_idx (user_id, lifecycle_status, updated_at DESC),
+  ADD KEY projects_user_starred_updated_idx (user_id, starred, updated_at DESC),
+  ADD KEY projects_duplicated_from_idx (duplicated_from_id),
+  ADD KEY projects_brand_kit_idx (brand_kit_id),
+  ADD CONSTRAINT projects_lifecycle_status_check CHECK (lifecycle_status IN ('active', 'archived', 'trashed')),
+  ADD CONSTRAINT projects_duplicated_from_fk FOREIGN KEY (duplicated_from_id) REFERENCES projects(id) ON DELETE SET NULL,
+  ADD CONSTRAINT projects_brand_kit_fk FOREIGN KEY (brand_kit_id) REFERENCES brand_kits(id) ON DELETE SET NULL;
 
 ALTER TABLE project_versions
-  ADD COLUMN IF NOT EXISTS name VARCHAR(80) NULL AFTER model,
-  ADD COLUMN IF NOT EXISTS note VARCHAR(500) NULL AFTER name,
-  ADD COLUMN IF NOT EXISTS starred BOOLEAN NOT NULL DEFAULT FALSE AFTER note,
-  ADD COLUMN IF NOT EXISTS parent_version_id CHAR(36) NULL AFTER starred,
-  ADD COLUMN IF NOT EXISTS change_summary JSON NULL AFTER parent_version_id;
-
-CREATE INDEX project_versions_project_starred_idx ON project_versions (project_id, starred, version DESC);
+  ADD COLUMN name VARCHAR(80) NULL AFTER model,
+  ADD COLUMN note VARCHAR(500) NULL AFTER name,
+  ADD COLUMN starred BOOLEAN NOT NULL DEFAULT FALSE AFTER note,
+  ADD COLUMN parent_version_id CHAR(36) NULL AFTER starred,
+  ADD COLUMN change_summary JSON NULL AFTER parent_version_id,
+  ADD KEY project_versions_project_starred_idx (project_id, starred, version DESC),
+  ADD KEY project_versions_parent_idx (parent_version_id),
+  ADD CONSTRAINT project_versions_parent_fk FOREIGN KEY (parent_version_id) REFERENCES project_versions(id) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS brand_assets (
   id CHAR(36) NOT NULL,
