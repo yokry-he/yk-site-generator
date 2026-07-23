@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { BrandKit } from 'shared'
 import { env } from '../env'
+import { getMysqlSnapshotStore } from './mysql-store'
 
 export type UserRole = 'user' | 'admin' | 'support'
 export type UserStatus = 'active' | 'suspended' | 'deleted'
@@ -172,7 +173,17 @@ export interface AppData {
   onboardingProgress: OnboardingProgressRecord[]
 }
 
-const emptyData = (): AppData => ({
+export interface DataStoreHealth {
+  driver: 'memory' | 'file' | 'mysql'
+  status: 'operational' | 'degraded'
+  message: string
+  latencyMs?: number
+  revision?: number
+  schemaVersion: number
+  updatedAt?: string
+}
+
+export const createEmptyData = (): AppData => ({
   schemaVersion: 4,
   users: [],
   verificationCodes: [],
@@ -188,7 +199,7 @@ const emptyData = (): AppData => ({
   onboardingProgress: [],
 })
 
-let memoryData: AppData = emptyData()
+let memoryData: AppData = createEmptyData()
 let queue: Promise<unknown> = Promise.resolve()
 
 function cloneData(data: AppData): AppData {
@@ -203,81 +214,147 @@ function normalizeUsers(users: UserRecord[]): UserRecord[] {
   }))
 }
 
-async function readFromDisk(): Promise<AppData> {
+export function normalizeAppData(input: unknown): AppData {
+  const parsed = (input && typeof input === 'object' ? input : {}) as Partial<AppData> & { schemaVersion?: number }
+  if (parsed.schemaVersion !== undefined && ![1, 2, 3, 4].includes(parsed.schemaVersion)) {
+    throw new Error('UNSUPPORTED_DATA_SCHEMA')
+  }
+  return {
+    schemaVersion: 4,
+    users: normalizeUsers(parsed.users ?? []),
+    verificationCodes: parsed.verificationCodes ?? [],
+    sessions: parsed.sessions ?? [],
+    projects: parsed.projects ?? [],
+    projectVersions: parsed.projectVersions ?? [],
+    usage: parsed.usage ?? [],
+    publications: parsed.publications ?? [],
+    brandKits: parsed.brandKits ?? [],
+    auditLogs: parsed.auditLogs ?? [],
+    systemEvents: parsed.systemEvents ?? [],
+    feedback: parsed.feedback ?? [],
+    onboardingProgress: parsed.onboardingProgress ?? [],
+  }
+}
+
+export async function readDataFile(filePath = env.DATA_STORAGE_FILE): Promise<AppData> {
   try {
-    const raw = await readFile(env.DATA_STORAGE_FILE, 'utf8')
-    const parsed = JSON.parse(raw) as {
-      schemaVersion?: number
-      users?: UserRecord[]
-      verificationCodes?: VerificationCodeRecord[]
-      sessions?: SessionRecord[]
-      projects?: ProjectRecord[]
-      projectVersions?: ProjectVersionRecord[]
-      usage?: UsageRecord[]
-      publications?: PublicationRecord[]
-      brandKits?: BrandKitRecord[]
-      auditLogs?: AuditLogRecord[]
-      systemEvents?: SystemEventRecord[]
-      feedback?: FeedbackRecord[]
-      onboardingProgress?: OnboardingProgressRecord[]
-    }
-    if (![1, 2, 3, 4].includes(parsed.schemaVersion ?? 0)) throw new Error('UNSUPPORTED_DATA_SCHEMA')
-    return {
-      schemaVersion: 4,
-      users: normalizeUsers(parsed.users ?? []),
-      verificationCodes: parsed.verificationCodes ?? [],
-      sessions: parsed.sessions ?? [],
-      projects: parsed.projects ?? [],
-      projectVersions: parsed.projectVersions ?? [],
-      usage: parsed.usage ?? [],
-      publications: parsed.publications ?? [],
-      brandKits: parsed.brandKits ?? [],
-      auditLogs: parsed.auditLogs ?? [],
-      systemEvents: parsed.systemEvents ?? [],
-      feedback: parsed.feedback ?? [],
-      onboardingProgress: parsed.onboardingProgress ?? [],
-    }
+    const raw = await readFile(filePath, 'utf8')
+    return normalizeAppData(JSON.parse(raw))
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return emptyData()
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return createEmptyData()
     throw err
   }
 }
 
-async function persistToDisk(data: AppData): Promise<void> {
-  const target = path.resolve(env.DATA_STORAGE_FILE)
+export async function writeDataFile(data: AppData, filePath = env.DATA_STORAGE_FILE): Promise<void> {
+  const target = path.resolve(filePath)
   await mkdir(path.dirname(target), { recursive: true })
   const temp = `${target}.${process.pid}.${Date.now()}.tmp`
-  await writeFile(temp, JSON.stringify(data), { encoding: 'utf8', mode: 0o600 })
+  await writeFile(temp, JSON.stringify(normalizeAppData(data)), { encoding: 'utf8', mode: 0o600 })
   await rename(temp, target)
+}
+
+function normalizeDraftInPlace(draft: AppData): AppData {
+  const normalized = normalizeAppData(draft)
+  for (const key of Object.keys(draft) as Array<keyof AppData>) delete draft[key]
+  Object.assign(draft, normalized)
+  return draft
+}
+
+export async function initializeDataStore(): Promise<void> {
+  if (env.NODE_ENV === 'test') return
+  if (env.DATA_STORAGE_DRIVER === 'mysql') {
+    await getMysqlSnapshotStore().initialize()
+    return
+  }
+  // 文件驱动在首次写入时创建目录；这里先验证已有文件能被读取。
+  await readDataFile()
+}
+
+export async function closeDataStore(): Promise<void> {
+  if (env.NODE_ENV !== 'test' && env.DATA_STORAGE_DRIVER === 'mysql') {
+    await getMysqlSnapshotStore().close()
+  }
 }
 
 export async function readData(): Promise<AppData> {
   if (env.NODE_ENV === 'test') return cloneData(memoryData)
-  return readFromDisk()
+  if (env.DATA_STORAGE_DRIVER === 'mysql') {
+    const snapshot = await getMysqlSnapshotStore().read()
+    return normalizeAppData(snapshot?.data ?? createEmptyData())
+  }
+  return readDataFile()
 }
 
 /**
- * 对整个数据快照执行串行原子修改。回调内不得发起长耗时网络请求。
- * 返回值与落盘在同一临界区完成,避免项目版本号和额度计数竞争。
+ * 对整个数据快照执行原子修改。
+ * - file:进程内队列 + 临时文件原子替换
+ * - mysql:事务 + SELECT ... FOR UPDATE,跨实例串行化
+ * 回调内不得发起长耗时网络请求。
  */
 export function mutateData<T>(mutator: (draft: AppData) => T | Promise<T>): Promise<T> {
   const task = queue.then(async () => {
-    const current = env.NODE_ENV === 'test' ? cloneData(memoryData) : await readFromDisk()
+    if (env.NODE_ENV === 'test') {
+      const current = cloneData(memoryData)
+      const result = await mutator(current)
+      memoryData = current
+      return result
+    }
+
+    if (env.DATA_STORAGE_DRIVER === 'mysql') {
+      return getMysqlSnapshotStore().mutate(createEmptyData(), async (draft) => {
+        normalizeDraftInPlace(draft)
+        return mutator(draft)
+      })
+    }
+
+    const current = await readDataFile()
     const result = await mutator(current)
-    if (env.NODE_ENV === 'test') memoryData = current
-    else await persistToDisk(current)
+    await writeDataFile(current)
     return result
   })
   queue = task.catch(() => undefined)
   return task
 }
 
-export function resetDataStoreForTest(seed?: Partial<AppData>): void {
-  memoryData = {
-    ...emptyData(),
-    ...seed,
-    users: normalizeUsers(seed?.users ?? []),
-    schemaVersion: 4,
+export async function getDataStoreHealth(): Promise<DataStoreHealth> {
+  if (env.NODE_ENV === 'test') {
+    return { driver: 'memory', status: 'operational', message: '内存测试适配器', schemaVersion: 4 }
   }
+  const startedAt = Date.now()
+  if (env.DATA_STORAGE_DRIVER === 'mysql') {
+    const health = await getMysqlSnapshotStore().health()
+    return {
+      driver: 'mysql',
+      status: health.status === 'operational' ? 'operational' : 'degraded',
+      message: health.message,
+      latencyMs: health.latencyMs,
+      revision: health.revision,
+      schemaVersion: health.schemaVersion ?? 4,
+      updatedAt: health.updatedAt,
+    }
+  }
+  try {
+    const data = await readDataFile()
+    return {
+      driver: 'file',
+      status: 'operational',
+      message: `原子 JSON 文件 · ${data.projects.length} 个项目`,
+      latencyMs: Date.now() - startedAt,
+      schemaVersion: data.schemaVersion,
+    }
+  } catch (error) {
+    return {
+      driver: 'file',
+      status: 'degraded',
+      message: error instanceof Error ? error.message : '文件数据存储不可用',
+      latencyMs: Date.now() - startedAt,
+      schemaVersion: 4,
+    }
+  }
+}
+
+export function resetDataStoreForTest(seed?: Partial<AppData>): void {
+  memoryData = normalizeAppData({ ...createEmptyData(), ...seed, schemaVersion: 4 })
   queue = Promise.resolve()
 }
