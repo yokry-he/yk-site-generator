@@ -14,7 +14,7 @@ describe('真实产物 ZIP 导出', () => {
       model: 'test-model',
       generatedAt: '2026-07-23T00:00:00.000Z',
     })
-    const zip = await JSZip.loadAsync(blob)
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer())
     expect(zip.file('index.html')).toBeTruthy()
     expect(await zip.file('styles.css')!.async('string')).toContain('color:red')
     expect(await zip.file('main.js')!.async('string')).toContain('console.log(1)')
