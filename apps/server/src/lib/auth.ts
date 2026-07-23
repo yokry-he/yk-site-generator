@@ -88,7 +88,7 @@ export function verifyAccessToken(token: string, now = Date.now()): AccessClaims
   }
 }
 
-/** JWT 校验后继续确认服务端会话没有撤销或过期。 */
+/** JWT 校验后继续确认服务端会话和账号状态。权限不缓存到令牌中。 */
 export async function authenticateBearerHeader(authorization?: string): Promise<AccessClaims | null> {
   const token = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]
   const claims = token ? verifyAccessToken(token) : null
@@ -101,13 +101,29 @@ export async function authenticateBearerHeader(authorization?: string): Promise<
       !item.revokedAt &&
       Date.parse(item.expiresAt) > Date.now(),
   )
-  return session ? claims : null
+  const user = data.users.find((item) => item.id === claims.sub)
+  return session && user && (user.status ?? 'active') === 'active' ? claims : null
 }
 
 export const authMiddleware: MiddlewareHandler<AuthEnv> = async (c, next) => {
   const claims = await authenticateBearerHeader(c.req.header('authorization'))
   if (!claims) {
-    return c.json({ error: { code: 'UNAUTHORIZED', message: '登录状态无效或已过期' } }, 401)
+    return c.json({ error: { code: 'UNAUTHORIZED', message: '登录状态无效、账号受限或已过期' } }, 401)
+  }
+  c.set('auth', claims)
+  await next()
+}
+
+/** 管理员权限每次从数据源实时读取，角色变更立即生效。 */
+export const adminMiddleware: MiddlewareHandler<AuthEnv> = async (c, next) => {
+  const claims = await authenticateBearerHeader(c.req.header('authorization'))
+  if (!claims) {
+    return c.json({ error: { code: 'UNAUTHORIZED', message: '登录状态无效、账号受限或已过期' } }, 401)
+  }
+  const data = await readData()
+  const user = data.users.find((item) => item.id === claims.sub)
+  if (!user || (user.role ?? 'user') !== 'admin') {
+    return c.json({ error: { code: 'FORBIDDEN', message: '需要管理员权限' } }, 403)
   }
   c.set('auth', claims)
   await next()
