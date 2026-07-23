@@ -82,7 +82,7 @@ describe('artifactToSingleHtml', () => {
     expect(analyzeHeadCompleteness(html).complete).toBe(true)
   })
 
-  it('清理模型原有同类标签,避免重复 title/meta', () => {
+  it('清理模型原有同类标签,复用优质内容并避免重复 title/meta', () => {
     const tree = makeTree()
     const entry = tree.files.find((f) => f.path === tree.entry)!
     entry.content = entry.content.replace(
@@ -90,7 +90,7 @@ describe('artifactToSingleHtml', () => {
       [
         '<meta charset="GBK">',
         '<meta name="viewport" content="width=320">',
-        '<meta name="description" content="旧摘要">',
+        '<meta name="description" content="模型摘要">',
         '<meta property="og:title" content="旧标题">',
         '<meta name="twitter:card" content="summary_large_image">',
         '<title>内容标题</title>',
@@ -102,9 +102,16 @@ describe('artifactToSingleHtml', () => {
     expect(count(html, /<meta\b[^>]*name="viewport"/gi)).toBe(1)
     expect(count(html, /<meta\b[^>]*name="description"/gi)).toBe(1)
     expect(count(html, /<meta\b[^>]*property="og:title"/gi)).toBe(1)
+    expect(count(html, /<meta\b[^>]*property="og:description"/gi)).toBe(1)
     expect(count(html, /<meta\b[^>]*name="twitter:card"/gi)).toBe(1)
+    expect(count(html, /<meta\b[^>]*name="twitter:description"/gi)).toBe(1)
     expect(html).toContain('<title>内容标题</title>')
-    expect(html).not.toContain('content="旧摘要"')
+    expect(html).toContain('<meta name="description" content="模型摘要" />')
+    expect(html).toContain('<meta property="og:description" content="模型摘要" />')
+    expect(html).toContain('<meta name="twitter:description" content="模型摘要" />')
+    expect(html).not.toContain('content="旧标题"')
+    expect(html).not.toContain('content="width=320"')
+    expect(html).not.toContain('content="summary_large_image"')
   })
 
   it('二进制文件以注释标注而非内联', () => {
