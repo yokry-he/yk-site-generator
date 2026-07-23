@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "db:mysql:check": "tsx scripts/check-mysql.ts",
     "db:mysql:import": "tsx scripts/migrate-json-to-mysql.ts",
-    "db:mysql:export": "tsx scripts/export-mysql-snapshot.ts"
+    "db:mysql:export": "tsx scripts/export-mysql-snapshot.ts",
+    "db:mysql:ci": "tsx scripts/mysql-ci.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.9",
