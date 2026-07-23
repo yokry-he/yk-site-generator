@@ -57,11 +57,52 @@ jobs:
           path: test.log
           retention-days: 7
 
-      - name: 前端生成链路 E2E
-        run: pnpm --filter web e2e
+      - name: 真实生成与迭代 E2E
+        shell: bash
+        env:
+          EVAL_API_KEY: ${{ secrets.EVAL_API_KEY }}
+          EVAL_BASE_URL: ${{ secrets.EVAL_BASE_URL }}
+          EVAL_MODEL: ${{ secrets.EVAL_MODEL }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${EVAL_API_KEY:-}" ]]; then
+            echo "未配置 EVAL_API_KEY,跳过需要真实模型的生成与迭代 E2E。"
+            exit 0
+          fi
 
-      - name: 前端迭代链路 E2E
-        run: pnpm --filter web e2e:iterate
+          pnpm --filter server start > server-e2e.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8787/api/health >/dev/null; then
+              break
+            fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              echo "服务端提前退出:"
+              cat server-e2e.log
+              exit 1
+            fi
+            if [[ "$attempt" == 30 ]]; then
+              echo "服务端健康检查超时:"
+              cat server-e2e.log
+              exit 1
+            fi
+            sleep 1
+          done
+
+          export E2E_ENDPOINT=http://127.0.0.1:8787/api/generate
+          pnpm --filter web e2e
+          pnpm --filter web e2e:iterate
+
+      - name: 上传真实 E2E 服务端日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-e2e-log
+          path: server-e2e.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: 前端历史恢复 E2E
         run: pnpm --filter web e2e:history
