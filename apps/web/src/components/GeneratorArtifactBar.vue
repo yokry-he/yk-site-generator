@@ -3,13 +3,11 @@ import { computed, ref, watch } from 'vue'
 import {
   Check,
   Cloud,
-  Copy,
   ExternalLink,
   Link2,
   Loader2,
   Package,
   PencilRuler,
-  Save,
   UserRound,
 } from 'lucide-vue-next'
 import VisualEditor from './VisualEditor.vue'
@@ -47,6 +45,7 @@ const title = computed(() => {
     return 'SiteForge 网站'
   }
 })
+const sizeKb = computed(() => (new Blob([props.html]).size / 1024).toFixed(1))
 const expiresText = computed(() =>
   share.value
     ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(share.value.expiresAt))
@@ -55,6 +54,14 @@ const expiresText = computed(() =>
 
 function messageOf(err: unknown): string {
   return err instanceof ApiError || err instanceof Error ? err.message : '操作失败'
+}
+
+function openEditor() {
+  if (!props.html) {
+    toast.info('请先完成一次生成', '有可预览产物后才能进入可视化编辑。')
+    return
+  }
+  editorOpen.value = true
 }
 
 async function exportZip() {
@@ -151,6 +158,8 @@ watch(
     copied.value = false
   },
 )
+
+defineExpose({ openEditor })
 </script>
 
 <template>
@@ -164,69 +173,33 @@ watch(
           <div class="min-w-0">
             <p class="truncate text-sm font-semibold text-ink">{{ title }}</p>
             <p class="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-faint">
-              <span>{{ siteType }}</span>
-              <span>·</span>
-              <span>{{ (new Blob([html]).size / 1024).toFixed(1) }} KB</span>
-              <template v-if="cloudProjectId">
-                <span>·</span>
-                <span class="text-emerald-500">云端第 {{ cloudVersion }} 版</span>
-              </template>
+              <span>{{ siteType }}</span><span>·</span><span>{{ sizeKb }} KB</span>
+              <template v-if="cloudProjectId"><span>·</span><span class="text-emerald-500">云端第 {{ cloudVersion }} 版</span></template>
             </p>
           </div>
         </div>
 
         <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
-          <button
-            :disabled="busy === 'zip'"
-            class="flex items-center justify-center gap-1.5 rounded-xl border border-line/12 bg-ink/[0.04] px-3.5 py-2.5 text-xs font-medium text-sub transition-colors hover:bg-ink/[0.08] hover:text-ink disabled:opacity-50"
-            @click="exportZip"
-          >
-            <Loader2 v-if="busy === 'zip'" class="h-3.5 w-3.5 animate-spin" />
-            <Package v-else class="h-3.5 w-3.5" />
-            导出 ZIP
+          <button :disabled="busy === 'zip'" class="flex items-center justify-center gap-1.5 rounded-xl border border-line/12 bg-ink/[0.04] px-3.5 py-2.5 text-xs font-medium text-sub transition-colors hover:bg-ink/[0.08] hover:text-ink disabled:opacity-50" @click="exportZip">
+            <Loader2 v-if="busy === 'zip'" class="h-3.5 w-3.5 animate-spin" /><Package v-else class="h-3.5 w-3.5" />导出 ZIP
           </button>
-          <button
-            :disabled="busy === 'share'"
-            class="flex items-center justify-center gap-1.5 rounded-xl border border-line/12 bg-ink/[0.04] px-3.5 py-2.5 text-xs font-medium text-sub transition-colors hover:bg-ink/[0.08] hover:text-ink disabled:opacity-50"
-            @click="share ? copyShare() : createShare()"
-          >
-            <Loader2 v-if="busy === 'share'" class="h-3.5 w-3.5 animate-spin" />
-            <Check v-else-if="copied" class="h-3.5 w-3.5 text-emerald-500" />
-            <Link2 v-else class="h-3.5 w-3.5" />
-            {{ share ? (copied ? '已复制' : '复制链接') : '7 天分享' }}
+          <button :disabled="busy === 'share'" class="flex items-center justify-center gap-1.5 rounded-xl border border-line/12 bg-ink/[0.04] px-3.5 py-2.5 text-xs font-medium text-sub transition-colors hover:bg-ink/[0.08] hover:text-ink disabled:opacity-50" @click="share ? copyShare() : createShare()">
+            <Loader2 v-if="busy === 'share'" class="h-3.5 w-3.5 animate-spin" /><Check v-else-if="copied" class="h-3.5 w-3.5 text-emerald-500" /><Link2 v-else class="h-3.5 w-3.5" />{{ share ? (copied ? '已复制' : '复制链接') : '7 天分享' }}
           </button>
-          <button
-            class="flex items-center justify-center gap-1.5 rounded-xl border border-brand1/20 bg-brand1/[0.07] px-3.5 py-2.5 text-xs font-semibold text-brand1 transition-colors hover:bg-brand1/[0.13]"
-            @click="editorOpen = true"
-          >
-            <PencilRuler class="h-3.5 w-3.5" />
-            可视化编辑
+          <button class="flex items-center justify-center gap-1.5 rounded-xl border border-brand1/20 bg-brand1/[0.07] px-3.5 py-2.5 text-xs font-semibold text-brand1 transition-colors hover:bg-brand1/[0.13]" @click="openEditor">
+            <PencilRuler class="h-3.5 w-3.5" />可视化编辑
           </button>
-          <button
-            :disabled="busy === 'cloud'"
-            class="bg-brand-gradient flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-white shadow-md shadow-brand1/20 disabled:opacity-50"
-            @click="saveCloud()"
-          >
-            <Loader2 v-if="busy === 'cloud'" class="h-3.5 w-3.5 animate-spin" />
-            <Cloud v-else-if="isAuthenticated" class="h-3.5 w-3.5" />
-            <UserRound v-else class="h-3.5 w-3.5" />
-            {{ isAuthenticated ? (cloudProjectId ? '保存新版本' : '保存到云端') : '登录并保存' }}
+          <button :disabled="busy === 'cloud'" class="bg-brand-gradient flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-white shadow-md shadow-brand1/20 disabled:opacity-50" @click="saveCloud()">
+            <Loader2 v-if="busy === 'cloud'" class="h-3.5 w-3.5 animate-spin" /><Cloud v-else-if="isAuthenticated" class="h-3.5 w-3.5" /><UserRound v-else class="h-3.5 w-3.5" />{{ isAuthenticated ? (cloudProjectId ? '保存新版本' : '保存到云端') : '登录并保存' }}
           </button>
         </div>
       </div>
 
       <div v-if="share" class="flex flex-col gap-2 border-t border-line/10 bg-brand1/[0.035] px-4 py-3 text-xs sm:flex-row sm:items-center sm:px-5">
         <Link2 class="h-3.5 w-3.5 shrink-0 text-brand1" />
-        <input
-          :value="share.url"
-          readonly
-          class="min-w-0 flex-1 truncate bg-transparent font-mono text-[11px] text-sub outline-none"
-          @focus="($event.target as HTMLInputElement).select()"
-        />
+        <input :value="share.url" readonly class="min-w-0 flex-1 truncate bg-transparent font-mono text-[11px] text-sub outline-none" @focus="($event.target as HTMLInputElement).select()" />
         <span class="shrink-0 text-[10px] text-faint">到期:{{ expiresText }}</span>
-        <a :href="share.url" target="_blank" rel="noopener noreferrer" class="flex shrink-0 items-center gap-1 text-brand1 hover:underline">
-          <ExternalLink class="h-3 w-3" />打开
-        </a>
+        <a :href="share.url" target="_blank" rel="noopener noreferrer" class="flex shrink-0 items-center gap-1 text-brand1 hover:underline"><ExternalLink class="h-3 w-3" />打开</a>
       </div>
     </div>
 
