@@ -255,9 +255,7 @@ export async function writeDataFile(data: AppData, filePath = env.DATA_STORAGE_F
 }
 
 function normalizeDraftInPlace(draft: AppData): AppData {
-  const normalized = normalizeAppData(draft)
-  for (const key of Object.keys(draft) as Array<keyof AppData>) delete draft[key]
-  Object.assign(draft, normalized)
+  Object.assign(draft, normalizeAppData(draft))
   return draft
 }
 
