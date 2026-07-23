@@ -4,6 +4,8 @@ import { apiUrl, ApiError, ensureOk } from '../lib/api'
 export interface AuthUser {
   id: string
   email: string
+  role: 'user' | 'admin' | 'support'
+  status: 'active' | 'suspended' | 'deleted'
   createdAt: string
 }
 
@@ -149,6 +151,7 @@ export function useAuth() {
     loading: readonly(loading),
     initialized: readonly(initialized),
     isAuthenticated: computed(() => Boolean(user.value)),
+    isAdmin: computed(() => user.value?.role === 'admin'),
     requestLoginCode,
     verifyLoginCode,
     loadAuthSession,
