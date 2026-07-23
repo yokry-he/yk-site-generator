@@ -119,7 +119,7 @@ describe('用户能力功能开关', () => {
     }))
   })
 
-  it('关闭发布后列表和创建接口被服务端拒绝', async () => {
+  it('关闭发布后仍可查看现有记录，但禁止创建新发布', async () => {
     resetDataStoreForTest({
       users: [{ id: userId, email: 'member@example.com', role: 'user', status: 'active', createdAt: now, updatedAt: now }],
       projects: [{ id: projectId, userId, title: 'Project', siteType: 'saas', requirement: '', createdAt: now, updatedAt: now }],
@@ -128,7 +128,9 @@ describe('用户能力功能开关', () => {
     })
     const token = await login()
     const authHeaders = { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
-    await assertDisabled(await app.request('/api/publications', { headers: authHeaders }))
+    const list = await app.request('/api/publications', { headers: authHeaders })
+    expect(list.status).toBe(200)
+    expect((await list.json()).publications).toEqual([])
     await assertDisabled(await app.request('/api/publications', {
       method: 'POST',
       headers: authHeaders,
