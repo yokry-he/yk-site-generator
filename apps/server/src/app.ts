@@ -15,6 +15,7 @@ import projects from './routes/projects'
 import quota from './routes/quota'
 import publications from './routes/publications'
 import brandKits from './routes/brand-kits'
+import brandAssets from './routes/brand-assets'
 import templates from './routes/templates'
 import features from './routes/features'
 import onboarding from './routes/onboarding'
@@ -27,12 +28,9 @@ import sitePage, { serveSiteFromHost } from './routes/site-page'
 export function createApp() {
   const app = new Hono()
 
-  // 稳定 request id + 慢请求/服务端错误事件。
   app.use('*', requestTelemetryMiddleware)
-  // 结构化请求日志
   app.use('*', logger())
 
-  // CORS:仅允许配置的前端来源
   app.use(
     '/api/*',
     cors({
@@ -45,7 +43,6 @@ export function createApp() {
     }),
   )
 
-  // 路由
   app.route('/api/health', health)
   app.route('/api/generate', generate)
   app.route('/api/providers', providers)
@@ -55,30 +52,27 @@ export function createApp() {
   app.route('/api/quota', quota)
   app.route('/api/publications', publications)
   app.route('/api/brand-kits', brandKits)
+  app.route('/api/brand-assets', brandAssets)
   app.route('/api/templates', templates)
   app.route('/api/features', features)
   app.route('/api/onboarding', onboarding)
   app.route('/api/feedback', feedback)
-  // 精确路由优先于旧管理通配中间件。
   app.route('/api/admin/health', adminStorageHealth)
   app.route('/api/admin', adminOperations)
   app.route('/api/admin', admin)
   app.route('/s', sharePage)
   app.route('/site', sitePage)
 
-  // 泛域名站点:在平台 API/固定路径之后处理任意 GET,避免抢占正常路由。
   app.get('*', async (c, next) => {
     const response = await serveSiteFromHost(c)
     if (response) return response
     await next()
   })
 
-  // 404:统一错误格式
   app.notFound((c) =>
     c.json(errorBody('NOT_FOUND', `路径不存在:${c.req.method} ${c.req.path}`), 404),
   )
 
-  // 全局错误处理:统一错误格式
   app.onError((err, c) => {
     if (err instanceof HTTPException) {
       return c.json(errorBody(`HTTP_${err.status}`, err.message), err.status)
