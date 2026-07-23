@@ -13,7 +13,7 @@ import auth from './routes/auth'
 import projects from './routes/projects'
 import quota from './routes/quota'
 import publications from './routes/publications'
-import sitePage from './routes/site-page'
+import sitePage, { serveSiteFromHost } from './routes/site-page'
 
 export function createApp() {
   const app = new Hono()
@@ -45,6 +45,13 @@ export function createApp() {
   app.route('/api/publications', publications)
   app.route('/s', sharePage)
   app.route('/site', sitePage)
+
+  // 泛域名站点:在平台 API/固定路径之后处理任意 GET,避免抢占正常路由。
+  app.get('*', async (c, next) => {
+    const response = await serveSiteFromHost(c)
+    if (response) return response
+    await next()
+  })
 
   // 404:统一错误格式
   app.notFound((c) =>
