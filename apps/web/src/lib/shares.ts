@@ -1,3 +1,5 @@
+import { API_BASE_URL, apiUrl } from './api'
+
 export interface TemporaryShare {
   id: string
   title: string
@@ -44,14 +46,17 @@ export async function createTemporaryShare(input: {
   title: string
   siteType: string
 }): Promise<TemporaryShare> {
-  const response = await fetch('/api/shares', {
+  const response = await fetch(apiUrl('/api/shares'), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
   })
   if (!response.ok) throw await parseError(response)
   const data = (await response.json()) as ShareResponse
-  const absoluteUrl = new URL(data.share.url, window.location.origin).toString()
+  const shareBase = API_BASE_URL || window.location.origin
+  const absoluteUrl = /^https?:\/\//i.test(data.share.url)
+    ? data.share.url
+    : new URL(data.share.url, shareBase).toString()
   const share = { ...data.share, url: absoluteUrl }
   try {
     localStorage.setItem(`siteforge:share-token:${share.id}`, data.deleteToken)
@@ -65,7 +70,7 @@ export async function deleteTemporaryShare(id: string): Promise<void> {
   const key = `siteforge:share-token:${id}`
   const token = localStorage.getItem(key)
   if (!token) throw new ShareHttpError(401, 'SHARE_TOKEN_REQUIRED', '当前浏览器没有保存该分享的删除凭证')
-  const response = await fetch(`/api/shares/${encodeURIComponent(id)}`, {
+  const response = await fetch(apiUrl(`/api/shares/${encodeURIComponent(id)}`), {
     method: 'DELETE',
     headers: { 'x-share-delete-token': token },
   })
