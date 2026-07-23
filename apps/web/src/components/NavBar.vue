@@ -9,6 +9,7 @@ import {
   Menu,
   Palette,
   Plug,
+  ShieldCheck,
   Sparkles,
   UserRound,
   X,
@@ -34,7 +35,7 @@ const open = ref(false)
 const accountOpen = ref(false)
 const { activeProvider } = useModelConfig()
 const { show: showModelSettings } = useModelDialog()
-const { user, isAuthenticated, logout } = useAuth()
+const { user, isAuthenticated, isAdmin, logout } = useAuth()
 const { show: showAuth } = useAuthDialog()
 const toast = useToast()
 const initials = computed(() => user.value?.email.slice(0, 2).toUpperCase() ?? 'SF')
@@ -52,7 +53,12 @@ async function signOut() {
   open.value = false
   await logout()
   toast.success('已安全退出账号')
-  if (route.path.startsWith('/projects') || route.path === '/usage' || route.path === '/brand') await router.push('/')
+  if (
+    route.path.startsWith('/projects') ||
+    route.path === '/usage' ||
+    route.path === '/brand' ||
+    route.path.startsWith('/admin')
+  ) await router.push('/')
 }
 
 function onDocumentClick(event: MouseEvent) {
@@ -155,7 +161,10 @@ onBeforeUnmount(() => {
               class="absolute top-[calc(100%+10px)] right-0 w-64 overflow-hidden rounded-2xl border border-line/10 bg-soft/95 p-2 shadow-2xl shadow-black/15 backdrop-blur-xl"
             >
               <div class="border-b border-line/10 px-3 py-2.5">
-                <p class="text-[10px] font-medium tracking-wider text-faint uppercase">当前账号</p>
+                <div class="flex items-center justify-between gap-2">
+                  <p class="text-[10px] font-medium tracking-wider text-faint uppercase">当前账号</p>
+                  <span v-if="isAdmin" class="rounded-full bg-violet-500/10 px-2 py-0.5 text-[9px] font-bold text-violet-500">ADMIN</span>
+                </div>
                 <p class="mt-1 truncate text-xs font-medium text-ink">{{ user?.email }}</p>
               </div>
               <RouterLink to="/projects" role="menuitem" class="mt-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink">
@@ -169,6 +178,10 @@ onBeforeUnmount(() => {
               <RouterLink to="/usage" role="menuitem" class="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink">
                 <Gauge class="h-4 w-4 text-brand2" />
                 额度与用量
+              </RouterLink>
+              <RouterLink v-if="isAdmin" to="/admin" role="menuitem" class="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-violet-500 hover:bg-violet-500/[0.07]">
+                <ShieldCheck class="h-4 w-4" />
+                运营控制台
               </RouterLink>
               <button role="menuitem" class="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm text-red-500 hover:bg-red-500/[0.07]" @click="signOut">
                 <LogOut class="h-4 w-4" />
@@ -224,6 +237,9 @@ onBeforeUnmount(() => {
           </RouterLink>
           <RouterLink to="/usage" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-sub hover:bg-ink/5 hover:text-ink">
             <Gauge class="h-4 w-4 text-brand2" />额度与用量
+          </RouterLink>
+          <RouterLink v-if="isAdmin" to="/admin" class="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-violet-500 hover:bg-violet-500/[0.07]">
+            <ShieldCheck class="h-4 w-4" />运营控制台
           </RouterLink>
         </template>
         <button
