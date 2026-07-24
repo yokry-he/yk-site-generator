@@ -35,6 +35,18 @@ jobs:
           retention-days: 7
       - name: Build(web + server + shared)
         run: pnpm build
+      - name: Web bundle 性能预算
+        run: pnpm --filter web check:bundle-budget
+      - name: Prompt 质量评测管线自检
+        run: pnpm --filter prompts eval:quality -- --dry-run --runs 1 --report ../../artifacts/prompt-eval.json
+      - name: 上传 Beta Readiness 报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta-readiness-reports
+          path: artifacts
+          if-no-files-found: warn
+          retention-days: 14
       - name: 全仓单元测试
         shell: bash
         run: |
