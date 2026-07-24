@@ -29,6 +29,11 @@ function editRetainedArtifact() {
 
 function applyEditedHtml(html: string) {
   artifactHtml.value = html
+  // The editor result is event-driven; update the existing sandbox immediately without restoring DOM polling.
+  requestAnimationFrame(() => {
+    const preview = document.querySelector<HTMLIFrameElement>('#demo iframe[title="生成产物预览"]')
+    if (preview) preview.srcdoc = html
+  })
 }
 
 watch(() => route.query.q, (value) => {
