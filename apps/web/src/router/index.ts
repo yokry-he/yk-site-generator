@@ -6,6 +6,8 @@ export const router = createRouter({
   routes: [
     { path: '/', name: 'home', component: HomePage, meta: { title: 'SiteForge · AI 网站生成器' } },
     { path: '/generator', name: 'generator', component: () => import('../pages/GeneratorPage.vue'), meta: { title: '生成网站 · SiteForge' } },
+    { path: '/starters', name: 'starter-projects', component: () => import('../pages/StarterProjectsPage.vue'), meta: { title: '内置项目 · SiteForge' } },
+    { path: '/starters/:slug', name: 'starter-project', component: () => import('../pages/StarterProjectPage.vue'), meta: { title: '内置项目工作台 · SiteForge' } },
     { path: '/templates', name: 'templates', component: () => import('../pages/TemplatesPage.vue'), meta: { title: '官方模板 · SiteForge' } },
     { path: '/templates/:slug', name: 'template-detail', component: () => import('../pages/TemplateDetailPage.vue'), meta: { title: '模板详情 · SiteForge' } },
     { path: '/projects', name: 'projects', component: () => import('../pages/ProjectsPage.vue'), meta: { title: '项目工作区 · SiteForge' } },
