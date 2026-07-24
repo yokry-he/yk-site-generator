@@ -38,12 +38,13 @@ pnpm --filter prompts eval:trend -- \
 
 `.github/workflows/prompt-quality-real.yml` 支持：
 
-- 首次分支基线运行
 - `workflow_dispatch` 手动运行
-- 固定周期运行（合并到默认分支后生效）
+- 每周一固定周期运行（合并到默认分支后生效）
 - 缺少真实评测配置时生成明确状态文件，不伪造评测结果
 - 上传真实报告、趋势 JSON、趋势 Markdown 和执行状态，保留 90 天
 - 首轮基线使用 soft gate：即使模型分数低于门槛，仍保存完整证据供分析；后续稳定后再切换为强制阻断
+
+2026-07-24 的首次受控探测 Run `30079013405` 已验证工具链、脱敏逻辑和 Artifact 上传正常；仓库当时未同时配置 `EVAL_API_KEY`、`EVAL_BASE_URL`、`EVAL_MODEL`，因此真实 126 次调用按设计跳过，未产生伪造质量结论。
 
 ## 报告比较
 
