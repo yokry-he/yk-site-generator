@@ -24,8 +24,8 @@ onMounted(() => {
       <div class="pointer-events-none absolute -right-40 -bottom-56 h-[470px] w-[470px] rounded-full bg-brand2/12 blur-3xl" />
       <div class="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <div class="max-w-4xl">
-          <span class="inline-flex items-center gap-2 rounded-full border border-brand1/18 bg-brand1/[0.07] px-3 py-1.5 text-[11px] font-semibold text-brand1">
-            <Sparkles class="h-3.5 w-3.5" />无需模型 · 无需登录 · 无需配置
+          <span class="inline-flex items-center gap-2 rounded-full border border-brand1/18 bg-brand1/[0.07] px-3 py-1.5 text-[11px] font-semibold text-sub">
+            <Sparkles class="h-3.5 w-3.5 text-brand1" />无需模型 · 无需登录 · 无需配置
           </span>
           <h1 class="mt-6 text-4xl font-bold tracking-tight text-ink sm:text-6xl">打开一个成品，直接开始使用</h1>
           <p class="mt-5 max-w-3xl text-sm leading-7 text-mut sm:text-lg">
@@ -54,7 +54,7 @@ onMounted(() => {
 
           <div class="p-5 sm:p-6">
             <div class="flex flex-wrap items-center gap-2">
-              <span class="rounded-full bg-brand1/10 px-2.5 py-1 text-[10px] font-semibold text-brand1">{{ getOfficialTemplate(project.templateId)?.industry }}</span>
+              <span class="rounded-full border border-brand1/18 bg-brand1/10 px-2.5 py-1 text-[10px] font-semibold text-ink">{{ getOfficialTemplate(project.templateId)?.industry }}</span>
               <span class="rounded-full bg-ink/5 px-2.5 py-1 text-[10px] text-faint">{{ project.audience }}</span>
             </div>
             <h2 class="mt-4 text-2xl font-bold tracking-tight text-ink">{{ project.name }}</h2>
