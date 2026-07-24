@@ -189,7 +189,17 @@ jobs:
       - name: Lint
         run: pnpm lint
       - name: Typecheck
-        run: pnpm typecheck
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm typecheck 2>&1 | tee generation-typecheck.log
+      - name: 上传生成优化 Typecheck 诊断
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generation-typecheck-log
+          path: generation-typecheck.log
+          retention-days: 7
       - name: 全仓测试
         run: pnpm test
       - name: 全仓构建
