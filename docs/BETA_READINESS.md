@@ -54,14 +54,14 @@ pnpm --filter web build
 pnpm --filter web check:bundle-budget
 ```
 
-第一版预算刻意设置为防止明显回退的宽松上限，待获得稳定基线后再逐步收紧：
+首次 CI 测量基线为：JS gzip 总量约 285 KiB、最大 JS gzip 约 64 KiB、CSS gzip 总量约 15 KiB、全部构建产物原始总量约 926 KiB。基于该结果保留约 20%–65% 的合理增长空间，而不是使用无法及时发现回退的宽松上限：
 
 | 指标 | 当前上限 |
 | --- | ---: |
-| JS gzip 总量 | 900 KiB |
-| 最大单个 JS gzip | 600 KiB |
-| CSS gzip 总量 | 150 KiB |
-| 全部构建产物原始总量 | 12 MiB |
+| JS gzip 总量 | 350 KiB |
+| 最大单个 JS gzip | 80 KiB |
+| CSS gzip 总量 | 25 KiB |
+| 全部构建产物原始总量 | 1200 KiB |
 
 报告默认写入 `artifacts/web-bundle-budget.json`。可通过 `BUNDLE_MAX_TOTAL_JS_GZIP_KB`、`BUNDLE_MAX_LARGEST_JS_GZIP_KB`、`BUNDLE_MAX_TOTAL_CSS_GZIP_KB` 和 `BUNDLE_MAX_TOTAL_ASSET_KB` 调整。
 
