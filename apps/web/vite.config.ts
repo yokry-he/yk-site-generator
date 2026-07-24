@@ -8,8 +8,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': { target: serverTarget, changeOrigin: true },
-      '^/s(?:/|$)': { target: serverTarget, changeOrigin: true },
-      '^/site(?:/|$)': { target: serverTarget, changeOrigin: true },
+      // 分享与托管页面均使用带资源 ID 的路径。显式尾斜线可避免 `/s` 前缀误匹配 `/src`。
+      '/s/': { target: serverTarget, changeOrigin: true },
+      '/site/': { target: serverTarget, changeOrigin: true },
     },
   },
 })
