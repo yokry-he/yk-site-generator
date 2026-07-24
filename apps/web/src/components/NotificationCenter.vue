@@ -21,7 +21,7 @@ function activate(item: (typeof items.value)[number]) {
 </script>
 
 <template>
-  <button class="fixed right-5 bottom-16 z-40 grid h-10 w-10 place-items-center rounded-full border border-line/10 bg-soft/90 text-faint shadow-xl backdrop-blur transition hover:border-brand1/25 hover:text-brand1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand1/50 lg:right-6 lg:bottom-20" aria-label="打开通知中心" @click="open = true">
+  <button class="fixed right-5 bottom-16 z-[140] grid h-10 w-10 place-items-center rounded-full border border-line/10 bg-soft/90 text-faint shadow-xl backdrop-blur transition hover:border-brand1/25 hover:text-brand1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand1/50 lg:right-6 lg:bottom-20" aria-label="打开通知中心" @click="open = true">
     <Bell class="h-4 w-4" />
     <span v-if="unreadCount" class="absolute -top-1 -right-1 min-w-4 rounded-full bg-red-500 px-1 py-0.5 text-center text-[8px] font-bold text-white">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
   </button>
