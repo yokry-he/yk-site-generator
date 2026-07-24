@@ -21,7 +21,8 @@
     "mysql2": "^3.23.1",
     "prompts": "workspace:*",
     "shared": "workspace:*",
-    "zod": "^4.3.5"
+    "zod": "^4.3.5",
+    "dotenv": "^17.4.2"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",
