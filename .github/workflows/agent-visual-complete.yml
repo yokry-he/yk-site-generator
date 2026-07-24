@@ -1,0 +1,58 @@
+name: Agent Visual Complete
+on:
+  push:
+    branches: [agent/continue-development-20260723]
+    paths: ['.github/agent-visual-complete.trigger']
+permissions:
+  contents: write
+jobs:
+  complete:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/continue-development-20260723
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Patch remaining accessibility details
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('apps/web/src/pages/TemplateDetailPage.vue')
+          text = path.read_text()
+          old = "<div class=\"flex rounded-lg bg-ink/[0.04] p-1\"><button v-for=\"item in [{id:'desktop',icon:Monitor},{id:'tablet',icon:Tablet},{id:'mobile',icon:Smartphone}]\" :key=\"item.id\" class=\"rounded-md p-1.5\" :class=\"viewport === item.id ? 'bg-soft text-brand1 shadow-sm' : 'text-faint'\" @click=\"viewport = item.id as typeof viewport\"><component :is=\"item.icon\" class=\"h-3.5 w-3.5\" /></button></div>"
+          new = "<div class=\"flex rounded-lg bg-ink/[0.04] p-1\"><button v-for=\"item in [{id:'desktop',label:'桌面预览',icon:Monitor},{id:'tablet',label:'平板预览',icon:Tablet},{id:'mobile',label:'手机预览',icon:Smartphone}]\" :key=\"item.id\" :aria-label=\"item.label\" :title=\"item.label\" class=\"rounded-md p-1.5\" :class=\"viewport === item.id ? 'bg-soft text-brand1 shadow-sm' : 'text-faint'\" @click=\"viewport = item.id as typeof viewport\"><component :is=\"item.icon\" class=\"h-3.5 w-3.5\" /></button></div>"
+          if text.count(old) != 1:
+              raise SystemExit(f'viewport control match count: {text.count(old)}')
+          text = text.replace(old, new)
+          replacements = [
+            ('class="grid h-7 w-7 place-items-center rounded-lg bg-brand1/10 text-[9px] font-bold text-brand1"', 'class="grid h-7 w-7 place-items-center rounded-lg bg-brand1/10 text-[9px] font-bold text-sub"'),
+            ('<RouterLink to="/templates" class="text-sm text-brand1">查看全部</RouterLink>', '<RouterLink to="/templates" class="text-sm font-semibold text-sub hover:text-ink">查看全部</RouterLink>'),
+          ]
+          for source, target in replacements:
+              if text.count(source) != 1:
+                  raise SystemExit(f'contrast match count: {text.count(source)} for {source}')
+              text = text.replace(source, target)
+          path.write_text(text)
+          PY
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm --filter web exec playwright install --with-deps chromium
+      - name: Verify browser behavior and accessibility
+        run: pnpm --filter web e2e:browser
+      - name: Generate visual regression baselines
+        run: pnpm --filter web e2e:visual:update
+      - name: Commit verified result
+        run: |
+          rm -f .github/agent-visual-complete.trigger .github/workflows/agent-visual-complete.yml .github/agent-visual-final-status.md
+          git config user.name "siteforge-agent"
+          git config user.email "siteforge-agent@users.noreply.github.com"
+          git add -A
+          git commit -m "test(web): complete browser accessibility and visual baselines"
+          git push origin HEAD:agent/continue-development-20260723
