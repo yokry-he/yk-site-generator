@@ -188,11 +188,32 @@ jobs:
         run: python scripts/apply-dotenv-change.py
       - name: 更新依赖锁文件
         run: pnpm install --no-frozen-lockfile
-      - name: 验证服务端
+      - name: 服务端 Typecheck
+        shell: bash
         run: |
-          pnpm --filter server typecheck
-          pnpm --filter server test
-          pnpm --filter server build
+          set -o pipefail
+          pnpm --filter server typecheck 2>&1 | tee dotenv-typecheck.log
+      - name: 服务端测试
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm --filter server test 2>&1 | tee dotenv-test.log
+      - name: 服务端构建
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm --filter server build 2>&1 | tee dotenv-build.log
+      - name: 上传 dotenv 验证诊断
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotenv-validation
+          path: |
+            dotenv-typecheck.log
+            dotenv-test.log
+            dotenv-build.log
+          if-no-files-found: warn
+          retention-days: 7
       - name: 提交最终改动并清理临时文件
         shell: bash
         run: |
