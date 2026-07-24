@@ -29,7 +29,7 @@ if "loadEnvironmentFile(fileURLToPath" not in env_source:
         raise SystemExit('env.ts import marker not found')
     env_path.write_text(env_source.replace(marker, replacement, 1))
 
-Path('apps/server/test/dotenv-loading.test.ts').write_text("""import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+Path('apps/server/test/dotenv-loading.test.ts').write_text(r"""import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
