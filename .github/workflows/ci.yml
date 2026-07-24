@@ -185,7 +185,9 @@ jobs:
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
       - name: 应用生成质量与速度优化
-        run: python scripts/apply-generation-quality-speed.py
+        run: |
+          python scripts/fix-generation-test-typing.py
+          python scripts/apply-generation-quality-speed.py
       - name: Lint
         run: pnpm lint
       - name: Typecheck
@@ -209,7 +211,7 @@ jobs:
         run: |
           git fetch origin agent/dotenv-server-env-loading-20260724
           git checkout origin/agent/dotenv-server-env-loading-20260724 -- .github/workflows/ci.yml
-          rm -f scripts/apply-generation-quality-speed.py
+          rm -f scripts/apply-generation-quality-speed.py scripts/fix-generation-test-typing.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
