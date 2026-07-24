@@ -17,7 +17,7 @@ function parseIpv4(hostname: string): number[] | null {
 }
 
 function isBlockedIpv4(parts: number[]): boolean {
-  const [a, b] = parts
+  const [a, b, c] = parts
   return (
     a === 0 ||
     a === 10 ||
@@ -26,8 +26,12 @@ function isBlockedIpv4(parts: number[]): boolean {
     (a === 169 && b === 254) ||
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 0) ||
+    (a === 192 && b === 0 && c === 2) ||
+    (a === 192 && b === 88 && c === 99) ||
     (a === 192 && b === 168) ||
     (a === 198 && (b === 18 || b === 19)) ||
+    (a === 198 && b === 51 && c === 100) ||
+    (a === 203 && b === 0 && c === 113) ||
     a >= 224
   )
 }
