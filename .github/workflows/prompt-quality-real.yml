@@ -1,0 +1,126 @@
+name: Prompt Quality Real Model
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Repetitions per evaluation case
+        required: true
+        default: '3'
+      concurrency:
+        description: Maximum concurrent model requests
+        required: true
+        default: '3'
+  schedule:
+    - cron: '20 18 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prompt-quality-real-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    name: real-model-quality-matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      EVAL_API_KEY: ${{ secrets.EVAL_API_KEY }}
+      EVAL_BASE_URL: ${{ secrets.EVAL_BASE_URL }}
+      EVAL_MODEL: ${{ secrets.EVAL_MODEL }}
+      EVAL_MODEL_LABEL: ${{ vars.EVAL_MODEL_LABEL }}
+      EVAL_ENDPOINT_LABEL: ${{ vars.EVAL_ENDPOINT_LABEL }}
+      EVAL_RUNS: ${{ inputs.runs || '3' }}
+      EVAL_CONCURRENCY: ${{ inputs.concurrency || '3' }}
+      EVAL_TIMEOUT_MS: '180000'
+      EVAL_COMMIT_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 评测工具自检
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter prompts typecheck
+          pnpm --filter prompts eval:quality -- --dry-run --runs 1 --report ../../artifacts/self-check.json
+          pnpm --filter prompts eval:annotate -- --input ../../artifacts/self-check.json
+          pnpm --filter prompts eval:trend -- --reports ../../artifacts/self-check.json --json ../../artifacts/self-check-trend.json --markdown ../../artifacts/self-check-trend.md
+          rm -f artifacts/self-check.json artifacts/self-check-trend.json artifacts/self-check-trend.md
+
+      - name: 检查真实评测配置
+        id: config
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/public artifacts/private
+          if [[ -z "${EVAL_API_KEY:-}" || -z "${EVAL_BASE_URL:-}" || -z "${EVAL_MODEL:-}" ]]; then
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            node -e "require('fs').writeFileSync('artifacts/public/status.json', JSON.stringify({configured:false, authoritative:false, reason:'missing EVAL_API_KEY/EVAL_BASE_URL/EVAL_MODEL', commitSha:process.env.EVAL_COMMIT_SHA, generatedAt:new Date().toISOString()}, null, 2)+'\n')"
+          else
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 执行 14 类真实模型质量矩阵
+        id: real_eval
+        if: steps.config.outputs.configured == 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter prompts eval:quality -- \
+            --runs "$EVAL_RUNS" \
+            --concurrency "$EVAL_CONCURRENCY" \
+            --timeout-ms "$EVAL_TIMEOUT_MS" \
+            --report ../../artifacts/private/prompt-eval-real.json
+
+      - name: 脱敏并补全报告证据链
+        if: always() && steps.config.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f artifacts/private/prompt-eval-real.json ]]; then
+            pnpm --filter prompts eval:annotate -- \
+              --input ../../artifacts/private/prompt-eval-real.json \
+              --output ../../artifacts/public/prompt-eval-real.json
+            pnpm --filter prompts eval:trend -- \
+              --reports ../../artifacts/public/prompt-eval-real.json \
+              --json ../../artifacts/public/prompt-eval-trend.json \
+              --markdown ../../artifacts/public/prompt-eval-trend.md
+            node -e "require('fs').writeFileSync('artifacts/public/status.json', JSON.stringify({configured:true, authoritative:true, evaluationOutcome:process.env.EVAL_OUTCOME, commitSha:process.env.EVAL_COMMIT_SHA, generatedAt:new Date().toISOString()}, null, 2)+'\n')"
+          else
+            node -e "require('fs').writeFileSync('artifacts/public/status.json', JSON.stringify({configured:true, authoritative:false, reason:'evaluation ended before a report was written', commitSha:process.env.EVAL_COMMIT_SHA, generatedAt:new Date().toISOString()}, null, 2)+'\n')"
+          fi
+        env:
+          EVAL_OUTCOME: ${{ steps.real_eval.outcome }}
+
+      - name: 写入 Job Summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/public/prompt-eval-trend.md ]]; then
+            cat artifacts/public/prompt-eval-trend.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '## Real-model prompt quality' >> "$GITHUB_STEP_SUMMARY"
+            echo '' >> "$GITHUB_STEP_SUMMARY"
+            echo '真实模型配置不可用或评测未生成报告；详见 status.json。' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: 上传真实模型质量证据
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prompt-quality-real-${{ github.run_id }}
+          path: artifacts/public
+          if-no-files-found: error
+          retention-days: 90
