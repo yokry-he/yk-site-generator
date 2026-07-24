@@ -34,6 +34,7 @@ interface NavigationLink {
 
 const BASE_NAV_LINKS: NavigationLink[] = [
   { label: '首页', to: '/' },
+  { label: '内置项目', to: '/starters' },
   { label: '在线体验', to: '/generator' },
   { label: '模板库', to: '/templates', feature: 'official-templates' },
   { label: '定价', to: '/pricing' },
