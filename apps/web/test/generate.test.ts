@@ -83,14 +83,18 @@ describe('generateSite', () => {
       sseText([
         { event: 'token', data: '{"delta":"<html>"}' },
         { event: 'token', data: '{"delta":"</html>"}' },
-        { event: 'done', data: '{"parse":{"ok":true,"fileCount":1,"entry":"index.html","warnings":[]}}' },
+        { event: 'done', data: '{"parse":{"ok":true,"fileCount":1,"entry":"index.html","warnings":[]},"performance":{"firstTokenMs":120,"durationMs":950,"outputChars":88,"generationMode":"balanced","maxTokens":4600}}' },
       ]),
     )
     const events: GenerateEvent[] = []
     for await (const ev of generateSite(req)) events.push(ev)
     expect(events).toHaveLength(3)
     expect(events[0]).toEqual({ type: 'token', delta: '<html>' })
-    expect(events[2]).toMatchObject({ type: 'done', parse: { ok: true, fileCount: 1 } })
+    expect(events[2]).toMatchObject({
+      type: 'done',
+      parse: { ok: true, fileCount: 1 },
+      performance: { firstTokenMs: 120, durationMs: 950, generationMode: 'balanced' },
+    })
   })
 
   it('中途 error 事件:透传 code 与 message,且后续事件不再依赖', async () => {

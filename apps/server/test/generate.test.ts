@@ -10,6 +10,7 @@ const validBody = {
   apiKey: 'test-key-not-real',
   siteType: 'personal',
   requirement: '深色极简的个人主页',
+  mode: 'balanced',
 }
 
 /** 用 SSE 文本构造一个 Response */
@@ -81,6 +82,27 @@ describe('POST /api/generate', () => {
     expect(done.parse.ok).toBe(true)
     expect(done.parse.fileCount).toBe(1)
     expect(done.parse.entry).toBe('index.html')
+    expect(done.performance.generationMode).toBe('balanced')
+    expect(done.performance.maxTokens).toBe(4600)
+    expect(done.performance.outputChars).toBeGreaterThan(0)
+    expect(typeof done.performance.durationMs).toBe('number')
+  })
+
+  it('精致成品模式使用更高预算并注入质量自检提示', async () => {
+    const html = '<!DOCTYPE html><html><head></head><body>quality</body></html>'
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => sseResponse([openaiChunk('```html\n' + html + '\n```'), '[DONE]']))
+    vi.stubGlobal('fetch', fetchMock)
+    const res = await app.request('/api/generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...validBody, mode: 'quality' }),
+    })
+    const events = await readEvents(res)
+    expect(events.some((event) => event.event === 'done')).toBe(true)
+    const sentBody = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect(sentBody.max_tokens).toBe(7200)
+    expect(sentBody.messages[0].content).toContain('当前生成策略：精致成品')
+    expect(sentBody.messages[0].content).toContain('静默自检')
   })
 
   it('认证失败(401):error 事件,PROVIDER_AUTH', async () => {
@@ -231,6 +253,16 @@ describe('POST /api/generate', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ ...validBody, apiKey: '' }),
+    })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error.code).toBe('BAD_REQUEST')
+  })
+
+  it('未知生成策略返回 400', async () => {
+    const res = await app.request('/api/generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...validBody, mode: 'ultra' }),
     })
     expect(res.status).toBe(400)
     expect((await res.json()).error.code).toBe('BAD_REQUEST')
