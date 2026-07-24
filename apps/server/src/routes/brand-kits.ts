@@ -2,15 +2,13 @@ import { randomUUID } from 'node:crypto'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { authMiddleware, type AuthEnv } from '../lib/auth'
+import { validateBrandAssetDataUrl, type BrandAssetKind } from '../lib/brand-asset-policy'
 import { mutateData, readData, type BrandKitRecord } from '../lib/data-store'
 import { featureFlagMiddleware } from '../lib/feature-flags'
 import { errorBody } from '../types'
 
 const color = z.string().regex(/^#[0-9a-f]{6}$/i, '颜色必须是 6 位十六进制值')
-const optionalImage = z.string().max(700_000, '图片数据过大').refine(
-  (value) => value === '' || /^data:image\/(png|jpeg|webp|svg\+xml);base64,/i.test(value),
-  '图片格式不受支持',
-).optional()
+const optionalImage = z.string().max(700_000, '图片数据过大').optional()
 const optionalText = (max: number) => z.string().trim().max(max).optional()
 const socialLinks = z.record(z.string().trim().min(1).max(40), z.string().url().max(500)).refine((value) => Object.keys(value).length <= 12, '社交链接最多 12 项').optional()
 
@@ -56,6 +54,17 @@ const descriptionSchema = z.string().trim().max(240)
 const createSchema = tokenSchema.merge(identitySchema).extend({ name: nameSchema, description: descriptionSchema.default(''), isDefault: z.boolean().default(false) })
 const updateSchema = tokenSchema.partial().merge(identitySchema).extend({ name: nameSchema.optional(), description: descriptionSchema.optional(), isDefault: z.boolean().optional() })
 
+const imageFields = ['logoDataUrl', 'logoDarkDataUrl', 'logoVerticalDataUrl', 'logoMarkDataUrl', 'faviconDataUrl', 'ogImageDataUrl'] as const
+type ImageField = (typeof imageFields)[number]
+const imageKinds: Record<ImageField, BrandAssetKind> = {
+  logoDataUrl: 'logo',
+  logoDarkDataUrl: 'logo',
+  logoVerticalDataUrl: 'logo',
+  logoMarkDataUrl: 'icon',
+  faviconDataUrl: 'icon',
+  ogImageDataUrl: 'image',
+}
+
 const brandKits = new Hono<AuthEnv>()
 brandKits.use('*', authMiddleware)
 brandKits.use('*', featureFlagMiddleware('brand-kits'))
@@ -65,6 +74,19 @@ function sorted(rows: BrandKitRecord[]): BrandKitRecord[] {
 }
 function zodMessage(error: unknown): string { return error instanceof z.ZodError ? error.issues[0]?.message ?? '参数错误' : '请求体不是合法 JSON' }
 function optionalValue(value: string | undefined): string | undefined { return value?.trim() || undefined }
+function validateIdentityImages(input: Partial<Record<ImageField, string | undefined>>): string | null {
+  for (const field of imageFields) {
+    const value = input[field]
+    if (!value) continue
+    try {
+      validateBrandAssetDataUrl(value, imageKinds[field])
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '图片内容不安全'
+      return `${field}: ${message}`
+    }
+  }
+  return null
+}
 
 brandKits.get('/', async (c) => {
   const userId = c.get('auth').sub
@@ -82,6 +104,8 @@ brandKits.post('/', async (c) => {
   let input: z.infer<typeof createSchema>
   try { input = createSchema.parse(await c.req.json()) }
   catch (error) { return c.json(errorBody('BAD_REQUEST', zodMessage(error)), 400) }
+  const imageError = validateIdentityImages(input)
+  if (imageError) return c.json(errorBody('BAD_REQUEST', imageError), 400)
   const userId = c.get('auth').sub
   const now = new Date().toISOString()
   const brandKit = await mutateData((data) => {
@@ -108,12 +132,13 @@ brandKits.patch('/:id', async (c) => {
   let input: z.infer<typeof updateSchema>
   try { input = updateSchema.parse(await c.req.json()) }
   catch (error) { return c.json(errorBody('BAD_REQUEST', zodMessage(error)), 400) }
+  const imageError = validateIdentityImages(input)
+  if (imageError) return c.json(errorBody('BAD_REQUEST', imageError), 400)
   const userId = c.get('auth').sub
   const brandKit = await mutateData<BrandKitRecord | null>((data) => {
     const row = data.brandKits.find((item) => item.id === c.req.param('id') && item.userId === userId)
     if (!row) return null
     if (input.isDefault) for (const item of data.brandKits) if (item.userId === userId) item.isDefault = item.id === row.id
-    const imageFields = ['logoDataUrl', 'logoDarkDataUrl', 'logoVerticalDataUrl', 'logoMarkDataUrl', 'faviconDataUrl', 'ogImageDataUrl'] as const
     for (const field of imageFields) if (input[field] !== undefined) row[field] = optionalValue(input[field])
     const textFields = ['name', 'description', 'companyName', 'companyDescription', 'contactEmail', 'contactPhone', 'address'] as const
     for (const field of textFields) if (input[field] !== undefined) Object.assign(row, { [field]: optionalValue(input[field]) })
