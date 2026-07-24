@@ -70,7 +70,7 @@ describe('跨账号资源所有权矩阵', () => {
     expect(publicationCreated.status).toBe(201)
     const publication = (await publicationCreated.json()).publication
 
-    const attempts: Array<Promise<Response>> = [
+    const attempts: Array<Response | Promise<Response>> = [
       app.request(`/api/projects/${project.id}`, { headers: headers(strangerToken) }),
       app.request(`/api/projects/${project.id}`, { method: 'PATCH', headers: headers(strangerToken), body: JSON.stringify({ title: 'Hijacked' }) }),
       app.request(`/api/projects/${project.id}`, { method: 'DELETE', headers: headers(strangerToken) }),
