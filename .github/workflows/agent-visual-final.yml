@@ -19,9 +19,12 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - name: Apply final contrast fixes
+      - name: Verify final behavior and visual suite
+        id: verify
+        shell: bash
         run: |
-          python - <<'PY'
+          set +e
+          python - <<'PY' > visual-final.log 2>&1
           from pathlib import Path
           path = Path('apps/web/src/pages/TemplateDetailPage.vue')
           text = path.read_text()
@@ -37,19 +40,37 @@ jobs:
             text = text.replace(old, new)
           path.write_text(text)
           PY
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Install Chromium
-        run: pnpm --filter web exec playwright install --with-deps chromium
-      - name: Verify behavior and accessibility
-        run: pnpm --filter web e2e:browser
-      - name: Generate visual baselines
-        run: pnpm --filter web e2e:visual:update
-      - name: Commit verified visual suite
+          PATCH_STATUS=$?
+          if [[ $PATCH_STATUS -eq 0 ]]; then pnpm install --frozen-lockfile >> visual-final.log 2>&1; INSTALL_STATUS=$?; else INSTALL_STATUS=99; fi
+          if [[ $INSTALL_STATUS -eq 0 ]]; then pnpm --filter web exec playwright install --with-deps chromium >> visual-final.log 2>&1; BROWSER_STATUS=$?; else BROWSER_STATUS=99; fi
+          if [[ $BROWSER_STATUS -eq 0 ]]; then pnpm --filter web e2e:browser >> visual-final.log 2>&1; BEHAVIOR_STATUS=$?; else BEHAVIOR_STATUS=99; fi
+          if [[ $BEHAVIOR_STATUS -eq 0 ]]; then pnpm --filter web e2e:visual:update >> visual-final.log 2>&1; VISUAL_STATUS=$?; else VISUAL_STATUS=99; fi
+          printf 'patch=%s\ninstall=%s\nbrowser=%s\nbehavior=%s\nvisual=%s\n' "$PATCH_STATUS" "$INSTALL_STATUS" "$BROWSER_STATUS" "$BEHAVIOR_STATUS" "$VISUAL_STATUS" > visual-final-status.txt
+          [[ $PATCH_STATUS -eq 0 && $INSTALL_STATUS -eq 0 && $BROWSER_STATUS -eq 0 && $BEHAVIOR_STATUS -eq 0 && $VISUAL_STATUS -eq 0 ]]
+          echo "success=$([[ $? -eq 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Commit final result
+        shell: bash
         run: |
+          SUCCESS='${{ steps.verify.outputs.success }}'
           rm -f .github/agent-visual-final.trigger .github/workflows/agent-visual-final.yml .github/agent-visual-baseline-status.md
+          if [[ "$SUCCESS" != 'true' ]]; then
+            {
+              echo '# Final visual diagnostic'
+              echo
+              cat visual-final-status.txt
+              echo
+              echo '## Log tail'
+              echo '```text'
+              tail -n 180 visual-final.log
+              echo '```'
+            } > .github/agent-visual-final-status.md
+            rm -rf apps/web/test-results apps/web/playwright-report
+          else
+            rm -f .github/agent-visual-final-status.md visual-final.log visual-final-status.txt
+          fi
           git config user.name "siteforge-agent"
           git config user.email "siteforge-agent@users.noreply.github.com"
           git add -A
-          git commit -m "test(web): add verified visual regression baselines"
+          git commit -m "$([[ "$SUCCESS" == 'true' ]] && echo 'test(web): add verified visual regression baselines' || echo 'chore(ci): record final visual diagnostic')"
           git push origin HEAD:agent/continue-development-20260723
