@@ -101,95 +101,13 @@ jobs:
         run: pnpm --filter web exec playwright install --with-deps chromium
       - name: 浏览器交互与无障碍 E2E
         run: pnpm --filter web e2e:browser
+      - name: 视觉回归测试
+        run: pnpm --filter web e2e:visual
       - name: 上传 Playwright 报告
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-browser-report
-          path: |
-            apps/web/playwright-report
-            apps/web/test-results
-          if-no-files-found: ignore
-          retention-days: 7
-
-  visual-baseline-bootstrap:
-    name: visual-baseline-bootstrap
-    needs: browser-quality
-    if: github.event_name == 'pull_request' && github.head_ref == 'agent/continue-development-20260723'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - name: 安装依赖
-        run: pnpm install --frozen-lockfile
-      - name: 安装 Chromium
-        run: pnpm --filter web exec playwright install --with-deps chromium
-      - name: 生成视觉回归基线
-        run: pnpm --filter web e2e:visual:update
-      - name: 更新文档并清理临时文件
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          from fnmatch import fnmatch
-
-          def replace_once(path: Path, old: str, new: str) -> None:
-              text = path.read_text(encoding='utf-8')
-              count = text.count(old)
-              if count == 1:
-                  path.write_text(text.replace(old, new), encoding='utf-8')
-              elif count == 0 and new in text:
-                  return
-              else:
-                  raise SystemExit(f'{path}: expected one target, found {count}')
-
-          readme = Path('README.md')
-          replace_once(readme, '- 项目收藏、复制、归档、回收站、恢复和永久删除\n', '- 项目收藏、复制、归档、回收站、恢复和永久删除\n- 永久删除必须输入完整项目名称确认，避免误删不可恢复的数据\n')
-          replace_once(readme, '- 用户间资源严格隔离，删除资源不会破坏已插入项目的副本\n', '- 用户间资源严格隔离，删除资源不会破坏已插入项目的副本\n- 删除品牌资源前展示关联品牌套件、项目版本与已插入副本的影响范围，并通过统一危险操作确认\n')
-          replace_once(readme, '- 响应式 iframe 预览，支持桌面、平板和手机尺寸\n', '- 响应式 iframe 预览，支持桌面、平板和手机尺寸\n- 模板卡片提供快速预览，独立详情页提供完整多端预览、变量定制、品牌联动与创建项目入口\n')
-          replace_once(readme, '- 项目概览和编辑器共用同一套质量分析规则\n', '- 项目概览和编辑器共用同一套质量分析规则\n- Playwright 浏览器行为矩阵覆盖桌面与 Pixel 7 手机视口，验证首页、命令面板、模板目录／详情、项目工作区、编辑器及关键 Dialog／Drawer 的键盘操作\n- Axe 自动无障碍门槛禁止 serious 或 critical 违规，并检查图标按钮的可访问名称\n- 自动验证 Skip Link 是首次 Tab 可达元素、弹层焦点进入与恢复正确、关键页面无横向溢出\n- 视觉回归覆盖首页、全局命令面板、模板目录、模板详情、项目工作区、可视化编辑器和深色模板详情的桌面／手机截图\n')
-          replace_once(readme, 'pnpm --filter web e2e:history\npnpm --filter prompts eval -- --dry-run', 'pnpm --filter web e2e:history\npnpm --filter web e2e:browser\npnpm --filter web e2e:visual\npnpm --filter web e2e:visual:update\npnpm --filter prompts eval -- --dry-run')
-          replace_once(readme, '- 真实生成、迭代和历史恢复 E2E\n- MySQL 8.4 Service Container', '- 真实生成、迭代和历史恢复 E2E\n- Playwright 桌面与手机行为矩阵、响应式溢出、Skip Link、焦点管理和键盘操作\n- Axe serious／critical 自动无障碍门槛\n- 首页、命令面板、模板、项目工作区、编辑器与深色页面的视觉回归比较\n- MySQL 8.4 Service Container')
-
-          for path in Path('.github').rglob('*'):
-              if not path.is_file() or path == Path('.github/workflows/ci.yml') or path == Path('.github/workflows/preview.yml'):
-                  continue
-              name = path.name
-              if fnmatch(name, 'agent-*trigger*') or fnmatch(name, 'agent-visual-*') or name in {'visual-baseline-status.txt', 'visual-final-status.txt'}:
-                  path.unlink()
-                  print(f'Removed temporary file: {path}')
-          PY
-
-          snapshot_dir=apps/web/tests/e2e/visual.spec.ts-snapshots
-          test -d "$snapshot_dir"
-          snapshot_count=$(find "$snapshot_dir" -type f -name '*.png' | wc -l)
-          echo "Generated ${snapshot_count} visual snapshots"
-          test "$snapshot_count" -ge 13
-          git diff --check
-          git status --short
-      - name: 提交视觉基线与文档
-        run: |
-          git config user.name "siteforge-agent"
-          git config user.email "siteforge-agent@users.noreply.github.com"
-          git add apps/web/tests/e2e/visual.spec.ts-snapshots README.md
-          git add -u .github
-          git commit -m "test(web): establish visual quality baseline"
-          git push origin "HEAD:${{ github.head_ref }}"
-      - name: 上传视觉基线诊断
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: visual-baseline-bootstrap-report
           path: |
             apps/web/playwright-report
             apps/web/test-results
