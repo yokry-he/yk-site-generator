@@ -67,10 +67,10 @@ async function main() {
   )
 
   const budgets = {
-    totalJsGzipBytes: envKb('BUNDLE_MAX_TOTAL_JS_GZIP_KB', 900),
-    largestJsGzipBytes: envKb('BUNDLE_MAX_LARGEST_JS_GZIP_KB', 600),
-    totalCssGzipBytes: envKb('BUNDLE_MAX_TOTAL_CSS_GZIP_KB', 150),
-    totalAssetBytes: envKb('BUNDLE_MAX_TOTAL_ASSET_KB', 12 * 1024),
+    totalJsGzipBytes: envKb('BUNDLE_MAX_TOTAL_JS_GZIP_KB', 350),
+    largestJsGzipBytes: envKb('BUNDLE_MAX_LARGEST_JS_GZIP_KB', 80),
+    totalCssGzipBytes: envKb('BUNDLE_MAX_TOTAL_CSS_GZIP_KB', 25),
+    totalAssetBytes: envKb('BUNDLE_MAX_TOTAL_ASSET_KB', 1200),
   }
 
   const files = await listFiles(distDir)
