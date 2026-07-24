@@ -1,0 +1,5 @@
+patch=0
+install=0
+browser=0
+behavior=1
+visual=99
