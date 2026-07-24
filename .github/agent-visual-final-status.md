@@ -1,4 +1,4 @@
-# Visual baseline diagnostic
+# Final visual diagnostic
 
 patch=0
 install=0
@@ -8,113 +8,133 @@ visual=99
 
 ## Log tail
 ```text
-    +         "html": "<span class=\"rounded-full bg-brand1/10 px-3 py-1 text-[10px] font-semibold text-brand1\">商业营销</span>",
-    +         "impact": "serious",
+    +             },
+    +             "id": "non-empty-title",
+    +             "impact": "critical",
+    +             "message": "Element has no title attribute",
+    +             "relatedNodes": Array [],
+    +           },
+    +           Object {
+    +             "data": null,
+    +             "id": "implicit-label",
+    +             "impact": "critical",
+    +             "message": "Element does not have an implicit (wrapped) <label>",
+    +             "relatedNodes": Array [],
+    +           },
+    +           Object {
+    +             "data": null,
+    +             "id": "explicit-label",
+    +             "impact": "critical",
+    +             "message": "Element does not have an explicit <label>",
+    +             "relatedNodes": Array [],
+    +           },
+    +           Object {
+    +             "data": null,
+    +             "id": "presentational-role",
+    +             "impact": "critical",
+    +             "message": "Element's default semantics were not overridden with role=\"none\" or role=\"presentation\"",
+    +             "relatedNodes": Array [],
+    +           },
+    +         ],
+    +         "failureSummary": "Fix any of the following:
+    +   Element does not have inner text that is visible to screen readers
+    +   aria-label attribute does not exist or is empty
+    +   aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty
+    +   Element has no title attribute
+    +   Element does not have an implicit (wrapped) <label>
+    +   Element does not have an explicit <label>
+    +   Element's default semantics were not overridden with role=\"none\" or role=\"presentation\"",
+    +         "html": "<button class=\"rounded-md p-1.5 text-faint\">",
+    +         "impact": "critical",
     +         "none": Array [],
     +         "target": Array [
-    +           ".bg-brand1\\/10.py-1.px-3",
+    +           ".p-1\\.5.rounded-md:nth-child(2)",
     +         ],
     +       },
     +       Object {
     +         "all": Array [],
     +         "any": Array [
     +           Object {
-    +             "data": Object {
-    +               "bgColor": "#120f1b",
-    +               "contrastRatio": 4.46,
-    +               "expectedContrastRatio": "4.5:1",
-    +               "fgColor": "#8b5cf6",
-    +               "fontSize": "10.5pt (14px)",
-    +               "fontWeight": "normal",
-    +               "messageKey": null,
-    +             },
-    +             "id": "color-contrast",
-    +             "impact": "serious",
-    +             "message": "Element has insufficient color contrast of 4.46 (foreground color: #8b5cf6, background color: #120f1b, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1",
-    +             "relatedNodes": Array [
-    +               Object {
-    +                 "html": "<button class=\"flex items-center gap-2 rounded-xl border border-brand1/20 bg-brand1/[0.07] px-4 py-3 text-sm font-semibold text-brand1\">",
-    +                 "target": Array [
-    +                   ".border-brand1\\/20",
-    +                 ],
-    +               },
-    +               Object {
-    +                 "html": "<div class=\"min-h-screen bg-app text-ink\">",
-    +                 "target": Array [
-    +                   ".bg-app",
-    +                 ],
-    +               },
-    +             ],
+    +             "data": null,
+    +             "id": "button-has-visible-text",
+    +             "impact": "critical",
+    +             "message": "Element does not have inner text that is visible to screen readers",
+    +             "relatedNodes": Array [],
     +           },
-    +         ],
-    +         "failureSummary": "Fix any of the following:
-    +   Element has insufficient color contrast of 4.46 (foreground color: #8b5cf6, background color: #120f1b, font size: 10.5pt (14px), font weight: normal). Expected contrast ratio of 4.5:1",
-    +         "html": "<button class=\"flex items-center gap-2 rounded-xl border border-brand1/20 bg-brand1/[0.07] px-4 py-3 text-sm font-semibold text-brand1\">",
-    +         "impact": "serious",
-    +         "none": Array [],
-    +         "target": Array [
-    +           ".border-brand1\\/20",
-    +         ],
-    +       },
-    +       Object {
-    +         "all": Array [],
-    +         "any": Array [
+    +           Object {
+    +             "data": null,
+    +             "id": "aria-label",
+    +             "impact": "critical",
+    +             "message": "aria-label attribute does not exist or is empty",
+    +             "relatedNodes": Array [],
+    +           },
+    +           Object {
+    +             "data": null,
+    +             "id": "aria-labelledby",
+    +             "impact": "critical",
+    +             "message": "aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty",
+    +             "relatedNodes": Array [],
+    +           },
     +           Object {
     +             "data": Object {
-    +               "bgColor": "#1a1624",
-    +               "contrastRatio": 4.18,
-    +               "expectedContrastRatio": "4.5:1",
-    +               "fgColor": "#8b5cf6",
-    +               "fontSize": "7.5pt (10px)",
-    +               "fontWeight": "normal",
-    +               "messageKey": null,
+    +               "messageKey": "noAttr",
     +             },
-    +             "id": "color-contrast",
-    +             "impact": "serious",
-    +             "message": "Element has insufficient color contrast of 4.18 (foreground color: #8b5cf6, background color: #1a1624, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1",
-    +             "relatedNodes": Array [
-    +               Object {
-    +                 "html": "<button class=\"rounded-xl border px-2 py-2.5 text-[10px] border-brand1/30 bg-brand1/[0.07] font-semibold text-brand1\">",
-    +                 "target": Array [
-    +                   ".border-brand1\\/30",
-    +                 ],
-    +               },
-    +               Object {
-    +                 "html": "<section class=\"rounded-3xl border border-line/10 bg-soft/55 p-5\">",
-    +                 "target": Array [
-    +                   ".p-5.rounded-3xl:nth-child(1)",
-    +                 ],
-    +               },
-    +               Object {
-    +                 "html": "<div class=\"min-h-screen bg-app text-ink\">",
-    +                 "target": Array [
-    +                   ".bg-app",
-    +                 ],
-    +               },
-    +             ],
+    +             "id": "non-empty-title",
+    +             "impact": "critical",
+    +             "message": "Element has no title attribute",
+    +             "relatedNodes": Array [],
+    +           },
+    +           Object {
+    +             "data": null,
+    +             "id": "implicit-label",
+    +             "impact": "critical",
+    +             "message": "Element does not have an implicit (wrapped) <label>",
+    +             "relatedNodes": Array [],
+    +           },
+    +           Object {
+    +             "data": null,
+    +             "id": "explicit-label",
+    +             "impact": "critical",
+    +             "message": "Element does not have an explicit <label>",
+    +             "relatedNodes": Array [],
+    +           },
+    +           Object {
+    +             "data": null,
+    +             "id": "presentational-role",
+    +             "impact": "critical",
+    +             "message": "Element's default semantics were not overridden with role=\"none\" or role=\"presentation\"",
+    +             "relatedNodes": Array [],
     +           },
     +         ],
     +         "failureSummary": "Fix any of the following:
-    +   Element has insufficient color contrast of 4.18 (foreground color: #8b5cf6, background color: #1a1624, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1",
-    +         "html": "<button class=\"rounded-xl border px-2 py-2.5 text-[10px] border-brand1/30 bg-brand1/[0.07] font-semibold text-brand1\">",
-    +         "impact": "serious",
+    +   Element does not have inner text that is visible to screen readers
+    +   aria-label attribute does not exist or is empty
+    +   aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty
+    +   Element has no title attribute
+    +   Element does not have an implicit (wrapped) <label>
+    +   Element does not have an explicit <label>
+    +   Element's default semantics were not overridden with role=\"none\" or role=\"presentation\"",
+    +         "html": "<button class=\"rounded-md p-1.5 text-faint\">",
+    +         "impact": "critical",
     +         "none": Array [],
     +         "target": Array [
-    +           ".border-brand1\\/30",
+    +           ".p-1\\.5.rounded-md:nth-child(3)",
     +         ],
     +       },
     +     ],
     +     "tags": Array [
-    +       "cat.color",
-    +       "wcag2aa",
-    +       "wcag143",
+    +       "cat.name-role-value",
+    +       "wcag2a",
+    +       "wcag412",
+    +       "section508",
+    +       "section508.22.a",
     +       "TTv5",
-    +       "TT13.c",
+    +       "TT6.a",
     +       "EN-301-549",
-    +       "EN-9.1.4.3",
+    +       "EN-9.4.1.2",
     +       "ACT",
     +       "RGAAv4",
-    +       "RGAA-3.2.1",
+    +       "RGAA-11.9.1",
     +     ],
     +   },
     + ]
@@ -138,15 +158,15 @@ visual=99
     ────────────────────────────────────────────────────────────────────────────────────────────────
 
     attachment #3: video (video/webm) ──────────────────────────────────────────────────────────────
-    test-results/accessibility-public-pages-c5f80-us-accessibility-violations-chromium-mobile-retry1/video-2.webm
+    test-results/accessibility-public-pages-c5f80-us-accessibility-violations-chromium-mobile-retry1/video.webm
     ────────────────────────────────────────────────────────────────────────────────────────────────
 
     attachment #4: video (video/webm) ──────────────────────────────────────────────────────────────
-    test-results/accessibility-public-pages-c5f80-us-accessibility-violations-chromium-mobile-retry1/video-3.webm
+    test-results/accessibility-public-pages-c5f80-us-accessibility-violations-chromium-mobile-retry1/video-2.webm
     ────────────────────────────────────────────────────────────────────────────────────────────────
 
     attachment #5: video (video/webm) ──────────────────────────────────────────────────────────────
-    test-results/accessibility-public-pages-c5f80-us-accessibility-violations-chromium-mobile-retry1/video.webm
+    test-results/accessibility-public-pages-c5f80-us-accessibility-violations-chromium-mobile-retry1/video-3.webm
     ────────────────────────────────────────────────────────────────────────────────────────────────
 
     Error Context: test-results/accessibility-public-pages-c5f80-us-accessibility-violations-chromium-mobile-retry1/error-context.md
@@ -164,7 +184,7 @@ visual=99
     [chromium-desktop] › tests/e2e/accessibility.spec.ts:11:1 › public pages have no serious accessibility violations 
     [chromium-mobile] › tests/e2e/accessibility.spec.ts:11:1 › public pages have no serious accessibility violations 
   4 skipped
-  12 passed (1.0m)
+  12 passed (1.2m)
 /home/runner/work/yk-site-generator/yk-site-generator/apps/web:
 [ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] web@0.0.0 e2e:browser: `playwright test --grep-invert @visual`
 Exit status 1
