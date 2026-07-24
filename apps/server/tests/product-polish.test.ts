@@ -78,7 +78,8 @@ describe('功能补全与细节优化', () => {
   it('品牌资源按用户隔离并支持更新和删除', async () => {
     const ownerToken = await login('owner@example.com')
     const otherToken = await login('other@example.com')
-    const dataUrl = `data:image/png;base64,${Buffer.from('image-data').toString('base64')}`
+    const pngBytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
+    const dataUrl = `data:image/png;base64,${Buffer.from(pngBytes).toString('base64')}`
     const created = await app.request('/api/brand-assets', { method: 'POST', headers: headers(ownerToken), body: JSON.stringify({ kind: 'logo', name: 'Main logo', dataUrl, alt: 'Company logo', tags: ['brand'] }) })
     expect(created.status).toBe(201)
     const asset = (await created.json()).asset
