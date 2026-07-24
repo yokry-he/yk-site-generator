@@ -2,7 +2,11 @@ import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { z } from 'zod'
 import { buildGenerationPrompt, buildIterationPrompt } from 'prompts'
-import { parseModelOutput } from 'shared'
+import {
+  DEFAULT_GENERATION_MODE,
+  getGenerationModeProfile,
+  parseModelOutput,
+} from 'shared'
 import { authenticateBearerHeader } from '../lib/auth'
 import { connectTimeoutMs, totalTimeoutMs } from '../lib/config'
 import { recordSystemEvent, requestIdFromContext } from '../lib/observability'
@@ -34,6 +38,7 @@ const bodySchema = z.object({
   siteType: z.string().min(1),
   requirement: z.string().min(1),
   history: z.array(historyItemSchema).optional(),
+  mode: z.enum(['fast', 'balanced', 'quality']).default(DEFAULT_GENERATION_MODE),
   maxTokens: z.number().int().positive().max(8192).optional(),
 })
 
@@ -83,11 +88,13 @@ generate.post('/', async (c) => {
           currentArtifact: lastHistory.artifact,
           instruction: lastHistory.instruction,
           round: lastHistory.round ?? 2,
+          mode: body.mode,
         })
       : buildGenerationPrompt({
           siteType: body.siteType,
           requirement: body.requirement,
           history: body.history?.map((h) => ({ feedback: h.instruction, artifactHtml: h.artifact })),
+          mode: body.mode,
         })
     messages = [
       { role: 'system', content: built.system },
@@ -127,22 +134,25 @@ generate.post('/', async (c) => {
 
   const requestId = requestIdFromContext(c)
   const startedAt = Date.now()
+  const generationProfile = getGenerationModeProfile(body.mode)
   const mode = body.history?.length ? 'iterate' : 'generate'
 
   return streamSSE(c, async (stream) => {
     let fullText = ''
+    let firstTokenAt: number | null = null
     try {
       const events = streamFromProvider(body.provider, {
         model: body.model,
         apiKey: body.apiKey,
         baseUrl: body.baseUrl,
         messages,
-        maxTokens: body.maxTokens,
+        maxTokens: body.maxTokens ?? generationProfile.maxTokens,
         connectTimeoutMs: connectTimeoutMs(),
         totalTimeoutMs: totalTimeoutMs(),
       })
       for await (const ev of events) {
         if (ev.type === 'token') {
+          if (firstTokenAt === null) firstTokenAt = Date.now()
           fullText += ev.delta
           await stream.writeSSE({ event: 'token', data: JSON.stringify({ delta: ev.delta }) })
         }
@@ -166,6 +176,8 @@ generate.post('/', async (c) => {
           model: body.model,
           siteType: body.siteType,
           mode,
+          generationMode: body.mode,
+          firstTokenMs: firstTokenAt === null ? null : firstTokenAt - startedAt,
           outputChars: fullText.length,
           authenticated: Boolean(auth),
         },
@@ -202,6 +214,13 @@ generate.post('/', async (c) => {
     await stream.writeSSE({
       event: 'done',
       data: JSON.stringify({
+        performance: {
+          firstTokenMs: firstTokenAt === null ? null : firstTokenAt - startedAt,
+          durationMs: Date.now() - startedAt,
+          outputChars: fullText.length,
+          generationMode: body.mode,
+          maxTokens: body.maxTokens ?? generationProfile.maxTokens,
+        },
         parse: parsed
           ? {
               ok: true,

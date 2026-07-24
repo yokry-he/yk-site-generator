@@ -2,9 +2,11 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import {
   generateSite,
   GenerateHttpError,
+  type GeneratePerformance,
   type GenerateRequest,
   type ParseSummary,
 } from '../lib/generate'
+import { createStreamTextBuffer } from '../lib/stream-text-buffer'
 
 export type GeneratePhase = 'idle' | 'connecting' | 'streaming' | 'parsing' | 'done' | 'error'
 
@@ -36,10 +38,24 @@ export function useGenerateStream() {
   const retainedPartial = ref('')
   const error = ref<GenerateError | null>(null)
   const parseSummary = ref<ParseSummary | null>(null)
+  const performance = ref<GeneratePerformance | null>(null)
   const stopped = ref(false)
   const lastRequest = ref<GenerateRequest | null>(null)
 
   let controller: AbortController | null = null
+  let startedAt = 0
+  let firstTokenAt = 0
+
+  const buffer = createStreamTextBuffer((delta, count) => {
+    text.value += delta
+    tokenCount.value += count
+    performance.value = {
+      ...(performance.value ?? { outputChars: 0 }),
+      firstTokenMs: firstTokenAt ? firstTokenAt - startedAt : null,
+      durationMs: startedAt ? Date.now() - startedAt : 0,
+      outputChars: text.value.length,
+    }
+  })
 
   const charCount = computed(() => text.value.length)
   const isActive = computed(() => phase.value === 'connecting' || phase.value === 'streaming' || phase.value === 'parsing')
@@ -52,45 +68,63 @@ export function useGenerateStream() {
   }
 
   async function start(req: GenerateRequest): Promise<void> {
-    stop()
-    lastRequest.value = structuredClone(req)
+    controller?.abort()
     controller = new AbortController()
+    buffer.clear()
+    lastRequest.value = structuredClone(req)
     phase.value = 'connecting'
     stageIndex.value = -1
     tokenCount.value = 0
     text.value = ''
     error.value = null
     parseSummary.value = null
+    performance.value = null
     stopped.value = false
+    startedAt = Date.now()
+    firstTokenAt = 0
 
     try {
       for await (const ev of generateSite(req, { signal: controller.signal })) {
         if (ev.type === 'token') {
+          if (!firstTokenAt) firstTokenAt = Date.now()
           if (stageIndex.value < 0) stageIndex.value = 0
           if (stageIndex.value < 2) stageIndex.value = tokenCount.value === 0 ? 1 : 2
-          else if (stageIndex.value === 1) stageIndex.value = 2
           phase.value = 'streaming'
-          tokenCount.value += 1
-          text.value += ev.delta
+          buffer.push(ev.delta)
         } else if (ev.type === 'done') {
+          buffer.flush()
           phase.value = 'parsing'
           stageIndex.value = 3
           parseSummary.value = ev.parse
+          performance.value = ev.performance ?? {
+            firstTokenMs: firstTokenAt ? firstTokenAt - startedAt : null,
+            durationMs: Date.now() - startedAt,
+            outputChars: text.value.length,
+          }
           retainedPartial.value = ''
           phase.value = 'done'
           stageIndex.value = 4
         } else if (ev.type === 'error') {
+          buffer.flush()
           if (text.value.trim()) retainedPartial.value = text.value
+          performance.value = {
+            ...(performance.value ?? { outputChars: text.value.length }),
+            firstTokenMs: firstTokenAt ? firstTokenAt - startedAt : null,
+            durationMs: Date.now() - startedAt,
+            outputChars: text.value.length,
+          }
           error.value = toError(ev.code, ev.message)
           phase.value = 'error'
         }
       }
       if (phase.value === 'streaming' || phase.value === 'connecting') {
+        buffer.flush()
         if (text.value.trim()) retainedPartial.value = text.value
         error.value = toError('PROVIDER_NETWORK', '生成过程中连接中断，未收到完成事件')
         phase.value = 'error'
       }
     } catch (err) {
+      buffer.flush()
       if (err instanceof DOMException && err.name === 'AbortError') {
         stopped.value = true
         if (text.value.trim()) retainedPartial.value = text.value
@@ -112,11 +146,9 @@ export function useGenerateStream() {
 
   async function resumeFromPartial(instruction = '继续完成上次中断的页面，保留正确内容，补齐缺失部分并输出完整可运行产物'): Promise<void> {
     if (!lastRequest.value || isActive.value) return
+    buffer.flush()
     const partial = retainedPartial.value || text.value
-    if (!partial.trim()) {
-      await retryLast()
-      return
-    }
+    if (!partial.trim()) return retryLast()
     const request = structuredClone(lastRequest.value)
     request.history = [
       ...(request.history ?? []),
@@ -126,12 +158,15 @@ export function useGenerateStream() {
   }
 
   function stop() {
+    buffer.flush()
     controller?.abort()
     controller = null
   }
 
   function reset(options: { keepPartial?: boolean } = {}) {
-    stop()
+    controller?.abort()
+    controller = null
+    buffer.clear()
     if (!options.keepPartial) retainedPartial.value = ''
     phase.value = 'idle'
     stageIndex.value = -1
@@ -139,29 +174,18 @@ export function useGenerateStream() {
     text.value = ''
     error.value = null
     parseSummary.value = null
+    performance.value = null
     stopped.value = false
   }
 
-  onBeforeUnmount(stop)
+  onBeforeUnmount(() => {
+    stop()
+    buffer.dispose()
+  })
 
   return {
-    phase,
-    stageIndex,
-    tokenCount,
-    charCount,
-    text,
-    retainedPartial,
-    error,
-    parseSummary,
-    stopped,
-    lastRequest,
-    isActive,
-    hasPartialOutput,
-    canRetry,
-    start,
-    retryLast,
-    resumeFromPartial,
-    stop,
-    reset,
+    phase, stageIndex, tokenCount, charCount, text, retainedPartial, error, parseSummary,
+    performance, stopped, lastRequest, isActive, hasPartialOutput, canRetry,
+    start, retryLast, resumeFromPartial, stop, reset,
   }
 }

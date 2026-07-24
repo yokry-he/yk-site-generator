@@ -25,7 +25,15 @@ import {
   AlertTriangle,
   XCircle,
 } from 'lucide-vue-next'
-import { parseModelOutput, artifactToSingleHtml, type ArtifactMeta } from 'shared'
+import {
+  DEFAULT_GENERATION_MODE,
+  GENERATION_MODES,
+  artifactToSingleHtml,
+  getGenerationModeProfile,
+  parseModelOutput,
+  type ArtifactMeta,
+  type GenerationMode,
+} from 'shared'
 import AppSelect from './AppSelect.vue'
 import SectionHeading from './SectionHeading.vue'
 import MockSite from './MockSite.vue'
@@ -63,7 +71,13 @@ import {
 } from '../lib/iterationSession'
 
 const props = defineProps<{ prompt: string }>()
-const emit = defineEmits<{ (e: 'update:prompt', v: string): void }>()
+const emit = defineEmits<{
+  (e: 'update:prompt', v: string): void
+  (e: 'artifact', html: string): void
+  (e: 'site-type', value: string): void
+  (e: 'recovery', visible: boolean): void
+  (e: 'edit-artifact'): void
+}>()
 
 /** web 类型 id → prompts 包站点类型 id(不一致的做映射) */
 const SITE_TYPE_MAP: Record<string, string> = { business: 'corporate' }
@@ -87,6 +101,15 @@ const typeId = ref('portfolio')
 const logs = ref<string[]>([])
 const logBoxRef = ref<HTMLElement>()
 const previewWidth = ref<'desktop' | 'mobile'>('desktop')
+const GENERATION_MODE_STORAGE_KEY = 'siteforge:generation-mode-v1'
+const savedGenerationMode = localStorage.getItem(GENERATION_MODE_STORAGE_KEY)
+const generationMode = ref<GenerationMode>(
+  GENERATION_MODES.some((item) => item.id === savedGenerationMode)
+    ? savedGenerationMode as GenerationMode
+    : DEFAULT_GENERATION_MODE,
+)
+const generationModeProfile = computed(() => getGenerationModeProfile(generationMode.value))
+watch(generationMode, (value) => localStorage.setItem(GENERATION_MODE_STORAGE_KEY, value))
 
 const typeName = computed(() => typeById(typeId.value)?.name ?? '网站')
 const typeIcon = computed(() => typeById(typeId.value)?.icon)
@@ -186,6 +209,22 @@ const logText = computed(() => {
   return t.length > 2000 ? `……${t.slice(-2000)}` : t
 })
 
+function formatDuration(value?: number | null): string {
+  if (value === undefined || value === null) return ''
+  return value < 1000 ? `${Math.round(value)}ms` : `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)}s`
+}
+
+const performanceSummary = computed(() => {
+  const value = stream.performance.value
+  if (!value) return ''
+  const parts = [
+    value.firstTokenMs === undefined || value.firstTokenMs === null ? '' : `首 token ${formatDuration(value.firstTokenMs)}`,
+    value.durationMs ? `总耗时 ${formatDuration(value.durationMs)}` : '',
+    value.outputChars ? `${(value.outputChars / 1024).toFixed(1)} KB` : '',
+  ]
+  return parts.filter(Boolean).join(' · ')
+})
+
 /** 流式预览 HTML(生成中增量渲染;浏览器自带未闭合标签容错) */
 const partialHtml = computed(() => extractPartialHtml(stream.text.value))
 
@@ -226,6 +265,12 @@ const parseFailed = computed(
     !finalHtml.value &&
     session.value.rounds.length === 0,
 )
+
+watch(previewHtml, (html) => emit('artifact', html ?? ''), { immediate: true })
+watch(typeId, (value) => emit('site-type', value), { immediate: true })
+watch([phase, stream.canRetry], () => {
+  emit('recovery', phase.value === 'error' && stream.canRetry.value)
+}, { immediate: true })
 
 /* ============ 迭代会话(SF-1-6)与历史持久化(SF-1-7) ============ */
 const session = ref<IterationSession>(createSession())
@@ -329,6 +374,8 @@ function sendIteration() {
     apiKey: conn.apiKey,
     baseUrl: conn.baseUrl || undefined,
     siteType: SITE_TYPE_MAP[typeId.value] ?? typeId.value,
+    mode: generationMode.value,
+    maxTokens: generationModeProfile.value.maxTokens,
     requirement: props.prompt.trim(),
     history: [{ instruction, artifact: b.html, round: nextRoundNumber(session.value) }],
   })
@@ -350,6 +397,8 @@ function regenerateFromBase() {
     apiKey: conn.apiKey,
     baseUrl: conn.baseUrl || undefined,
     siteType: SITE_TYPE_MAP[typeId.value] ?? typeId.value,
+    mode: generationMode.value,
+    maxTokens: generationModeProfile.value.maxTokens,
     requirement: props.prompt.trim(),
     history: [{ instruction: b.instruction, artifact: b.html, round: nextRoundNumber(session.value) }],
   })
@@ -379,6 +428,8 @@ function start() {
     apiKey: conn.apiKey,
     baseUrl: conn.baseUrl || undefined,
     siteType: SITE_TYPE_MAP[typeId.value] ?? typeId.value,
+    mode: generationMode.value,
+    maxTokens: generationModeProfile.value.maxTokens,
     requirement: props.prompt.trim(),
   })
 }
@@ -387,6 +438,13 @@ function regenerate() {
   stream.reset()
   start()
 }
+
+function retryGeneration() {
+  if (stream.canRetry.value) void stream.retryLast()
+  else regenerate()
+}
+
+defineExpose({ retryGeneration })
 
 async function copyHtml() {
   const html = previewHtml.value
@@ -522,6 +580,24 @@ onBeforeUnmount(() => {
               </template>
             </AppSelect>
 
+            <label class="mt-5 mb-2 block text-sm font-medium text-sub">生成策略</label>
+            <div class="grid gap-2 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+              <button
+                v-for="item in GENERATION_MODES"
+                :key="item.id"
+                type="button"
+                class="rounded-xl border px-3 py-3 text-left transition"
+                :class="generationMode === item.id ? 'border-brand1/35 bg-brand1/[0.08] ring-2 ring-brand1/8' : 'border-line/10 bg-app/45 hover:border-brand1/20'"
+                @click="generationMode = item.id"
+              >
+                <span class="block text-xs font-semibold" :class="generationMode === item.id ? 'text-brand1' : 'text-ink'">{{ item.label }}</span>
+                <span class="mt-1 block text-[9px] leading-4 text-faint">{{ item.description }}</span>
+              </button>
+            </div>
+            <p class="mt-2 text-[10px] leading-5 text-faint">
+              {{ generationModeProfile.sectionGuidance }} · {{ generationModeProfile.outputTarget }} · 最大 {{ generationModeProfile.maxTokens }} tokens
+            </p>
+
             <div class="mt-6 flex gap-2">
               <button
                 :disabled="phase === 'generating'"
@@ -624,8 +700,9 @@ onBeforeUnmount(() => {
                       {{ s.label }}
                     </span>
                   </div>
-                  <p v-if="!isDemo && stream.tokenCount.value > 0" class="mt-2 text-[10px] text-faint">
-                    已接收 {{ stream.tokenCount.value }} tokens / {{ stream.charCount.value }} 字符
+                  <p v-if="!isDemo && stream.tokenCount.value > 0" class="mt-2 text-[10px] leading-5 text-faint">
+                    已接收 {{ stream.tokenCount.value }} 分片 / {{ stream.charCount.value }} 字符<br>
+                    {{ generationModeProfile.label }}<template v-if="stream.performance.value?.firstTokenMs != null"> · 首 token {{ formatDuration(stream.performance.value.firstTokenMs) }}</template>
                   </p>
                 </div>
                 <!-- 日志输出 -->
@@ -774,6 +851,7 @@ onBeforeUnmount(() => {
                     </template>
                     <template v-else>{{ typeName }} · 生成结束</template>
                   </p>
+                  <span v-if="!isDemo && performanceSummary" class="text-[10px] text-faint">{{ performanceSummary }}</span>
                   <div class="flex flex-wrap gap-2">
                     <button
                       v-if="!isDemo && viewing"
@@ -793,7 +871,7 @@ onBeforeUnmount(() => {
                     </button>
                     <button
                       class="bg-brand-gradient flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold text-white shadow-md shadow-brand1/25 transition-transform hover:scale-[1.03] active:scale-95"
-                      @click="toast.info('编辑器即将上线', '在线编辑器属于 V1 计划(SF-2-4),当前可通过工具条复制或导出 HTML。')"
+                      @click="emit('edit-artifact')"
                     >
                       <PencilRuler class="h-3.5 w-3.5" />
                       进入编辑

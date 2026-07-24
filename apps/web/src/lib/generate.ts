@@ -1,9 +1,5 @@
+import type { GenerationMode } from 'shared'
 import { apiUrl } from './api'
-
-/**
- * /api/generate SSE 客户端(SF-1-5)。
- * 框架无关,便于单测:fetch + ReadableStream 手动解析(POST 不能用 EventSource)。
- */
 
 export interface GenerateRequest {
   provider: string
@@ -12,8 +8,8 @@ export interface GenerateRequest {
   baseUrl?: string
   siteType: string
   requirement: string
-  /** 迭代历史(SF-1-6):artifact 为当前产物单 HTML,instruction 为本轮修改指令 */
   history?: { instruction: string; artifact?: string; round?: number }[]
+  mode?: GenerationMode
   maxTokens?: number
 }
 
@@ -24,12 +20,19 @@ export interface ParseSummary {
   warnings: string[]
 }
 
+export interface GeneratePerformance {
+  firstTokenMs?: number | null
+  durationMs: number
+  outputChars: number
+  generationMode?: GenerationMode
+  maxTokens?: number
+}
+
 export type GenerateEvent =
   | { type: 'token'; delta: string }
-  | { type: 'done'; parse: ParseSummary }
+  | { type: 'done'; parse: ParseSummary; performance?: GeneratePerformance }
   | { type: 'error'; code: string; message: string }
 
-/** HTTP 层错误(4xx/5xx JSON 错误体),带服务端错误分类 code */
 export class GenerateHttpError extends Error {
   status: number
   code: string
@@ -41,7 +44,6 @@ export class GenerateHttpError extends Error {
   }
 }
 
-/** 逐条解析 SSE 字节流为 { event, data } 对;畸形行/残缺事件容错跳过 */
 export async function* readSseEventStream(
   body: ReadableStream<Uint8Array>,
 ): AsyncGenerator<{ event: string; data: string }, void, unknown> {
@@ -71,10 +73,6 @@ export async function* readSseEventStream(
   }
 }
 
-/**
- * 发起生成请求并产出统一事件流。
- * 登录后自动携带 access token,让服务端记录额度;匿名模式仍可按原逻辑使用自备 Key。
- */
 export async function* generateSite(
   req: GenerateRequest,
   options: { signal?: AbortSignal; endpoint?: string } = {},
@@ -97,7 +95,7 @@ export async function* generateSite(
       if (json.error?.code) code = json.error.code
       if (json.error?.message) message = json.error.message
     } catch {
-      /* 非 JSON 错误体,用默认信息 */
+      // Non-JSON error body.
     }
     throw new GenerateHttpError(res.status, code, message)
   }
@@ -109,14 +107,15 @@ export async function* generateSite(
         const parsed = JSON.parse(ev.data) as { delta?: string }
         if (parsed.delta) yield { type: 'token', delta: parsed.delta }
       } catch {
-        /* 畸形 token 行:跳过 */
+        // Skip malformed token events without terminating the stream.
       }
     } else if (ev.event === 'done') {
       try {
-        const parsed = JSON.parse(ev.data) as { parse?: ParseSummary }
+        const parsed = JSON.parse(ev.data) as { parse?: ParseSummary; performance?: GeneratePerformance }
         yield {
           type: 'done',
           parse: parsed.parse ?? { ok: false, fileCount: 0, warnings: ['done 事件缺少解析摘要'] },
+          performance: parsed.performance,
         }
       } catch {
         yield { type: 'done', parse: { ok: false, fileCount: 0, warnings: ['done 事件解析失败'] } }
@@ -129,14 +128,13 @@ export async function* generateSite(
         if (parsed.code) code = parsed.code
         if (parsed.message) message = parsed.message
       } catch {
-        /* 用默认错误 */
+        // Use defaults.
       }
       yield { type: 'error', code, message }
     }
   }
 }
 
-/** 从已累计的模型输出中提取可用于 iframe 增量预览的 HTML 片段 */
 export function extractPartialHtml(text: string): string | null {
   const start = text.search(/<!doctype html|<html[\s>]/i)
   if (start < 0) return null
