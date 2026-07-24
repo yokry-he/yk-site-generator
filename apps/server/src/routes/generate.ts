@@ -191,6 +191,9 @@ generate.post('/', async (c) => {
 
     // 流结束:服务端解析产物并给出摘要
     const parsed = parseModelOutput(fullText)
+    const durationMs = Date.now() - startedAt
+    const firstTokenMs = firstTokenAt === null ? null : firstTokenAt - startedAt
+    const maxTokens = body.maxTokens ?? generationProfile.maxTokens
     await recordSystemEvent({
       level: parsed ? 'info' : 'warning',
       source: 'generation',
@@ -199,12 +202,15 @@ generate.post('/', async (c) => {
         ? `${body.provider}/${body.model} 生成完成`
         : `${body.provider}/${body.model} 输出无法解析为产物`,
       requestId,
-      durationMs: Date.now() - startedAt,
+      durationMs,
       metadata: {
         provider: body.provider,
         model: body.model,
         siteType: body.siteType,
         mode,
+        generationMode: body.mode,
+        firstTokenMs,
+        maxTokens,
         outputChars: fullText.length,
         fileCount: parsed?.tree.files.length ?? 0,
         warningCount: parsed?.warnings.length ?? 1,
@@ -215,11 +221,11 @@ generate.post('/', async (c) => {
       event: 'done',
       data: JSON.stringify({
         performance: {
-          firstTokenMs: firstTokenAt === null ? null : firstTokenAt - startedAt,
-          durationMs: Date.now() - startedAt,
+          firstTokenMs,
+          durationMs,
           outputChars: fullText.length,
           generationMode: body.mode,
-          maxTokens: body.maxTokens ?? generationProfile.maxTokens,
+          maxTokens,
         },
         parse: parsed
           ? {
