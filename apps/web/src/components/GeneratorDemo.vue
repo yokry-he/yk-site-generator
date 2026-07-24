@@ -95,6 +95,8 @@ const { activeProvider, activeConnection } = useModelConfig()
 const { show: showModelSettings } = useModelDialog()
 const toast = useToast()
 const stream = useGenerateStream()
+// Session must exist before eager computed/watch sources evaluate during setup.
+const session = ref<IterationSession>(createSession())
 
 const tab = ref<'ai' | 'template'>('ai')
 const typeId = ref('portfolio')
@@ -273,7 +275,6 @@ watch([phase, stream.canRetry], () => {
 }, { immediate: true })
 
 /* ============ 迭代会话(SF-1-6)与历史持久化(SF-1-7) ============ */
-const session = ref<IterationSession>(createSession())
 const instructionInput = ref('')
 /** 当前这次流式生成对应的指令(初生成=需求,迭代=修改意见) */
 let pendingInstruction = ''
