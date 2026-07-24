@@ -22,6 +22,7 @@ import {
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
+import { confirmDialog } from '../composables/useConfirmDialog'
 import { useAuthDialog } from '../composables/useAuthDialog'
 import { useToast } from '../composables/useToast'
 import { ApiError } from '../lib/api'
@@ -174,7 +175,13 @@ async function save() {
 
 async function remove(asset: BrandAsset) {
   openMenu.value = ''
-  if (!window.confirm(`永久删除资源「${asset.name}」？已插入项目的副本不会受影响。`)) return
+  const confirmed = await confirmDialog({
+    title: `删除资源「${asset.name}」？`,
+    description: '资源库中的原文件会被删除；已经插入项目版本的副本不会受影响。',
+    confirmLabel: '删除资源',
+    tone: 'danger',
+  })
+  if (!confirmed) return
   actionBusy.value = asset.id
   try {
     await deleteBrandAsset(asset.id)

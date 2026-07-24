@@ -25,6 +25,7 @@ import {
   X,
 } from 'lucide-vue-next'
 import { useAuth } from '../composables/useAuth'
+import { confirmDialog } from '../composables/useConfirmDialog'
 import { useAuthDialog } from '../composables/useAuthDialog'
 import { useToast } from '../composables/useToast'
 import { typeById } from '../data/siteTypes'
@@ -55,7 +56,6 @@ const editingId = ref('')
 const editingTitle = ref('')
 const actionBusyId = ref('')
 const openMenu = ref('')
-const permanentConfirmId = ref('')
 
 const counts = computed(() => ({
   active: projects.value.filter((project) => project.status === 'active').length,
@@ -141,16 +141,20 @@ async function clone(project: CloudProject) {
 }
 
 async function permanentlyDelete(project: CloudProject) {
-  if (permanentConfirmId.value !== project.id) {
-    permanentConfirmId.value = project.id
-    toast.info('再次点击永久删除', '该操作会删除全部版本和反馈，无法恢复。')
-    return
-  }
+  openMenu.value = ''
+  const confirmed = await confirmDialog({
+    title: `永久删除「${project.title}」？`,
+    description: '项目、全部不可变版本、质量反馈和发布关联都会被移除，且无法恢复。',
+    confirmLabel: '永久删除',
+    tone: 'danger',
+    verificationText: project.title,
+    verificationLabel: `请输入项目名称「${project.title}」确认`,
+  })
+  if (!confirmed) return
   actionBusyId.value = project.id
   try {
     await deleteProject(project.id)
     projects.value = projects.value.filter((item) => item.id !== project.id)
-    permanentConfirmId.value = ''
     toast.success('项目已永久删除')
   } catch (err) { toast.error('删除失败', messageOf(err)) } finally { actionBusyId.value = '' }
 }
@@ -208,7 +212,7 @@ onBeforeUnmount(() => window.removeEventListener('siteforge:projects-updated', h
                 <div v-if="editingId === project.id" class="flex min-w-0 flex-1 items-center gap-2"><input v-model="editingTitle" maxlength="120" autofocus class="min-w-0 flex-1 rounded-lg border border-brand1/35 bg-app/70 px-2.5 py-1.5 text-sm font-semibold outline-none" @keyup.enter="saveRename(project)" @keyup.escape="editingId = ''" /><button class="rounded-lg bg-brand1/12 p-2 text-brand1" @click="saveRename(project)"><Check class="h-3.5 w-3.5" /></button></div>
                 <button v-else class="min-w-0 flex-1 text-left" @click="router.push(`/projects/${project.id}`)"><h2 class="truncate text-base font-semibold text-ink group-hover:text-brand1">{{ project.title }}</h2><p class="mt-1 line-clamp-2 text-xs leading-5 text-mut">{{ project.requirement || '暂无需求描述' }}</p></button>
                 <button class="rounded-lg p-1.5" :class="project.starred ? 'text-amber-500' : 'text-faint hover:text-amber-500'" :title="project.starred ? '取消收藏' : '收藏项目'" @click="patch(project,{starred:!project.starred})"><Star class="h-4 w-4" :fill="project.starred ? 'currentColor' : 'none'" /></button>
-                <div class="relative"><button class="rounded-lg p-1.5 text-faint hover:bg-ink/5 hover:text-ink" @click="openMenu = openMenu === project.id ? '' : project.id"><MoreHorizontal class="h-4 w-4" /></button><div v-if="openMenu === project.id" class="absolute top-8 right-0 z-20 w-44 rounded-xl border border-line/10 bg-soft/98 p-1.5 shadow-2xl"><button class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-sub hover:bg-ink/5" @click="startRename(project)"><Pencil class="h-3.5 w-3.5" />重命名</button><button class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-sub hover:bg-ink/5" @click="clone(project)"><Copy class="h-3.5 w-3.5" />创建副本</button><button v-if="project.status === 'active'" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-sub hover:bg-ink/5" @click="patch(project,{status:'archived'})"><Archive class="h-3.5 w-3.5" />归档</button><button v-if="project.status !== 'active'" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-sub hover:bg-ink/5" @click="patch(project,{status:'active'})"><RotateCcw class="h-3.5 w-3.5" />恢复到进行中</button><button v-if="project.status !== 'trashed'" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-red-500 hover:bg-red-500/[0.06]" @click="patch(project,{status:'trashed'})"><Trash2 class="h-3.5 w-3.5" />移入回收站</button><button v-else class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-red-500 hover:bg-red-500/[0.06]" @click="permanentlyDelete(project)"><X class="h-3.5 w-3.5" />{{ permanentConfirmId === project.id ? '确认永久删除' : '永久删除' }}</button></div></div>
+                <div class="relative"><button class="rounded-lg p-1.5 text-faint hover:bg-ink/5 hover:text-ink" @click="openMenu = openMenu === project.id ? '' : project.id"><MoreHorizontal class="h-4 w-4" /></button><div v-if="openMenu === project.id" class="absolute top-8 right-0 z-20 w-44 rounded-xl border border-line/10 bg-soft/98 p-1.5 shadow-2xl"><button class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-sub hover:bg-ink/5" @click="startRename(project)"><Pencil class="h-3.5 w-3.5" />重命名</button><button class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-sub hover:bg-ink/5" @click="clone(project)"><Copy class="h-3.5 w-3.5" />创建副本</button><button v-if="project.status === 'active'" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-sub hover:bg-ink/5" @click="patch(project,{status:'archived'})"><Archive class="h-3.5 w-3.5" />归档</button><button v-if="project.status !== 'active'" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-sub hover:bg-ink/5" @click="patch(project,{status:'active'})"><RotateCcw class="h-3.5 w-3.5" />恢复到进行中</button><button v-if="project.status !== 'trashed'" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-red-500 hover:bg-red-500/[0.06]" @click="patch(project,{status:'trashed'})"><Trash2 class="h-3.5 w-3.5" />移入回收站</button><button v-else class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-red-500 hover:bg-red-500/[0.06]" @click="permanentlyDelete(project)"><X class="h-3.5 w-3.5" />永久删除</button></div></div>
               </div>
 
               <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line/8 pt-3 text-[10px] text-faint"><span class="flex items-center gap-1"><Clock3 class="h-3 w-3" />更新 {{ formatDate(project.updatedAt) }}</span><span>{{ project.latestVersion ? `第 ${project.latestVersion.version} 版` : '尚无版本' }}</span><span v-if="project.templateId" class="rounded bg-violet-500/10 px-1.5 py-0.5 text-violet-500">官方模板</span><Loader2 v-if="actionBusyId === project.id" class="ml-auto h-3.5 w-3.5 animate-spin text-brand1" /></div>
