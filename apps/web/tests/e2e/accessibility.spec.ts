@@ -8,13 +8,28 @@ async function expectNoSeriousViolations(page: import('@playwright/test').Page) 
   expect(serious, serious.map((item) => `${item.id}: ${item.description}`).join('\n')).toEqual([])
 }
 
-test('public pages have no serious accessibility violations', async ({ page }) => {
+const PUBLIC_ROUTES = [
+  '/',
+  '/starters',
+  '/starters/aurora-product-launch',
+  '/templates',
+  '/templates/aurora-saas',
+  '/generator',
+]
+
+test('public pages mount and have no serious accessibility violations', async ({ page }) => {
   await mockPublicApi(page)
-  for (const path of ['/', '/templates', '/templates/aurora-saas', '/generator']) {
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+
+  for (const path of PUBLIC_ROUTES) {
     await page.goto(path)
     await expect(page.locator('#main-content')).toBeVisible()
+    await expect(page.locator('#main-content')).not.toBeEmpty()
     await expectNoSeriousViolations(page)
   }
+
+  expect(pageErrors, pageErrors.join('\n')).toEqual([])
 })
 
 test('skip link and shortcut dialog work from keyboard', async ({ page }) => {
@@ -45,7 +60,7 @@ test('drawer traps focus and restores it to trigger', async ({ page }) => {
 test('mobile layouts avoid horizontal page overflow', async ({ page, isMobile }) => {
   test.skip(!isMobile, 'mobile viewport assertion')
   await mockPublicApi(page)
-  for (const path of ['/', '/templates', '/templates/aurora-saas', '/generator']) {
+  for (const path of PUBLIC_ROUTES) {
     await page.goto(path)
     const dimensions = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth }))
     expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.width + 2)
