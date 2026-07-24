@@ -147,15 +147,24 @@ jobs:
       - name: 安装 Chromium
         run: pnpm --filter web exec playwright install --with-deps chromium
       - name: 浏览器性能基线与门槛
+        shell: bash
         env:
           PERF_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: pnpm --filter web performance:baseline
+        run: |
+          set -o pipefail
+          mkdir -p artifacts
+          pnpm --filter web performance:baseline 2>&1 | tee artifacts/web-performance.log
       - name: 写入性能摘要
         if: always()
         shell: bash
         run: |
           if [[ -f artifacts/web-performance.md ]]; then
             cat artifacts/web-performance.md >> "$GITHUB_STEP_SUMMARY"
+          elif [[ -f artifacts/web-performance.log ]]; then
+            echo '## Web performance diagnostic' >> "$GITHUB_STEP_SUMMARY"
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 80 artifacts/web-performance.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: 上传性能报告
         if: always()
@@ -165,7 +174,8 @@ jobs:
           path: |
             artifacts/web-performance.json
             artifacts/web-performance.md
-          if-no-files-found: warn
+            artifacts/web-performance.log
+          if-no-files-found: error
           retention-days: 30
 
   mysql-integration:
