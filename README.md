@@ -190,6 +190,8 @@ cp apps/server/.env.example apps/server/.env
 pnpm dev
 ```
 
+服务端通过 `dotenv` 自动加载 `apps/server/.env`，无需在终端执行 `source`。操作系统、Docker、CI 或部署平台已经注入的环境变量优先，不会被本地文件覆盖；修改 `.env` 后需重启服务端进程。
+
 默认地址：
 
 - Web：`http://localhost:5173`

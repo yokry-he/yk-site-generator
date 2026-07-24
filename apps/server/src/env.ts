@@ -1,4 +1,8 @@
+import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
+import { loadEnvironmentFile } from './lib/load-environment'
+
+loadEnvironmentFile(fileURLToPath(new URL('../.env', import.meta.url)))
 
 const DEV_JWT_SECRET = 'siteforge-development-secret-change-before-production-2026'
 
