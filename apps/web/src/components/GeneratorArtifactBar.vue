@@ -193,8 +193,8 @@ defineExpose({ openEditor })
           <button :disabled="busy === 'share'" class="flex items-center justify-center gap-1.5 rounded-xl border border-line/12 bg-ink/[0.04] px-3.5 py-2.5 text-xs font-medium text-sub transition-colors hover:bg-ink/[0.08] hover:text-ink disabled:opacity-50" @click="share ? copyShare() : createShare()">
             <Loader2 v-if="busy === 'share'" class="h-3.5 w-3.5 animate-spin" /><Check v-else-if="copied" class="h-3.5 w-3.5 text-emerald-500" /><Link2 v-else class="h-3.5 w-3.5" />{{ share ? (copied ? '已复制' : '复制链接') : '7 天分享' }}
           </button>
-          <button class="flex items-center justify-center gap-1.5 rounded-xl border border-brand1/20 bg-brand1/[0.07] px-3.5 py-2.5 text-xs font-semibold text-brand1 transition-colors hover:bg-brand1/[0.13]" @click="openEditor">
-            <PencilRuler class="h-3.5 w-3.5" />可视化编辑
+          <button class="flex items-center justify-center gap-1.5 rounded-xl border border-brand1/28 bg-brand1/[0.07] px-3.5 py-2.5 text-xs font-semibold text-ink transition-colors hover:bg-brand1/[0.13]" @click="openEditor">
+            <PencilRuler class="h-3.5 w-3.5 text-brand1" />可视化编辑
           </button>
           <button :disabled="busy === 'cloud'" class="bg-brand-gradient flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-white shadow-md shadow-brand1/20 disabled:opacity-50" @click="saveCloud()">
             <Loader2 v-if="busy === 'cloud'" class="h-3.5 w-3.5 animate-spin" /><Cloud v-else-if="isAuthenticated" class="h-3.5 w-3.5" /><UserRound v-else class="h-3.5 w-3.5" />{{ isAuthenticated ? (cloudProjectId ? '保存新版本' : '保存到云端') : '登录并保存' }}

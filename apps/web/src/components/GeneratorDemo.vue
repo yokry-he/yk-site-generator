@@ -95,6 +95,8 @@ const { activeProvider, activeConnection } = useModelConfig()
 const { show: showModelSettings } = useModelDialog()
 const toast = useToast()
 const stream = useGenerateStream()
+// Session must exist before eager computed/watch sources evaluate during setup.
+const session = ref<IterationSession>(createSession())
 
 const tab = ref<'ai' | 'template'>('ai')
 const typeId = ref('portfolio')
@@ -273,7 +275,6 @@ watch([phase, stream.canRetry], () => {
 }, { immediate: true })
 
 /* ============ 迭代会话(SF-1-6)与历史持久化(SF-1-7) ============ */
-const session = ref<IterationSession>(createSession())
 const instructionInput = ref('')
 /** 当前这次流式生成对应的指令(初生成=需求,迭代=修改意见) */
 let pendingInstruction = ''
@@ -590,7 +591,7 @@ onBeforeUnmount(() => {
                 :class="generationMode === item.id ? 'border-brand1/35 bg-brand1/[0.08] ring-2 ring-brand1/8' : 'border-line/10 bg-app/45 hover:border-brand1/20'"
                 @click="generationMode = item.id"
               >
-                <span class="block text-xs font-semibold" :class="generationMode === item.id ? 'text-brand1' : 'text-ink'">{{ item.label }}</span>
+                <span class="block text-xs font-semibold text-ink">{{ item.label }}</span>
                 <span class="mt-1 block text-[9px] leading-4 text-faint">{{ item.description }}</span>
               </button>
             </div>
