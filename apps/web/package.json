@@ -15,6 +15,7 @@
     "e2e:visual": "playwright test --grep @visual",
     "e2e:visual:update": "playwright test --grep @visual --update-snapshots",
     "check:bundle-budget": "tsx scripts/check-bundle-budget.ts",
+    "performance:baseline": "tsx scripts/performance-baseline.ts",
     "typecheck": "vue-tsc -b"
   },
   "dependencies": {

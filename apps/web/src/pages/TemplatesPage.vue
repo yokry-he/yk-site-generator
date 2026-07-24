@@ -50,10 +50,14 @@ const toast = useToast()
 
 const searchRef = ref<HTMLInputElement>()
 const dialogRef = ref<HTMLElement>()
-const templates = ref<OfficialTemplateDefinition[]>([])
-const filters = ref<OfficialTemplateFilters>({ categories: [], industries: [], styles: [] })
+const templates = ref<OfficialTemplateDefinition[]>(SITEFORGE_TEMPLATES)
+const filters = ref<OfficialTemplateFilters>({
+  categories: [...new Set(SITEFORGE_TEMPLATES.map((item) => item.category))],
+  industries: [...new Set(SITEFORGE_TEMPLATES.map((item) => item.industry))],
+  styles: [...new Set(SITEFORGE_TEMPLATES.flatMap((item) => item.styleTags))],
+})
 const brandKits = ref<BrandKit[]>([])
-const loading = ref(true)
+const loading = ref(false)
 const refreshing = ref(false)
 const error = ref('')
 const query = ref('')
@@ -267,7 +271,7 @@ watch(() => route.query.template, (value) => {
 onMounted(async () => {
   favorites.value = localFavorites()
   window.addEventListener('keydown', onKeydown)
-  await Promise.all([loadCatalog(), loadAccountData()])
+  await Promise.all([loadCatalog(true), loadAccountData()])
   const slug = typeof route.query.template === 'string' ? route.query.template : ''
   const template = templates.value.find((item) => item.slug === slug)
   if (template) await openTemplate(template)
