@@ -6,6 +6,7 @@ import { parseModelOutput } from 'shared'
 import { authenticateBearerHeader } from '../lib/auth'
 import { connectTimeoutMs, totalTimeoutMs } from '../lib/config'
 import { recordSystemEvent, requestIdFromContext } from '../lib/observability'
+import { validateProviderBaseUrl } from '../lib/provider-url-policy'
 import { QuotaExceededError, refundUsage, reserveGenerationUsage } from '../lib/quota'
 import { takeToken } from '../lib/rate-limit'
 import {
@@ -61,8 +62,14 @@ generate.post('/', async (c) => {
   let body: z.infer<typeof bodySchema>
   try {
     body = bodySchema.parse(await c.req.json())
+    body.baseUrl = validateProviderBaseUrl(body.baseUrl)
   } catch (err) {
-    const msg = err instanceof z.ZodError ? err.issues.map((i) => i.message).join(';') : '请求体不是合法 JSON'
+    const msg =
+      err instanceof z.ZodError
+        ? err.issues.map((i) => i.message).join(';')
+        : err instanceof Error
+          ? err.message
+          : '请求体不是合法 JSON'
     return c.json(errorBody('BAD_REQUEST', `参数校验失败:${msg}`), 400)
   }
 
