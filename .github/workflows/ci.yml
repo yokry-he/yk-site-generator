@@ -203,7 +203,17 @@ jobs:
           path: generation-typecheck.log
           retention-days: 7
       - name: 全仓测试
-        run: pnpm test
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm test 2>&1 | tee generation-test.log
+      - name: 上传生成优化测试诊断
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generation-test-log
+          path: generation-test.log
+          retention-days: 7
       - name: 全仓构建
         run: pnpm build
       - name: 提交最终代码并清理临时文件
