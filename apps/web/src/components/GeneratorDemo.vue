@@ -591,7 +591,7 @@ onBeforeUnmount(() => {
                 :class="generationMode === item.id ? 'border-brand1/35 bg-brand1/[0.08] ring-2 ring-brand1/8' : 'border-line/10 bg-app/45 hover:border-brand1/20'"
                 @click="generationMode = item.id"
               >
-                <span class="block text-xs font-semibold" :class="generationMode === item.id ? 'text-brand1' : 'text-ink'">{{ item.label }}</span>
+                <span class="block text-xs font-semibold text-ink">{{ item.label }}</span>
                 <span class="mt-1 block text-[9px] leading-4 text-faint">{{ item.description }}</span>
               </button>
             </div>
