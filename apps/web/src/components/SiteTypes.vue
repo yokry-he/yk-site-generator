@@ -36,7 +36,7 @@ import { SITE_TYPES, TYPE_GROUPS } from '../data/siteTypes'
                 <span
                   v-for="tag in t.tags"
                   :key="tag"
-                  class="rounded-md border border-line/12 bg-ink/[0.04] px-2 py-0.5 text-[11px] text-sub"
+                  class="rounded-md border border-line/12 bg-ink/[0.04] px-2 py-0.5 text-[11px] text-ink"
                 >
                   {{ tag }}
                 </span>
