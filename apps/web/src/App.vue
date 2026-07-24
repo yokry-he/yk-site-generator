@@ -29,7 +29,7 @@ watch(() => user.value?.id, () => void loadFeatures())
   <div class="min-h-screen bg-app text-ink">
     <a href="#main-content" class="fixed top-2 left-2 z-[300] -translate-y-20 rounded-xl bg-brand1 px-4 py-2 text-sm font-semibold text-white transition-transform focus:translate-y-0">跳到主要内容</a>
     <NavBar />
-    <div id="main-content" tabindex="-1">
+    <div id="main-content" tabindex="-1" class="min-h-[calc(100vh-4rem)]">
       <RouterView v-slot="{ Component }"><component :is="Component" /></RouterView>
     </div>
     <SiteFooter />
