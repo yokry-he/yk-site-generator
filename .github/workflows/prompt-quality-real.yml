@@ -1,10 +1,6 @@
 name: Prompt Quality Real Model
 
 on:
-  push:
-    branches: [agent/real-model-quality-matrix-20260724]
-  pull_request:
-    branches: [agent/beta-readiness-foundation-20260724]
   workflow_dispatch:
     inputs:
       runs:
@@ -39,7 +35,7 @@ jobs:
       EVAL_RUNS: ${{ inputs.runs || '3' }}
       EVAL_CONCURRENCY: ${{ inputs.concurrency || '3' }}
       EVAL_TIMEOUT_MS: '180000'
-      EVAL_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      EVAL_COMMIT_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
