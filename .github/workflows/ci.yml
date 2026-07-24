@@ -21,6 +21,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Lint
         run: pnpm lint
+      - name: 双语文档检查 / Bilingual docs
+        run: pnpm docs:check
       - name: Typecheck
         shell: bash
         run: |
