@@ -1,0 +1,74 @@
+name: Agent fix generation contrast
+
+on:
+  push:
+    branches:
+      - agent/continue-development-20260723
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply exact contrast fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              Path('apps/web/src/components/GenerationBrief.vue'): [
+                  (
+                      'bg-brand1/10 px-2 py-0.5 text-[11px] font-semibold text-brand1',
+                      'bg-brand1/10 px-2 py-0.5 text-[11px] font-semibold text-sub',
+                  ),
+              ],
+              Path('apps/web/src/components/GeneratorDemo.vue'): [
+                  (
+                      'class="flex items-center gap-1 font-medium text-brand1 underline-offset-2 hover:underline"',
+                      'class="flex items-center gap-1 font-medium text-sub underline-offset-2 hover:underline"',
+                  ),
+                  (
+                      'class="text-xs text-faint/70">AI 将在这里实时构建你的网站</p>',
+                      'class="text-xs text-mut">AI 将在这里实时构建你的网站</p>',
+                  ),
+              ],
+          }
+
+          for path, pairs in replacements.items():
+              text = path.read_text(encoding='utf-8')
+              for old, new in pairs:
+                  count = text.count(old)
+                  if count == 1:
+                      text = text.replace(old, new)
+                  elif count == 0 and new in text:
+                      pass
+                  else:
+                      raise SystemExit(f'{path}: expected exactly one target, found {count}: {old}')
+              path.write_text(text, encoding='utf-8')
+          PY
+
+          grep -n "完成度\|去接入\|AI 将在这里实时构建你的网站" \
+            apps/web/src/components/GenerationBrief.vue \
+            apps/web/src/components/GeneratorDemo.vue
+          git diff --check
+          git diff -- apps/web/src/components/GenerationBrief.vue apps/web/src/components/GeneratorDemo.vue
+
+      - name: Commit fixes
+        run: |
+          if git diff --quiet; then
+            echo "Contrast fixes already present."
+            exit 0
+          fi
+          git config user.name "siteforge-agent"
+          git config user.email "siteforge-agent@users.noreply.github.com"
+          git add apps/web/src/components/GenerationBrief.vue apps/web/src/components/GeneratorDemo.vue
+          git commit -m "fix(web): resolve generation page contrast"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
