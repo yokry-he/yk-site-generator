@@ -4,16 +4,22 @@ on:
   push:
     branches:
       - agent/dotenv-server-env-loading-20260724
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - agent/ownership-and-brand-kit-assets-20260724
 
 permissions:
   contents: write
 
 jobs:
   apply:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && (github.event_name != 'pull_request' || github.head_ref == 'agent/dotenv-server-env-loading-20260724')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: agent/dotenv-server-env-loading-20260724
       - uses: pnpm/action-setup@v4
         with:
           version: 11
@@ -144,4 +150,4 @@ pnpm dev
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add README.md apps/server/package.json apps/server/src/env.ts apps/server/src/lib/load-environment.ts apps/server/test/dotenv-loading.test.ts pnpm-lock.yaml .github/workflows/apply-dotenv-env-loading.yml
           git commit -m "chore: load server environment with dotenv"
-          git push
+          git push origin HEAD:agent/dotenv-server-env-loading-20260724
