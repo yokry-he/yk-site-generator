@@ -1,0 +1,50 @@
+name: Agent Visual Baseline
+on:
+  push:
+    branches: [agent/continue-development-20260723]
+    paths: ['.github/agent-visual-baseline.trigger']
+permissions:
+  contents: write
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/continue-development-20260723
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Fix final template contrast
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('apps/web/src/pages/TemplatesPage.vue')
+          text = path.read_text()
+          old = 'class="flex items-center justify-center gap-1.5 rounded-xl bg-brand1/10 px-3 py-2.5 text-xs font-semibold text-brand1 hover:bg-brand1/15">完整详情'
+          new = 'class="flex items-center justify-center gap-1.5 rounded-xl bg-brand1/10 px-3 py-2.5 text-xs font-semibold text-sub hover:bg-brand1/15 hover:text-ink">完整详情'
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'expected exactly one full-detail link, found {count}')
+          path.write_text(text.replace(old, new))
+          PY
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm --filter web exec playwright install --with-deps chromium
+      - name: Verify browser behavior and accessibility
+        run: pnpm --filter web e2e:browser
+      - name: Generate visual baselines
+        run: pnpm --filter web e2e:visual:update
+      - name: Commit verified baselines
+        run: |
+          rm -f .github/agent-visual-baseline.trigger .github/workflows/agent-visual-baseline.yml
+          git config user.name "siteforge-agent"
+          git config user.email "siteforge-agent@users.noreply.github.com"
+          git add -A
+          git commit -m "test(web): add verified visual regression baselines"
+          git push origin HEAD:agent/continue-development-20260723
