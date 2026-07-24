@@ -46,6 +46,8 @@ export function useGenerateStream() {
   let startedAt = 0
   let firstTokenAt = 0
 
+  // iframe srcdoc follows `text`, so cap reactive commits to roughly eight per second.
+  // This keeps the live preview responsive without reparsing and reloading for every provider fragment.
   const buffer = createStreamTextBuffer((delta, count) => {
     text.value += delta
     tokenCount.value += count
@@ -55,7 +57,7 @@ export function useGenerateStream() {
       durationMs: startedAt ? Date.now() - startedAt : 0,
       outputChars: text.value.length,
     }
-  })
+  }, 120)
 
   const charCount = computed(() => text.value.length)
   const isActive = computed(() => phase.value === 'connecting' || phase.value === 'streaming' || phase.value === 'parsing')
