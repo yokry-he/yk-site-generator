@@ -26,8 +26,8 @@ jobs:
           replacements = {
               Path('apps/web/src/components/GenerationBrief.vue'): [
                   (
-                      'bg-brand1/10 px-2 py-0.5 text-[11px] font-semibold text-brand1',
-                      'bg-brand1/10 px-2 py-0.5 text-[11px] font-semibold text-sub',
+                      'hidden rounded-full bg-brand1/10 px-3 py-1.5 text-[10px] font-semibold text-brand1 sm:block',
+                      'hidden rounded-full bg-brand1/10 px-3 py-1.5 text-[10px] font-semibold text-sub sm:block',
                   ),
               ],
               Path('apps/web/src/components/GeneratorDemo.vue'): [
