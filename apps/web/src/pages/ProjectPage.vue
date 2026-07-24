@@ -331,6 +331,7 @@ onMounted(() => void load())
       <header class="flex flex-wrap items-center gap-3 border-b border-line/10 py-4">
         <button class="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm text-mut hover:bg-ink/5 hover:text-ink" @click="router.push('/projects')"><ArrowLeft class="h-4 w-4" />项目列表</button>
         <div v-if="detail" class="min-w-0 flex-1"><div class="flex items-center gap-2"><h1 class="truncate text-base font-semibold">{{ detail.project.title }}</h1><span v-if="detail.project.templateId" class="rounded bg-violet-500/10 px-2 py-0.5 text-[9px] text-violet-500">官方模板</span></div><p class="truncate text-xs text-faint">{{ detail.project.requirement || '暂无需求描述' }}</p></div>
+        <div v-else class="min-w-0 flex-1" aria-hidden="true"><div class="h-5 w-44 animate-pulse rounded bg-ink/[0.05]" /><div class="mt-1.5 h-3 w-72 max-w-full animate-pulse rounded bg-ink/[0.035]" /></div>
         <div class="ml-auto flex flex-wrap items-center justify-end gap-2">
           <button :disabled="loading" class="rounded-lg p-2 text-faint hover:bg-ink/5 hover:text-ink disabled:opacity-40" title="刷新项目" @click="load(selected?.id)"><RefreshCw class="h-4 w-4" :class="loading && 'animate-spin'" /></button>
           <button class="flex items-center gap-1.5 rounded-xl border border-line/12 bg-ink/[0.04] px-3 py-2.5 text-xs font-medium text-sub lg:hidden" @click="mobileVersionsOpen = true"><History class="h-3.5 w-3.5" />版本</button>
@@ -342,7 +343,10 @@ onMounted(() => void load())
       </header>
 
       <div v-if="error" class="mt-5 rounded-2xl border border-red-500/20 bg-red-500/[0.06] p-4 text-sm text-red-500">{{ error }}</div>
-      <div v-if="loading && !detail" class="flex min-h-[65vh] items-center justify-center"><Loader2 class="h-7 w-7 animate-spin text-brand1" /></div>
+      <div v-if="loading && !detail" class="mt-5 grid min-h-[720px] gap-5 lg:grid-cols-[300px_minmax(0,1fr)]" aria-label="正在加载项目工作区">
+        <aside class="hidden animate-pulse rounded-2xl border border-line/10 bg-soft/65 lg:block"><div class="h-12 border-b border-line/10" /><div class="space-y-3 p-3"><div v-for="item in 5" :key="item" class="h-20 rounded-xl bg-ink/[0.035]" /></div></aside>
+        <section class="animate-pulse overflow-hidden rounded-2xl border border-line/10 bg-soft/60"><div class="h-14 border-b border-line/10 bg-app/45" /><div class="grid gap-4 p-7 sm:grid-cols-2 xl:grid-cols-4"><div v-for="item in 4" :key="item" class="h-32 rounded-2xl bg-ink/[0.035]" /></div><div class="mx-7 h-64 rounded-2xl bg-ink/[0.025]" /></section>
+      </div>
 
       <div v-else-if="detail" class="mt-5 grid min-h-[720px] gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
         <aside class="hidden overflow-hidden rounded-2xl border border-line/10 bg-soft/65 lg:block">

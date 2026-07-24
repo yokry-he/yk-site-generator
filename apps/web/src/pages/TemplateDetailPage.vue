@@ -42,7 +42,7 @@ const variables = ref<Record<string, string>>({})
 const viewport = ref<'desktop' | 'tablet' | 'mobile'>('desktop')
 const colorVariant = ref<'original' | 'cool' | 'warm'>('original')
 const selectedBrandKitId = ref('')
-const loading = ref(true)
+const loading = ref(false)
 const creating = ref(false)
 
 const slug = computed(() => String(route.params.slug ?? ''))
@@ -79,7 +79,6 @@ const similar = computed(() => {
 const generatedPrompt = computed(() => template.value ? `基于「${template.value.name}」的结构，创建一个${typeById(template.value.siteType)?.name ?? template.value.siteType}。保留${template.value.styleTags.join('、')}的视觉方向，但根据以下内容深度定制：${variables.value.headline || template.value.description}` : '')
 
 async function load() {
-  loading.value = true
   try {
     const catalog = await listOfficialTemplates()
     templates.value = catalog.templates
