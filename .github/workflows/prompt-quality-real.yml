@@ -3,6 +3,8 @@ name: Prompt Quality Real Model
 on:
   push:
     branches: [agent/real-model-quality-matrix-20260724]
+  pull_request:
+    branches: [agent/beta-readiness-foundation-20260724]
   workflow_dispatch:
     inputs:
       runs:
@@ -37,7 +39,7 @@ jobs:
       EVAL_RUNS: ${{ inputs.runs || '3' }}
       EVAL_CONCURRENCY: ${{ inputs.concurrency || '3' }}
       EVAL_TIMEOUT_MS: '180000'
-      EVAL_COMMIT_SHA: ${{ github.sha }}
+      EVAL_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -68,7 +70,7 @@ jobs:
           mkdir -p artifacts/public artifacts/private
           if [[ -z "${EVAL_API_KEY:-}" || -z "${EVAL_BASE_URL:-}" || -z "${EVAL_MODEL:-}" ]]; then
             echo 'configured=false' >> "$GITHUB_OUTPUT"
-            node -e "require('fs').writeFileSync('artifacts/public/status.json', JSON.stringify({configured:false, authoritative:false, reason:'missing EVAL_API_KEY/EVAL_BASE_URL/EVAL_MODEL', commitSha:process.env.GITHUB_SHA, generatedAt:new Date().toISOString()}, null, 2)+'\n')"
+            node -e "require('fs').writeFileSync('artifacts/public/status.json', JSON.stringify({configured:false, authoritative:false, reason:'missing EVAL_API_KEY/EVAL_BASE_URL/EVAL_MODEL', commitSha:process.env.EVAL_COMMIT_SHA, generatedAt:new Date().toISOString()}, null, 2)+'\n')"
           else
             echo 'configured=true' >> "$GITHUB_OUTPUT"
           fi
@@ -99,9 +101,9 @@ jobs:
               --reports ../../artifacts/public/prompt-eval-real.json \
               --json ../../artifacts/public/prompt-eval-trend.json \
               --markdown ../../artifacts/public/prompt-eval-trend.md
-            node -e "require('fs').writeFileSync('artifacts/public/status.json', JSON.stringify({configured:true, authoritative:true, evaluationOutcome:process.env.EVAL_OUTCOME, commitSha:process.env.GITHUB_SHA, generatedAt:new Date().toISOString()}, null, 2)+'\n')"
+            node -e "require('fs').writeFileSync('artifacts/public/status.json', JSON.stringify({configured:true, authoritative:true, evaluationOutcome:process.env.EVAL_OUTCOME, commitSha:process.env.EVAL_COMMIT_SHA, generatedAt:new Date().toISOString()}, null, 2)+'\n')"
           else
-            node -e "require('fs').writeFileSync('artifacts/public/status.json', JSON.stringify({configured:true, authoritative:false, reason:'evaluation ended before a report was written', commitSha:process.env.GITHUB_SHA, generatedAt:new Date().toISOString()}, null, 2)+'\n')"
+            node -e "require('fs').writeFileSync('artifacts/public/status.json', JSON.stringify({configured:true, authoritative:false, reason:'evaluation ended before a report was written', commitSha:process.env.EVAL_COMMIT_SHA, generatedAt:new Date().toISOString()}, null, 2)+'\n')"
           fi
         env:
           EVAL_OUTCOME: ${{ steps.real_eval.outcome }}
