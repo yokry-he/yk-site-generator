@@ -11,7 +11,7 @@ const STEPS = [
 </script>
 
 <template>
-  <section id="process" class="relative scroll-mt-20 py-24">
+  <section id="process" class="relative overflow-hidden scroll-mt-20 py-24">
     <div class="glow-brand2 pointer-events-none absolute top-1/2 left-1/2 h-72 w-[640px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-[120px]" />
     <div class="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <SectionHeading
