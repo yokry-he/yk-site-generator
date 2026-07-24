@@ -117,8 +117,6 @@ async function run(item: CommandItem) {
 }
 
 function onKey(event: KeyboardEvent) {
-  const target = event.target as HTMLElement
-  const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
     event.preventDefault()
     open.value ? close() : void show()
@@ -128,7 +126,8 @@ function onKey(event: KeyboardEvent) {
   if (event.key === 'Escape') { event.preventDefault(); close(); return }
   if (event.key === 'ArrowDown') { event.preventDefault(); activeIndex.value = Math.min(results.value.length - 1, activeIndex.value + 1); return }
   if (event.key === 'ArrowUp') { event.preventDefault(); activeIndex.value = Math.max(0, activeIndex.value - 1); return }
-  if (event.key === 'Enter' && !typing) {
+  // 搜索输入框保持焦点时 Enter 也应执行当前高亮命令；仅在中文输入法合成期间忽略。
+  if (event.key === 'Enter' && !event.isComposing) {
     const item = results.value[activeIndex.value]
     if (item) { event.preventDefault(); void run(item) }
   }
