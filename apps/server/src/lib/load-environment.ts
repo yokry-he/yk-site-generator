@@ -1,6 +1,6 @@
 import { config } from 'dotenv'
 
-/** Load a dotenv file without overriding values injected by the OS or deployment platform. */
+/** Load an optional dotenv file while preserving values injected by the OS or deployment platform. */
 export function loadEnvironmentFile(path: string): void {
   const result = config({ path, override: false, quiet: true })
   if (!result.error) return
