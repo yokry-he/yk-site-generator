@@ -1,5 +1,5 @@
 /**
- * 提示词离线评测脚本(SF-1-2)
+ * 提示词离线评测脚本(SF-1-2 / SF-1-8)
  *
  * 用法:
  *   pnpm --filter prompts eval -- --dry-run   # 离线样例跑分(不需要 key)
@@ -9,7 +9,7 @@
  * 评分维度(每用例 4 项,取平均):
  *   1. 输出可被 shared 的 parseModelOutput 解析为文件树
  *   2. 必备要素关键词命中率(画像 validationKeywords)
- *   3. 经 artifactToSingleHtml 合成后包含全部 5 个 head 标准槽位
+ *   3. SEO head 完整性(charset/title/description/viewport/theme/OG/Twitter)
  *   4. HTML 基本健全(doctype/html/head/body 闭合、style/script 标签配平)
  *
  * 重要:--dry-run 使用脚本内置的占位样例 HTML 充当模型输出,仅用于验证
@@ -22,10 +22,11 @@ import {
   type SiteTypeProfile,
 } from '../src/index'
 import {
-  HEAD_SLOT_NAMES,
+  analyzeHeadCompleteness,
   artifactToSingleHtml,
   parseModelOutput,
   type ArtifactMeta,
+  type HeadCheckName,
 } from 'shared'
 
 /* ============ 42 个真实感中文评测用例(14 类 × 3) ============ */
@@ -105,10 +106,6 @@ const EVAL_CASES: Record<string, string[]> = {
 
 /* ============ dry-run 占位样例(非真实模型输出!) ============ */
 
-/**
- * 根据画像拼装一份"理想化"的模型输出样例:
- * 仅用于验证评测管线,不能代表任何模型的真实水平。
- */
 function makeSample(profile: SiteTypeProfile, requirement: string): string {
   const keywordList = profile.validationKeywords.join('、')
   const sections = profile.skeleton
@@ -145,12 +142,13 @@ ${sections}
 interface CaseScore {
   parseable: number
   keywordHit: number
-  headSlots: number
+  headComplete: number
+  headMissing: HeadCheckName[]
   htmlSane: number
   total: number
 }
 
-function scoreOutput(profile: SiteTypeProfile, output: string): CaseScore {
+export function scoreOutput(profile: SiteTypeProfile, output: string): CaseScore {
   const parsed = parseModelOutput(output)
   const parseable = parsed ? 1 : 0
 
@@ -162,7 +160,8 @@ function scoreOutput(profile: SiteTypeProfile, output: string): CaseScore {
     ? hits / profile.validationKeywords.length
     : 1
 
-  let headSlots = 0
+  let headComplete = 0
+  let headMissing: HeadCheckName[] = []
   let htmlSane = 0
   if (parsed) {
     const meta: ArtifactMeta = {
@@ -175,9 +174,12 @@ function scoreOutput(profile: SiteTypeProfile, output: string): CaseScore {
     }
     try {
       const single = artifactToSingleHtml(parsed.tree, meta)
-      headSlots = HEAD_SLOT_NAMES.every((n) => single.includes(`@sf:slot:${n}`)) ? 1 : 0
+      const report = analyzeHeadCompleteness(single)
+      headComplete = report.complete ? 1 : 0
+      headMissing = report.missing
     } catch {
-      headSlots = 0
+      headComplete = 0
+      headMissing = ['charset', 'title', 'description', 'viewport', 'themeColor', 'ogTitle', 'ogDescription', 'ogType', 'twitterCard', 'twitterTitle', 'twitterDescription']
     }
 
     const entry = parsed.tree.files.find((f) => f.path === parsed.tree.entry)?.content ?? ''
@@ -197,8 +199,8 @@ function scoreOutput(profile: SiteTypeProfile, output: string): CaseScore {
     htmlSane = structureOk && tagsBalanced ? 1 : 0
   }
 
-  const total = (parseable + keywordHit + headSlots + htmlSane) / 4
-  return { parseable, keywordHit, headSlots, htmlSane, total }
+  const total = (parseable + keywordHit + headComplete + htmlSane) / 4
+  return { parseable, keywordHit, headComplete, headMissing, htmlSane, total }
 }
 
 /* ============ 真实模型调用(OpenAI 兼容协议) ============ */
@@ -252,7 +254,6 @@ async function main() {
       : `🚀 真实跑分:模型 ${process.env.EVAL_MODEL} @ ${process.env.EVAL_BASE_URL}\n`,
   )
 
-  // --only type1,type2:只跑指定类型(用于不达标类型的迭代重跑)
   const onlyIdx = process.argv.indexOf('--only')
   const only =
     onlyIdx >= 0 ? (process.argv[onlyIdx + 1] ?? '').split(',').filter(Boolean) : null
@@ -269,7 +270,6 @@ async function main() {
   }
   if (only) console.log(`🎯 只跑类型:${only.join(', ')}\n`)
 
-  // 有界并发执行(控制 token 消耗速率,避免触发厂商限流)
   const scoreMap = new Map<string, number[]>()
   let cursor = 0
   async function worker() {
@@ -282,8 +282,9 @@ async function main() {
         arr.push(s.total)
         scoreMap.set(t.profile.id, arr)
         const flag = s.total >= 0.8 ? '✅' : '⚠️ '
+        const headDetail = s.headMissing.length ? `缺:${s.headMissing.join(',')}` : '完整'
         console.log(
-          `  ${flag} [${t.profile.id}] ${t.req.slice(0, 24)}…  解析${s.parseable} 关键词${(s.keywordHit * 100).toFixed(0)}% 槽位${s.headSlots} HTML${s.htmlSane} → ${(s.total * 100).toFixed(0)}%`,
+          `  ${flag} [${t.profile.id}] ${t.req.slice(0, 24)}…  解析${s.parseable} 关键词${(s.keywordHit * 100).toFixed(0)}% SEO${s.headComplete}(${headDetail}) HTML${s.htmlSane} → ${(s.total * 100).toFixed(0)}%`,
         )
       } catch (err) {
         const arr = scoreMap.get(t.profile.id) ?? []
@@ -322,7 +323,9 @@ async function main() {
   if (dryRun) console.log('(再次提醒:以上为占位样例结果,真实跑分请配置 EVAL_* 环境变量。)')
 }
 
-main().catch((err) => {
-  console.error('评测失败:', err instanceof Error ? err.message : err)
-  process.exit(1)
-})
+if (process.env.VITEST !== 'true') {
+  main().catch((err) => {
+    console.error('评测失败:', err instanceof Error ? err.message : err)
+    process.exit(1)
+  })
+}

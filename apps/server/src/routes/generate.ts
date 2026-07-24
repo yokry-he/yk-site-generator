@@ -3,14 +3,15 @@ import { streamSSE } from 'hono/streaming'
 import { z } from 'zod'
 import { buildGenerationPrompt, buildIterationPrompt } from 'prompts'
 import { parseModelOutput } from 'shared'
+import { authenticateBearerHeader } from '../lib/auth'
 import { connectTimeoutMs, totalTimeoutMs } from '../lib/config'
+import { recordSystemEvent, requestIdFromContext } from '../lib/observability'
+import { QuotaExceededError, refundUsage, reserveGenerationUsage } from '../lib/quota'
 import { takeToken } from '../lib/rate-limit'
 import {
-  PROVIDER_ERROR_META,
   ProviderError,
   SUPPORTED_PROVIDERS,
   streamFromProvider,
-  type ProviderErrorCode,
 } from '../providers'
 import { errorBody } from '../types'
 
@@ -39,6 +40,7 @@ const bodySchema = z.object({
  * POST /api/generate —— 生成代理(SSE)
  * 事件序列:token*(delta 增量) → done(含解析摘要);出错时 error → 结束。
  * apiKey 只在请求生命周期内存活:不落地、不打日志。
+ * 已登录用户在连接厂商前原子预占额度;厂商错误时自动退回。
  */
 const generate = new Hono()
 
@@ -91,6 +93,35 @@ generate.post('/', async (c) => {
     )
   }
 
+  const auth = await authenticateBearerHeader(c.req.header('authorization'))
+  let usageReservation: { id: string; userId: string } | null = null
+  if (auth) {
+    try {
+      const usage = await reserveGenerationUsage({
+        userId: auth.sub,
+        action: body.history?.length ? 'iterate' : 'generate',
+        siteType: body.siteType,
+        model: body.model,
+      })
+      usageReservation = { id: usage.id, userId: auth.sub }
+    } catch (err) {
+      if (err instanceof QuotaExceededError) {
+        return c.json(
+          errorBody(
+            'QUOTA_EXCEEDED',
+            `本月生成额度已用完(${err.used}/${err.limit}),下月自动重置`,
+          ),
+          429,
+        )
+      }
+      throw err
+    }
+  }
+
+  const requestId = requestIdFromContext(c)
+  const startedAt = Date.now()
+  const mode = body.history?.length ? 'iterate' : 'generate'
+
   return streamSSE(c, async (stream) => {
     let fullText = ''
     try {
@@ -110,8 +141,28 @@ generate.post('/', async (c) => {
         }
       }
     } catch (err) {
+      if (usageReservation) {
+        await refundUsage(usageReservation.id, usageReservation.userId)
+      }
       const pErr =
         err instanceof ProviderError ? err : new ProviderError('INTERNAL', '生成过程中出现内部错误')
+      await recordSystemEvent({
+        level: 'error',
+        source: 'provider',
+        eventType: 'generation.failed',
+        message: `${body.provider}/${body.model}: ${pErr.message}`.slice(0, 500),
+        requestId,
+        durationMs: Date.now() - startedAt,
+        metadata: {
+          code: pErr.code,
+          provider: body.provider,
+          model: body.model,
+          siteType: body.siteType,
+          mode,
+          outputChars: fullText.length,
+          authenticated: Boolean(auth),
+        },
+      })
       await stream.writeSSE({
         event: 'error',
         data: JSON.stringify({ code: pErr.code, message: pErr.message }),
@@ -121,6 +172,26 @@ generate.post('/', async (c) => {
 
     // 流结束:服务端解析产物并给出摘要
     const parsed = parseModelOutput(fullText)
+    await recordSystemEvent({
+      level: parsed ? 'info' : 'warning',
+      source: 'generation',
+      eventType: parsed ? 'generation.completed' : 'generation.parse_failed',
+      message: parsed
+        ? `${body.provider}/${body.model} 生成完成`
+        : `${body.provider}/${body.model} 输出无法解析为产物`,
+      requestId,
+      durationMs: Date.now() - startedAt,
+      metadata: {
+        provider: body.provider,
+        model: body.model,
+        siteType: body.siteType,
+        mode,
+        outputChars: fullText.length,
+        fileCount: parsed?.tree.files.length ?? 0,
+        warningCount: parsed?.warnings.length ?? 1,
+        authenticated: Boolean(auth),
+      },
+    })
     await stream.writeSSE({
       event: 'done',
       data: JSON.stringify({

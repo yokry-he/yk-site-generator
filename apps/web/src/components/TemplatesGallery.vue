@@ -1,108 +1,73 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { ArrowUpRight } from 'lucide-vue-next'
+import { ArrowRight, ArrowUpRight, Sparkles } from 'lucide-vue-next'
+import { OFFICIAL_TEMPLATES, renderOfficialTemplate } from 'shared'
 import SectionHeading from './SectionHeading.vue'
-import TemplateThumb from './TemplateThumb.vue'
-import { TYPE_GROUPS, typeById } from '../data/siteTypes'
-import { useToast } from '../composables/useToast'
+import { typeById } from '../data/siteTypes'
 
-interface Template {
-  name: string
-  type: string
-  accent: string
-  dark: boolean
-}
-
-const TEMPLATES: Template[] = [
-  // 个人创作
-  { name: '暗夜独白', type: 'personal', accent: '#a78bfa', dark: true },
-  { name: '极简名片', type: 'personal', accent: '#22d3ee', dark: false },
-  { name: '光影集', type: 'portfolio', accent: '#f472b6', dark: true },
-  { name: '造物志', type: 'portfolio', accent: '#fb923c', dark: false },
-  { name: '一页简历', type: 'resume', accent: '#38bdf8', dark: false },
-  { name: '字里行间', type: 'blog', accent: '#f59e0b', dark: false },
-  { name: '码农札记', type: 'blog', accent: '#34d399', dark: true },
-  // 商业营销
-  { name: '创想云科', type: 'business', accent: '#6366f1', dark: false },
-  { name: '曜石集团', type: 'business', accent: '#f59e0b', dark: true },
-  { name: '云帆 SaaS', type: 'saas', accent: '#7c3aed', dark: false },
-  { name: '脉冲数据', type: 'saas', accent: '#0ea5e9', dark: true },
-  { name: '峰会议程', type: 'landing', accent: '#8b5cf6', dark: true },
-  { name: '新品首发', type: 'landing', accent: '#06b6d4', dark: false },
-  { name: '好物橱窗', type: 'shop', accent: '#f59e0b', dark: false },
-  { name: '匠心手作', type: 'shop', accent: '#e11d48', dark: true },
-  { name: '山海食堂', type: 'restaurant', accent: '#f59e0b', dark: true },
-  { name: '芝士课堂', type: 'education', accent: '#10b981', dark: false },
-  // 内容社区
-  { name: '开发者手册', type: 'docs', accent: '#10b981', dark: false },
-  { name: 'API 参考', type: 'docs', accent: '#8b5cf6', dark: true },
-  { name: '团队 Wiki', type: 'wiki', accent: '#10b981', dark: false },
-  { name: '回音社区', type: 'forum', accent: '#0ea5e9', dark: false },
-  // 数据可视化
-  { name: '城市脉搏', type: 'dashboard', accent: '#22d3ee', dark: true },
-  { name: '运营罗盘', type: 'dashboard', accent: '#34d399', dark: true },
-]
-
-const toast = useToast()
-const filter = ref('all')
-
-const visible = computed(() =>
-  filter.value === 'all'
-    ? TEMPLATES
-    : TEMPLATES.filter((t) => typeById(t.type)?.group === filter.value),
-)
+const featured = OFFICIAL_TEMPLATES.filter((template) => template.featured).slice(0, 6)
+const previews = Object.fromEntries(featured.map((template) => [template.id, renderOfficialTemplate(template)]))
 </script>
 
 <template>
   <section id="templates" class="relative scroll-mt-20 py-24">
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <SectionHeading
-        eyebrow="模板库"
-        title="从精选模板开始,快人一步"
-        desc="每一套模板都由 AI 生成、人工精调。选一个喜欢的风格,再让它变成你的样子。"
+        eyebrow="官方模板"
+        title="从经过打磨的起点开始"
+        desc="每套模板都包含完整响应式布局、可编辑内容与清晰转化路径，还可以直接套用你的品牌套件。"
       />
 
-      <!-- 分组筛选 tab -->
-      <div class="mt-10 flex flex-wrap justify-center gap-2">
-        <button
-          v-for="g in ['all', ...TYPE_GROUPS]"
-          :key="g"
-          class="rounded-full px-4 py-2 text-sm transition-all"
-          :class="
-            filter === g
-              ? 'bg-brand-gradient font-semibold text-white shadow-lg shadow-brand1/25'
-              : 'border border-line/10 bg-ink/[0.04] text-mut hover:border-line/20 hover:text-ink'
-          "
-          @click="filter = g"
+      <div class="stagger mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <article
+          v-for="template in featured"
+          :key="template.id"
+          class="group overflow-hidden rounded-2xl border border-line/10 bg-soft/60 transition-all duration-300 hover:-translate-y-1 hover:border-brand1/35 hover:shadow-2xl hover:shadow-brand1/10"
         >
-          {{ g === 'all' ? '全部' : g }}
-        </button>
+          <div class="relative aspect-[16/10] overflow-hidden bg-white">
+            <iframe
+              :srcdoc="previews[template.id]"
+              sandbox=""
+              loading="lazy"
+              tabindex="-1"
+              aria-hidden="true"
+              class="pointer-events-none h-[200%] w-[200%] origin-top-left scale-50 border-0"
+              title=""
+            />
+            <div class="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-50" />
+            <span class="absolute top-3 left-3 inline-flex items-center gap-1 rounded-full bg-white/92 px-2.5 py-1 text-[10px] font-bold text-zinc-900 shadow-sm backdrop-blur">
+              <Sparkles class="h-3 w-3 text-violet-600" />官方精选
+            </span>
+            <RouterLink
+              :to="{ path: '/templates', query: { template: template.slug } }"
+              class="bg-brand-gradient absolute inset-x-4 bottom-3 flex translate-y-2 items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold text-white opacity-0 shadow-lg transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100"
+            >
+              预览并使用
+              <ArrowUpRight class="h-3.5 w-3.5" />
+            </RouterLink>
+          </div>
+          <div class="p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <h3 class="truncate text-sm font-semibold text-ink">{{ template.name }}</h3>
+                <p class="mt-1 text-[11px] text-faint">{{ typeById(template.siteType)?.name || template.siteType }} · {{ template.industry }}</p>
+              </div>
+              <div class="flex shrink-0 gap-1">
+                <span v-for="color in [template.palette.primary, template.palette.secondary, template.palette.accent]" :key="color" class="h-4 w-4 rounded-full border border-black/5" :style="{ backgroundColor: color }" />
+              </div>
+            </div>
+            <p class="mt-3 line-clamp-2 text-xs leading-5 text-mut">{{ template.description }}</p>
+          </div>
+        </article>
       </div>
 
-      <!-- 模板网格(key 切换触发交错动画) -->
-      <div :key="filter" class="stagger mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <div
-          v-for="tpl in visible"
-          :key="tpl.name"
-          class="group overflow-hidden rounded-2xl border border-line/10 bg-soft/60 transition-all duration-300 hover:-translate-y-1 hover:border-brand1/40 hover:shadow-xl hover:shadow-brand1/10"
+      <div class="mt-10 flex justify-center">
+        <RouterLink
+          to="/templates"
+          class="flex items-center gap-2 rounded-full border border-brand1/20 bg-brand1/[0.07] px-5 py-3 text-sm font-semibold text-brand1 transition hover:bg-brand1/[0.12]"
         >
-          <div class="relative aspect-[4/3] overflow-hidden">
-            <TemplateThumb :type="tpl.type" :accent="tpl.accent" :dark="tpl.dark" />
-            <button
-              class="bg-brand-gradient absolute inset-x-4 bottom-3 flex translate-y-2 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold text-white opacity-0 shadow-lg transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100"
-              @click="toast.info('演示环境', `模板「${tpl.name}」已加入你的工作台(演示)。`)"
-            >
-              使用模板
-              <ArrowUpRight class="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <div class="flex items-center justify-between px-4 py-3">
-            <span class="text-sm font-medium text-ink">{{ tpl.name }}</span>
-            <span class="rounded-md border border-line/10 bg-ink/[0.04] px-2 py-0.5 text-xs text-mut">
-              {{ typeById(tpl.type)?.name }}
-            </span>
-          </div>
-        </div>
+          浏览全部官方模板
+          <ArrowRight class="h-4 w-4" />
+        </RouterLink>
       </div>
     </div>
   </section>

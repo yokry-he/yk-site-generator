@@ -10,8 +10,11 @@
     "test": "vitest run",
     "e2e": "tsx scripts/e2e-generate.ts",
     "e2e:iterate": "tsx scripts/e2e-iterate.ts",
-    "typecheck": "vue-tsc -b",
-    "e2e:history": "tsx scripts/e2e-history.ts"
+    "e2e:history": "tsx scripts/e2e-history.ts",
+    "e2e:browser": "playwright test --grep-invert @visual",
+    "e2e:visual": "playwright test --grep @visual",
+    "e2e:visual:update": "playwright test --grep @visual --update-snapshots",
+    "typecheck": "vue-tsc -b"
   },
   "dependencies": {
     "jszip": "^3.10.1",
@@ -21,6 +24,8 @@
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
+    "@playwright/test": "^1.55.0",
     "@types/node": "^24.13.2",
     "@vitejs/plugin-vue": "^6.0.7",
     "@vue/tsconfig": "^0.9.1",

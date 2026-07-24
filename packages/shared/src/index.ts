@@ -1,3 +1,7 @@
 export * from './types'
 export * from './artifact'
 export * from './parse'
+export * from './brand'
+export * from './officialTemplates'
+export * from './templateCatalog'
+export * from './templateCatalogBootstrap'

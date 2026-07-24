@@ -67,8 +67,8 @@ const COLUMNS: { title: string; links: { label: string; to: string }[] }[] = [
         </div>
       </div>
       <div class="mt-12 flex flex-col items-center justify-between gap-3 border-t border-line/8 pt-6 sm:flex-row">
-        <p class="text-xs text-faint/80">© 2025 SiteForge · 智能网站生成平台。保留所有权利。</p>
-        <p class="text-xs text-faint/80">本页面由 SiteForge 设计理念驱动构建</p>
+        <p class="text-xs text-faint">© 2025 SiteForge · 智能网站生成平台。保留所有权利。</p>
+        <p class="text-xs text-faint">本页面由 SiteForge 设计理念驱动构建</p>
       </div>
     </div>
   </footer>
