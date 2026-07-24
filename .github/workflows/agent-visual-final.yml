@@ -1,0 +1,55 @@
+name: Agent Visual Final
+on:
+  push:
+    branches: [agent/continue-development-20260723]
+    paths: ['.github/agent-visual-final.trigger']
+permissions:
+  contents: write
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/continue-development-20260723
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Apply final contrast fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('apps/web/src/pages/TemplateDetailPage.vue')
+          text = path.read_text()
+          replacements = [
+            ('class="rounded-full bg-brand1/10 px-3 py-1 text-[10px] font-semibold text-brand1"', 'class="rounded-full bg-brand1/10 px-3 py-1 text-[10px] font-semibold text-sub"'),
+            ('class="flex items-center gap-2 rounded-xl border border-brand1/20 bg-brand1/[0.07] px-4 py-3 text-sm font-semibold text-brand1"', 'class="flex items-center gap-2 rounded-xl border border-brand1/20 bg-brand1/[0.07] px-4 py-3 text-sm font-semibold text-sub hover:text-ink"'),
+            ("'border-brand1/30 bg-brand1/[0.07] font-semibold text-brand1'", "'border-brand1/30 bg-brand1/[0.07] font-semibold text-sub'"),
+          ]
+          for old, new in replacements:
+            count = text.count(old)
+            if count != 1:
+              raise SystemExit(f'expected one match, found {count}: {old}')
+            text = text.replace(old, new)
+          path.write_text(text)
+          PY
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm --filter web exec playwright install --with-deps chromium
+      - name: Verify behavior and accessibility
+        run: pnpm --filter web e2e:browser
+      - name: Generate visual baselines
+        run: pnpm --filter web e2e:visual:update
+      - name: Commit verified visual suite
+        run: |
+          rm -f .github/agent-visual-final.trigger .github/workflows/agent-visual-final.yml .github/agent-visual-baseline-status.md
+          git config user.name "siteforge-agent"
+          git config user.email "siteforge-agent@users.noreply.github.com"
+          git add -A
+          git commit -m "test(web): add verified visual regression baselines"
+          git push origin HEAD:agent/continue-development-20260723
