@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { connectTimeoutMs } from '../lib/config'
-import { validateProviderBaseUrl } from '../lib/provider-url-policy'
+import { validateProviderBaseUrlForRequest } from '../lib/provider-url-policy'
 import { takeToken } from '../lib/rate-limit'
 import {
   classifyFetchError,
@@ -35,7 +35,7 @@ providers.post('/test', async (c) => {
   let body: z.infer<typeof testSchema>
   try {
     body = testSchema.parse(await c.req.json())
-    body.baseUrl = validateProviderBaseUrl(body.baseUrl)
+    body.baseUrl = await validateProviderBaseUrlForRequest(body.baseUrl)
   } catch (err) {
     const msg =
       err instanceof z.ZodError
@@ -64,6 +64,7 @@ providers.post('/test', async (c) => {
   try {
     const res = await fetch(url, {
       headers,
+      redirect: 'error',
       signal: AbortSignal.timeout(connectTimeoutMs()),
     })
     const latencyMs = Date.now() - started

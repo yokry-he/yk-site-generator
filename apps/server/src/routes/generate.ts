@@ -6,7 +6,7 @@ import { parseModelOutput } from 'shared'
 import { authenticateBearerHeader } from '../lib/auth'
 import { connectTimeoutMs, totalTimeoutMs } from '../lib/config'
 import { recordSystemEvent, requestIdFromContext } from '../lib/observability'
-import { validateProviderBaseUrl } from '../lib/provider-url-policy'
+import { validateProviderBaseUrlForRequest } from '../lib/provider-url-policy'
 import { QuotaExceededError, refundUsage, reserveGenerationUsage } from '../lib/quota'
 import { takeToken } from '../lib/rate-limit'
 import {
@@ -58,11 +58,11 @@ generate.post('/', async (c) => {
     return c.json(errorBody('BAD_REQUEST', '请求体超过 2MB 上限,请缩短迭代历史中的产物内容'), 400)
   }
 
-  // 参数校验
+  // 参数校验与自定义厂商地址 DNS 安全校验
   let body: z.infer<typeof bodySchema>
   try {
     body = bodySchema.parse(await c.req.json())
-    body.baseUrl = validateProviderBaseUrl(body.baseUrl)
+    body.baseUrl = await validateProviderBaseUrlForRequest(body.baseUrl)
   } catch (err) {
     const msg =
       err instanceof z.ZodError

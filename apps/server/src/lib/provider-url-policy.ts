@@ -1,3 +1,5 @@
+import { lookup } from 'node:dns/promises'
+import { isIP } from 'node:net'
 import { env } from '../env'
 
 const BLOCKED_HOSTNAMES = new Set([
@@ -9,6 +11,18 @@ const BLOCKED_HOSTNAMES = new Set([
 
 const BLOCKED_SUFFIXES = ['.localhost', '.local', '.internal', '.lan', '.home', '.home.arpa']
 
+export interface ProviderResolvedAddress {
+  address: string
+  family: number
+}
+
+export type ProviderHostResolver = (
+  hostname: string,
+) => Promise<readonly ProviderResolvedAddress[]>
+
+const defaultResolver: ProviderHostResolver = async (hostname) =>
+  lookup(hostname, { all: true, verbatim: true })
+
 function parseIpv4(hostname: string): number[] | null {
   const parts = hostname.split('.')
   if (parts.length !== 4 || parts.some((part) => !/^\d{1,3}$/.test(part))) return null
@@ -17,6 +31,7 @@ function parseIpv4(hostname: string): number[] | null {
 }
 
 function isBlockedIpv4(parts: number[]): boolean {
+  if (parts.length !== 4) return true
   const [a, b, c] = parts
   return (
     a === 0 ||
@@ -36,16 +51,72 @@ function isBlockedIpv4(parts: number[]): boolean {
   )
 }
 
-function isBlockedIpv6(hostname: string): boolean {
-  const normalized = hostname.replace(/^\[|\]$/g, '').toLowerCase()
-  if (!normalized.includes(':')) return false
-  if (normalized === '::' || normalized === '::1') return true
-  if (/^(fc|fd)/.test(normalized)) return true
-  if (/^fe[89ab]/.test(normalized)) return true
-  if (normalized.startsWith('ff')) return true
+function ipv6ToHextets(hostname: string): number[] | null {
+  let normalized = hostname.replace(/^\[|\]$/g, '').toLowerCase()
+  if (normalized.includes('%')) return null
 
-  const mappedIpv4 = normalized.match(/(?:^|:)ffff:(\d+\.\d+\.\d+\.\d+)$/)?.[1]
-  return mappedIpv4 ? isBlockedIpv4(parseIpv4(mappedIpv4) ?? []) : false
+  const ipv4Tail = normalized.match(/(?:^|:)(\d+\.\d+\.\d+\.\d+)$/)?.[1]
+  let ipv4Hextets: number[] = []
+  if (ipv4Tail) {
+    const ipv4 = parseIpv4(ipv4Tail)
+    if (!ipv4) return null
+    ipv4Hextets = [(ipv4[0] << 8) | ipv4[1], (ipv4[2] << 8) | ipv4[3]]
+    normalized = normalized.slice(0, normalized.length - ipv4Tail.length).replace(/:$/, '')
+  }
+
+  if ((normalized.match(/::/g) ?? []).length > 1) return null
+  const [leftRaw, rightRaw] = normalized.split('::')
+  const left = leftRaw ? leftRaw.split(':').filter(Boolean) : []
+  const right = rightRaw ? rightRaw.split(':').filter(Boolean) : []
+  const explicit = left.length + right.length + ipv4Hextets.length
+  const fill = normalized.includes('::') ? 8 - explicit : 0
+  if (fill < 0 || (!normalized.includes('::') && explicit !== 8)) return null
+
+  const tokens = [...left, ...Array.from({ length: fill }, () => '0'), ...right]
+  const parsed = tokens.map((token) => Number.parseInt(token, 16))
+  if (
+    parsed.some((value, index) =>
+      !Number.isInteger(value) || value < 0 || value > 0xffff || !/^[0-9a-f]{1,4}$/.test(tokens[index]),
+    )
+  ) {
+    return null
+  }
+  const result = [...parsed, ...ipv4Hextets]
+  return result.length === 8 ? result : null
+}
+
+function embeddedIpv4(hextets: number[], index: number): number[] {
+  return [
+    hextets[index] >> 8,
+    hextets[index] & 0xff,
+    hextets[index + 1] >> 8,
+    hextets[index + 1] & 0xff,
+  ]
+}
+
+function isBlockedIpv6(hostname: string): boolean {
+  const hextets = ipv6ToHextets(hostname)
+  if (!hextets) return hostname.includes(':')
+
+  const [first, second] = hextets
+  const allZero = hextets.every((value) => value === 0)
+  const loopback = hextets.slice(0, 7).every((value) => value === 0) && hextets[7] === 1
+  if (allZero || loopback) return true
+  if ((first & 0xfe00) === 0xfc00) return true // fc00::/7 unique-local
+  if ((first & 0xffc0) === 0xfe80) return true // fe80::/10 link-local
+  if ((first & 0xffc0) === 0xfec0) return true // fec0::/10 deprecated site-local
+  if ((first & 0xff00) === 0xff00) return true // multicast
+  if (first === 0x0100 && second === 0) return true // 100::/64 discard-only
+  if (first === 0x2001 && second === 0) return true // Teredo / special-use
+  if (first === 0x2001 && second === 0x0002) return true // benchmarking
+  if (first === 0x2001 && second === 0x0db8) return true // documentation
+
+  const isMapped = hextets.slice(0, 5).every((value) => value === 0) && hextets[5] === 0xffff
+  const isCompatible = hextets.slice(0, 6).every((value) => value === 0)
+  if ((isMapped || isCompatible) && isBlockedIpv4(embeddedIpv4(hextets, 6))) return true
+
+  if (first === 0x2002 && isBlockedIpv4(embeddedIpv4(hextets, 1))) return true // 6to4
+  return false
 }
 
 export function isPrivateOrReservedProviderHost(hostname: string): boolean {
@@ -60,8 +131,7 @@ export function isPrivateOrReservedProviderHost(hostname: string): boolean {
 }
 
 /**
- * 校验用户自定义模型 Base URL，阻断直接访问本机、内网、链路本地及云元数据地址。
- * 默认厂商地址由代码维护，不经过此策略；开发者如确需连接本地模型，必须显式开启环境变量。
+ * 先做纯 URL/字面地址校验。默认厂商地址由代码维护，不经过自定义地址策略。
  */
 export function validateProviderBaseUrl(raw: string | undefined): string | undefined {
   if (!raw) return undefined
@@ -90,4 +160,31 @@ export function validateProviderBaseUrl(raw: string | undefined): string | undef
   }
 
   return url.toString().replace(/\/$/, '')
+}
+
+/**
+ * 请求前解析自定义域名，任一 A/AAAA 记录落入非公网地址即拒绝。
+ * 解析器可注入，便于测试 DNS rebinding 与混合公网/私网结果。
+ */
+export async function validateProviderBaseUrlForRequest(
+  raw: string | undefined,
+  resolver: ProviderHostResolver = defaultResolver,
+): Promise<string | undefined> {
+  const normalized = validateProviderBaseUrl(raw)
+  if (!normalized || env.ALLOW_PRIVATE_PROVIDER_BASE_URLS) return normalized
+
+  const url = new URL(normalized)
+  if (isIP(url.hostname.replace(/^\[|\]$/g, ''))) return normalized
+
+  let addresses: readonly ProviderResolvedAddress[]
+  try {
+    addresses = await resolver(url.hostname)
+  } catch {
+    throw new Error('自定义 Base URL 域名解析失败')
+  }
+  if (!addresses.length) throw new Error('自定义 Base URL 域名没有可用的 DNS 记录')
+  if (addresses.some(({ address }) => isPrivateOrReservedProviderHost(address))) {
+    throw new Error('自定义 Base URL 域名解析到本机、内网、链路本地或保留地址')
+  }
+  return normalized
 }

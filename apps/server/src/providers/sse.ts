@@ -58,8 +58,7 @@ export async function extractUpstreamDetail(res: Response): Promise<string | und
 /**
  * 带双超时的 fetch:连接超时只守护「收到响应头」之前;
  * 一旦响应建立即解除,流式读取阶段只受总超时(totalSignal)约束。
- * (直接用 AbortSignal.timeout 组合进 fetch signal 会在连接超时到点后
- *  把正在消费的响应体一并掐断,这是流式场景的经典坑。)
+ * 所有模型请求禁止自动跟随重定向，避免公开厂商地址跳转到内网或元数据端点。
  */
 export async function fetchWithTimeouts(
   url: string,
@@ -72,6 +71,7 @@ export async function fetchWithTimeouts(
   try {
     return await fetch(url, {
       ...init,
+      redirect: 'error',
       signal: AbortSignal.any([totalSignal, connect.signal]),
     })
   } finally {
