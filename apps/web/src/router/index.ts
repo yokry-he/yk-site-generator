@@ -30,7 +30,10 @@ export const router = createRouter({
   },
 })
 
-router.afterEach((to) => {
+router.afterEach((to, from) => {
   document.title = typeof to.meta.title === 'string' ? to.meta.title : 'SiteForge'
-  window.requestAnimationFrame(() => document.getElementById('main-content')?.focus({ preventScroll: true }))
+  // 首次加载保留浏览器原生 Tab 顺序，让 Skip Link 成为第一个焦点；仅在站内导航后聚焦主内容。
+  if (from.matched.length) {
+    window.requestAnimationFrame(() => document.getElementById('main-content')?.focus({ preventScroll: true }))
+  }
 })
