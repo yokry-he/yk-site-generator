@@ -15,7 +15,8 @@
     "build": "tsup src/index.ts --format esm --dts --out-dir dist --clean",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "eval": "tsx scripts/eval-prompts.ts"
+    "eval": "tsx scripts/eval-prompts.ts",
+    "eval:quality": "tsx scripts/eval-quality.ts"
   },
   "dependencies": {
     "shared": "workspace:*"

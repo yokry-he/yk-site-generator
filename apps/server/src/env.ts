@@ -8,6 +8,11 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   /** 允许的前端来源,逗号分隔 */
   CORS_ORIGINS: z.string().default('http://localhost:3000,http://localhost:5173'),
+  /** 自定义模型 Base URL 是否允许访问本机/内网;默认关闭以降低 SSRF 风险。 */
+  ALLOW_PRIVATE_PROVIDER_BASE_URLS: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
   /** 临时分享文件目录;生产环境应挂载持久卷 */
   SHARE_STORAGE_DIR: z.string().min(1).default('.data/shares'),
   /** 临时分享有效期,MVP 固定默认 7 天 */

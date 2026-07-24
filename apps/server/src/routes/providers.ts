@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { connectTimeoutMs } from '../lib/config'
+import { validateProviderBaseUrl } from '../lib/provider-url-policy'
 import { takeToken } from '../lib/rate-limit'
 import {
   classifyFetchError,
@@ -34,8 +35,14 @@ providers.post('/test', async (c) => {
   let body: z.infer<typeof testSchema>
   try {
     body = testSchema.parse(await c.req.json())
+    body.baseUrl = validateProviderBaseUrl(body.baseUrl)
   } catch (err) {
-    const msg = err instanceof z.ZodError ? err.issues.map((i) => i.message).join(';') : '请求体不是合法 JSON'
+    const msg =
+      err instanceof z.ZodError
+        ? err.issues.map((i) => i.message).join(';')
+        : err instanceof Error
+          ? err.message
+          : '请求体不是合法 JSON'
     return c.json(errorBody('BAD_REQUEST', `参数校验失败:${msg}`), 400)
   }
 

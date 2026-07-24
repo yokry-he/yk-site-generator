@@ -14,6 +14,7 @@
     "e2e:browser": "playwright test --grep-invert @visual",
     "e2e:visual": "playwright test --grep @visual",
     "e2e:visual:update": "playwright test --grep @visual --update-snapshots",
+    "check:bundle-budget": "tsx scripts/check-bundle-budget.ts",
     "typecheck": "vue-tsc -b"
   },
   "dependencies": {
