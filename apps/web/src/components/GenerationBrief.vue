@@ -163,7 +163,7 @@ onMounted(() => {
     <button class="flex w-full items-center gap-4 rounded-3xl border border-brand1/16 bg-brand1/[0.055] p-4 text-left transition hover:border-brand1/30 sm:p-5" @click="open = !open">
       <span class="bg-brand-gradient grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-white"><Sparkles class="h-5 w-5" /></span>
       <span class="min-w-0 flex-1"><strong class="block text-sm text-ink">结构化需求向导</strong><span class="mt-1 block text-xs text-mut">把目标、受众、区块、风格和参考素材整理成可编辑的生成简报。</span></span>
-      <span class="hidden rounded-full bg-brand1/10 px-3 py-1.5 text-[10px] font-semibold text-brand1 sm:block">完成度 {{ completion }}%</span>
+      <span class="hidden rounded-full bg-brand1/10 px-3 py-1.5 text-[10px] font-semibold text-sub sm:block">完成度 {{ completion }}%</span>
       <ChevronDown class="h-4 w-4 text-faint transition" :class="open && 'rotate-180'" />
     </button>
 

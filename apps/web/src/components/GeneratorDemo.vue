@@ -494,7 +494,7 @@ onBeforeUnmount(() => {
             <span class="font-medium text-brand2">演示模式</span>
             当前为模拟生成,接入模型后可真实生成
             <button
-              class="flex items-center gap-1 font-medium text-brand1 underline-offset-2 hover:underline"
+              class="flex items-center gap-1 font-medium text-sub underline-offset-2 hover:underline"
               @click="showModelSettings"
             >
               <Plug class="h-3 w-3" />
@@ -606,7 +606,7 @@ onBeforeUnmount(() => {
                   <Play class="h-6 w-6 text-faint" />
                 </div>
                 <p class="text-sm text-faint">填写需求并点击「开始生成」</p>
-                <p class="text-xs text-faint/70">AI 将在这里实时构建你的网站</p>
+                <p class="text-xs text-mut">AI 将在这里实时构建你的网站</p>
               </div>
 
               <!-- 生成过程 -->
