@@ -16,7 +16,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "eval": "tsx scripts/eval-prompts.ts",
-    "eval:quality": "tsx scripts/eval-quality.ts"
+    "eval:quality": "tsx scripts/eval-quality.ts",
+    "eval:annotate": "tsx scripts/annotate-quality-report.ts",
+    "eval:trend": "tsx scripts/summarize-quality-reports.ts"
   },
   "dependencies": {
     "shared": "workspace:*"
