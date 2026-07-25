@@ -12,6 +12,38 @@ test('command palette supports keyboard navigation', async ({ page }) => {
   await expect(page).toHaveURL(/\/templates$/)
 })
 
+test('model settings distinguish demo mode from verified real generation', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'desktop navigation exposes the model settings trigger')
+  await mockPublicApi(page)
+  await page.goto('/')
+
+  await page.getByRole('button', { name: '模型设置' }).click()
+  let dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('当前为演示模式')).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  await page.evaluate(() => {
+    localStorage.setItem('siteforge.models.v1', JSON.stringify({
+      active: 'deepseek',
+      connections: {
+        deepseek: {
+          apiKey: 'sk-browser-test-provider-key-1234567890',
+          baseUrl: 'https://api.deepseek.com',
+          model: 'deepseek-v4-pro',
+          availableModels: ['deepseek-v4-pro', 'deepseek-v4-flash'],
+          verifiedAt: '2026-07-25T00:00:00.000Z',
+          latencyMs: 88,
+        },
+      },
+    }))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: '模型设置' }).click()
+  dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('真实生成已验证')).toBeVisible()
+  await expect(dialog.getByPlaceholder(/模型 ID/)).toHaveValue('deepseek-v4-pro')
+})
+
 test('template detail customizes preview and links to AI', async ({ page }) => {
   await mockPublicApi(page)
   await page.goto('/templates/aurora-saas')

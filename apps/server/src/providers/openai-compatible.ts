@@ -7,7 +7,7 @@ import {
   type StreamEvent,
 } from './types'
 
-/** OpenAI 兼容厂商的默认 Base URL */
+/** OpenAI-compatible provider default base URLs. */
 export const OPENAI_COMPATIBLE_DEFAULTS: Record<string, string> = {
   deepseek: 'https://api.deepseek.com',
   kimi: 'https://api.moonshot.cn/v1',
@@ -17,9 +17,36 @@ export const OPENAI_COMPATIBLE_DEFAULTS: Record<string, string> = {
   openai: 'https://api.openai.com/v1',
 }
 
+function usesCompletionTokenBudget(model: string): boolean {
+  const normalized = model.toLowerCase()
+  return normalized.startsWith('gpt-5') || /^o\d(?:-|$)/u.test(normalized)
+}
+
 /**
- * OpenAI 兼容协议适配器(DeepSeek / Kimi / GLM / 通义 / 豆包):
- * POST {baseUrl}/chat/completions,stream: true,逐条解析 delta.content。
+ * Builds a Chat Completions request while avoiding parameters rejected by
+ * current OpenAI reasoning models. Other compatible providers keep the widely
+ * supported max_tokens + temperature shape.
+ */
+export function buildOpenAiCompatibleRequestBody(input: ProviderCallInput): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    model: input.model,
+    messages: input.messages,
+    stream: true,
+  }
+
+  if (usesCompletionTokenBudget(input.model)) {
+    body.max_completion_tokens = input.maxTokens ?? 4096
+  } else {
+    body.max_tokens = input.maxTokens ?? 4096
+    body.temperature = 0.7
+  }
+
+  return body
+}
+
+/**
+ * OpenAI-compatible streaming adapter used by DeepSeek, Kimi, GLM, Qwen,
+ * Doubao, and OpenAI itself.
  */
 export async function* openaiCompatibleStream(
   input: ProviderCallInput,
@@ -39,13 +66,7 @@ export async function* openaiCompatibleStream(
             'content-type': 'application/json',
             authorization: `Bearer ${input.apiKey}`,
           },
-          body: JSON.stringify({
-            model: input.model,
-            messages: input.messages,
-            stream: true,
-            max_tokens: input.maxTokens ?? 4096,
-            temperature: 0.7,
-          }),
+          body: JSON.stringify(buildOpenAiCompatibleRequestBody(input)),
         },
         input.connectTimeoutMs,
         controller.signal,
@@ -62,7 +83,7 @@ export async function* openaiCompatibleStream(
       try {
         json = JSON.parse(payload)
       } catch {
-        continue // 忽略畸形分片
+        continue
       }
       const delta = json.choices?.[0]?.delta?.content
       if (delta) yield { type: 'token', delta }

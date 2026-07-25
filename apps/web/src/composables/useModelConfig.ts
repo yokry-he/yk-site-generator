@@ -5,6 +5,11 @@ export interface ModelConnection {
   apiKey: string
   baseUrl: string
   model: string
+  /** Models returned by the provider for this API key during the latest test. */
+  availableModels?: string[]
+  /** Successful provider test time. Absence means configured but not verified. */
+  verifiedAt?: string
+  latencyMs?: number
 }
 
 interface ModelStore {
@@ -14,29 +19,53 @@ interface ModelStore {
 
 const STORAGE_KEY = 'siteforge.models.v1'
 
+function normalizeConnection(value: unknown): ModelConnection | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as Partial<ModelConnection>
+  if (typeof candidate.apiKey !== 'string' || typeof candidate.baseUrl !== 'string' || typeof candidate.model !== 'string') return null
+  return {
+    apiKey: candidate.apiKey,
+    baseUrl: candidate.baseUrl,
+    model: candidate.model,
+    availableModels: Array.isArray(candidate.availableModels)
+      ? candidate.availableModels.filter((item): item is string => typeof item === 'string').slice(0, 120)
+      : undefined,
+    verifiedAt: typeof candidate.verifiedAt === 'string' ? candidate.verifiedAt : undefined,
+    latencyMs: typeof candidate.latencyMs === 'number' && Number.isFinite(candidate.latencyMs) ? candidate.latencyMs : undefined,
+  }
+}
+
 function loadStore(): ModelStore {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
-      const parsed = JSON.parse(raw) as ModelStore
-      return { connections: parsed.connections ?? {}, active: parsed.active ?? null }
+      const parsed = JSON.parse(raw) as Partial<ModelStore>
+      const connections: Record<string, ModelConnection> = {}
+      if (parsed.connections && typeof parsed.connections === 'object') {
+        for (const [providerId, value] of Object.entries(parsed.connections)) {
+          const connection = normalizeConnection(value)
+          if (connection) connections[providerId] = connection
+        }
+      }
+      const active = typeof parsed.active === 'string' && connections[parsed.active] ? parsed.active : null
+      return { connections, active }
     }
   } catch {
-    /* ignore */
+    /* Ignore invalid browser storage and start with a clean store. */
   }
   return { connections: {}, active: null }
 }
 
-// 模块级单例,全站共享
+// Module-level singleton shared across the application.
 const store = reactive<ModelStore>(loadStore())
 
 watch(
   store,
-  (s) => {
+  (state) => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(s))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
     } catch {
-      /* ignore */
+      /* Browser storage may be unavailable or full. */
     }
   },
   { deep: true },
@@ -45,9 +74,14 @@ watch(
 export function useModelConfig() {
   const activeProvider = computed(() => (store.active ? providerById(store.active) : undefined))
   const activeConnection = computed(() => (store.active ? store.connections[store.active] : undefined))
+  const isConfigured = computed(() => Boolean(activeProvider.value && activeConnection.value?.apiKey && activeConnection.value.model))
+  const isVerified = computed(() => Boolean(isConfigured.value && activeConnection.value?.verifiedAt))
 
-  function save(providerId: string, conn: ModelConnection) {
-    store.connections[providerId] = conn
+  function save(providerId: string, connection: ModelConnection) {
+    store.connections[providerId] = {
+      ...connection,
+      availableModels: connection.availableModels ? [...new Set(connection.availableModels)].slice(0, 120) : undefined,
+    }
     store.active = providerId
   }
 
@@ -67,6 +101,8 @@ export function useModelConfig() {
     activeId: computed(() => store.active),
     activeProvider,
     activeConnection,
+    isConfigured,
+    isVerified,
     save,
     remove,
     setActive,

@@ -9,20 +9,22 @@ import {
   SUPPORTED_PROVIDERS,
   testConnectionTarget,
 } from '../providers'
+import { parseProviderModelCatalog, readProviderCatalog } from '../providers/model-catalog'
 import { errorBody } from '../types'
 
 const testSchema = z.object({
   provider: z.enum(SUPPORTED_PROVIDERS),
   apiKey: z.string().min(1),
   baseUrl: z.string().url().optional(),
-  /** 保留字段:未来可用来探测指定模型;当前测连用 models list,与模型无关 */
-  model: z.string().optional(),
+  /** The selected model is echoed back for availability diagnostics. */
+  model: z.string().trim().min(1).max(160).optional(),
 })
 
 /**
- * POST /api/providers/test —— 真实测试连接(SF-1-4)
- * 发最轻量请求(models list),返回 { ok, latencyMs, error? }。
- * apiKey 只在请求生命周期内存活:不落地、不打日志。
+ * POST /api/providers/test —— test a real provider connection and synchronize
+ * the text-generation models visible to the supplied API key.
+ *
+ * The API key lives only for this request. It is never persisted or logged.
  */
 const providers = new Hono()
 
@@ -51,7 +53,7 @@ providers.post('/test', async (c) => {
     return c.json(errorBody('BAD_REQUEST', `不支持的厂商:${body.provider}`), 400)
   }
 
-  // Gemini 的 key 走查询参数
+  // Gemini authenticates its models endpoint through a query parameter.
   const url =
     body.provider === 'gemini'
       ? `${target.url}?key=${encodeURIComponent(body.apiKey)}`
@@ -72,7 +74,20 @@ providers.post('/test', async (c) => {
       const err = classifyHttpError(res.status)
       return c.json({ ok: false, latencyMs, error: { code: err.code, message: err.message } })
     }
-    return c.json({ ok: true, latencyMs })
+
+    const payload = await readProviderCatalog(res)
+    const models = parseProviderModelCatalog(body.provider, payload)
+    const selectedModelAvailable = body.model && models.length > 0
+      ? models.includes(body.model)
+      : undefined
+
+    return c.json({
+      ok: true,
+      latencyMs,
+      models,
+      catalogSource: models.length ? 'provider' : 'unavailable',
+      selectedModelAvailable,
+    })
   } catch (err) {
     const latencyMs = Date.now() - started
     const classified = classifyFetchError(err)
