@@ -15,6 +15,7 @@ import {
   applyDocumentToVersion,
   siteDocumentChangeSummary,
   siteDocumentFromInput,
+  siteDocumentFromVersion,
   siteDocumentInputShape,
   siteDocumentWithinLimit,
   validateHomePage,
@@ -316,18 +317,32 @@ projects.post('/:id/versions', async (c) => {
   if (input.source === 'editor' && !(await authenticatedFeatureEnabled('visual-editor', c.get('auth')))) {
     return c.json(errorBody('FEATURE_DISABLED', `${featureName('visual-editor')}当前未开放`), 503)
   }
-  const document = siteDocumentFromInput(input)
-  if (!siteDocumentWithinLimit(document)) return c.json(errorBody('PROJECT_TOO_LARGE', '整站项目版本超过大小上限'), 413)
   const userId = c.get('auth').sub
   const now = new Date().toISOString()
-  const version = await mutateData<ProjectVersionRecord | null>((data) => {
+  const result = await mutateData<{ version?: ProjectVersionRecord; error?: 'PROJECT_NOT_FOUND' | 'PROJECT_TOO_LARGE' }>((data) => {
     const project = data.projects.find((item) => item.id === c.req.param('id') && item.userId === userId)
-    if (!project) return null
+    if (!project) return { error: 'PROJECT_NOT_FOUND' }
     const existingVersions = data.projectVersions.filter((item) => item.projectId === project.id && item.userId === userId)
-    const latest = existingVersions.sort((a, b) => b.version - a.version)[0]
+    const latest = [...existingVersions].sort((a, b) => b.version - a.version)[0]
     const parent = input.parentVersionId
       ? existingVersions.find((item) => item.id === input.parentVersionId)
       : latest
+
+    // Older clients submit only `html`. On a multi-page project this means “replace
+    // the home page”, not “discard every other page”. This server-side fallback keeps
+    // the whole-site invariant even if a caller has not yet adopted the pages payload.
+    let document = siteDocumentFromInput(input)
+    if (!input.pages?.length && input.html && parent) {
+      const parentDocument = siteDocumentFromVersion(parent)
+      document = {
+        ...parentDocument,
+        pages: parentDocument.pages.map((page) => (
+          page.id === parentDocument.homePageId ? { ...page, html: input.html! } : { ...page }
+        )),
+      }
+    }
+    if (!siteDocumentWithinLimit(document)) return { error: 'PROJECT_TOO_LARGE' }
+
     const next = Math.max(0, ...existingVersions.map((item) => item.version)) + 1
     const row = applyDocumentToVersion<ProjectVersionRecord>({
       id: randomUUID(),
@@ -348,10 +363,13 @@ projects.post('/:id/versions', async (c) => {
     data.projectVersions.push(row)
     project.updatedAt = now
     project.openedAt = now
-    return structuredClone(row)
+    return { version: structuredClone(row) }
   })
-  if (!version) return c.json(errorBody('PROJECT_NOT_FOUND', '项目不存在'), 404)
-  return c.json({ version: versionSummary(version) }, 201)
+  if (!result.version) {
+    if (result.error === 'PROJECT_TOO_LARGE') return c.json(errorBody(result.error, '整站项目版本超过大小上限'), 413)
+    return c.json(errorBody('PROJECT_NOT_FOUND', '项目不存在'), 404)
+  }
+  return c.json({ version: versionSummary(result.version) }, 201)
 })
 
 projects.patch('/:id/versions/:versionId', async (c) => {
@@ -386,10 +404,13 @@ projects.get('/:id/versions/:versionId', async (c) => {
     (item) => item.id === c.req.param('versionId') && item.projectId === project.id && item.userId === userId,
   )
   if (!version) return c.json(errorBody('VERSION_NOT_FOUND', '项目版本不存在'), 404)
+  const document = siteDocumentFromVersion(version)
   return c.json({
     version: {
       ...version,
       ...versionDocumentSummary(version),
+      pages: document.pages,
+      homePageId: document.homePageId,
       starred: version.starred ?? false,
       changeSummary: version.changeSummary ?? [],
     },
