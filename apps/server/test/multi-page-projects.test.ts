@@ -85,6 +85,25 @@ describe('multi-page projects', () => {
     expect(second.version.pageCount).toBe(3)
     expect(second.version.changeSummary.join(' ')).toContain('页面数量 2 → 3')
 
+    const legacyHomeUpdate = '<!doctype html><html><body><h1>Legacy editor changed only home</h1></body></html>'
+    const legacyResponse = await app.request(`/api/projects/${created.project.id}/versions`, {
+      method: 'POST',
+      headers: headers(token),
+      body: JSON.stringify({
+        source: 'editor',
+        parentVersionId: second.version.id,
+        html: legacyHomeUpdate,
+      }),
+    })
+    expect(legacyResponse.status).toBe(201)
+    const legacy = await legacyResponse.json() as { version: { id: string; pageCount: number } }
+    expect(legacy.version.pageCount).toBe(3)
+    const legacyFullResponse = await app.request(`/api/projects/${created.project.id}/versions/${legacy.version.id}`, { headers: headers(token) })
+    const legacyFull = await legacyFullResponse.json() as { version: { homePageId: string; pages: Array<{ id: string; path: string; html: string }> } }
+    expect(legacyFull.version.pages).toHaveLength(3)
+    expect(legacyFull.version.pages.find((page) => page.id === legacyFull.version.homePageId)?.html).toBe(legacyHomeUpdate)
+    expect(legacyFull.version.pages.find((page) => page.path === '/contact')?.html).toContain('Contact')
+
     const rollbackResponse = await app.request(`/api/projects/${created.project.id}/rollback`, {
       method: 'POST',
       headers: headers(token),
