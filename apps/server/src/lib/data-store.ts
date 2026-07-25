@@ -1,6 +1,11 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import type { BrandKit } from 'shared'
+import {
+  normalizeSiteProject,
+  siteProjectHomePage,
+  type BrandKit,
+  type SitePage,
+} from 'shared'
 import { env } from '../env'
 import { getMysqlSnapshotStore } from './mysql-store'
 
@@ -65,7 +70,11 @@ export interface ProjectVersionRecord {
   projectId: string
   userId: string
   version: number
+  /** 首页 HTML，保留用于旧客户端兼容。 */
   html: string
+  /** 完整站点页面快照；旧数据会在读取时自动补齐。 */
+  pages?: SitePage[]
+  homePageId?: string
   source: ProjectVersionSource
   instruction?: string
   model?: string
@@ -95,7 +104,10 @@ export interface PublicationRecord {
   versionId?: string
   slug: string
   title: string
+  /** 首页 HTML，保留用于旧发布记录兼容。 */
   html: string
+  pages?: SitePage[]
+  homePageId?: string
   status: 'published' | 'offline'
   createdAt: string
   updatedAt: string
@@ -226,7 +238,7 @@ export interface FeatureFlagRecord {
 }
 
 export interface AppData {
-  schemaVersion: 6
+  schemaVersion: 7
   users: UserRecord[]
   verificationCodes: VerificationCodeRecord[]
   sessions: SessionRecord[]
@@ -256,7 +268,7 @@ export interface DataStoreHealth {
 }
 
 export const createEmptyData = (): AppData => ({
-  schemaVersion: 6,
+  schemaVersion: 7,
   users: [],
   verificationCodes: [],
   sessions: [],
@@ -299,27 +311,47 @@ function normalizeProjects(projects: ProjectRecord[]): ProjectRecord[] {
 }
 
 function normalizeVersions(versions: ProjectVersionRecord[]): ProjectVersionRecord[] {
-  return versions.map((version) => ({
-    ...version,
-    starred: version.starred ?? false,
-    changeSummary: version.changeSummary ?? [],
-  }))
+  return versions.map((version) => {
+    const document = normalizeSiteProject(version, '首页')
+    const home = siteProjectHomePage(document)
+    return {
+      ...version,
+      html: home.html,
+      pages: document.pages,
+      homePageId: document.homePageId,
+      starred: version.starred ?? false,
+      changeSummary: version.changeSummary ?? [],
+    }
+  })
+}
+
+function normalizePublications(publications: PublicationRecord[]): PublicationRecord[] {
+  return publications.map((publication) => {
+    const document = normalizeSiteProject(publication, '首页')
+    const home = siteProjectHomePage(document)
+    return {
+      ...publication,
+      html: home.html,
+      pages: document.pages,
+      homePageId: document.homePageId,
+    }
+  })
 }
 
 export function normalizeAppData(input: unknown): AppData {
   const parsed = (input && typeof input === 'object' ? input : {}) as Partial<AppData> & { schemaVersion?: number }
-  if (parsed.schemaVersion !== undefined && ![1, 2, 3, 4, 5, 6].includes(parsed.schemaVersion)) {
+  if (parsed.schemaVersion !== undefined && ![1, 2, 3, 4, 5, 6, 7].includes(parsed.schemaVersion)) {
     throw new Error('UNSUPPORTED_DATA_SCHEMA')
   }
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     users: normalizeUsers(parsed.users ?? []),
     verificationCodes: parsed.verificationCodes ?? [],
     sessions: parsed.sessions ?? [],
     projects: normalizeProjects(parsed.projects ?? []),
     projectVersions: normalizeVersions(parsed.projectVersions ?? []),
     usage: parsed.usage ?? [],
-    publications: parsed.publications ?? [],
+    publications: normalizePublications(parsed.publications ?? []),
     brandKits: parsed.brandKits ?? [],
     brandAssets: parsed.brandAssets ?? [],
     templateFavorites: parsed.templateFavorites ?? [],
@@ -412,7 +444,7 @@ export function mutateData<T>(mutator: (draft: AppData) => T | Promise<T>): Prom
 
 export async function getDataStoreHealth(): Promise<DataStoreHealth> {
   if (env.NODE_ENV === 'test') {
-    return { driver: 'memory', status: 'operational', message: '内存测试适配器', schemaVersion: 6 }
+    return { driver: 'memory', status: 'operational', message: '内存测试适配器', schemaVersion: 7 }
   }
   const startedAt = Date.now()
   if (env.DATA_STORAGE_DRIVER === 'mysql') {
@@ -423,7 +455,7 @@ export async function getDataStoreHealth(): Promise<DataStoreHealth> {
       message: health.message,
       latencyMs: health.latencyMs,
       revision: health.revision,
-      schemaVersion: health.schemaVersion ?? 6,
+      schemaVersion: health.schemaVersion ?? 7,
       updatedAt: health.updatedAt,
     }
   }
@@ -442,12 +474,12 @@ export async function getDataStoreHealth(): Promise<DataStoreHealth> {
       status: 'degraded',
       message: error instanceof Error ? error.message : '文件数据存储不可用',
       latencyMs: Date.now() - startedAt,
-      schemaVersion: 6,
+      schemaVersion: 7,
     }
   }
 }
 
 export function resetDataStoreForTest(seed?: Partial<AppData>): void {
-  memoryData = normalizeAppData({ ...createEmptyData(), ...seed, schemaVersion: 6 })
+  memoryData = normalizeAppData({ ...createEmptyData(), ...seed, schemaVersion: 7 })
   queue = Promise.resolve()
 }
