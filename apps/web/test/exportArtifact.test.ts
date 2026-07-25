@@ -20,10 +20,12 @@ describe('真实产物 ZIP 导出', () => {
     expect(await zip.file('main.js')!.async('string')).toContain('console.log(1)')
     const meta = JSON.parse(await zip.file('siteforge.json')!.async('string'))
     expect(meta).toMatchObject({
-      format: 'siteforge-export-v1',
+      format: 'siteforge-export-v2',
       title: '测试网站',
       siteType: 'personal',
       entry: 'index.html',
+      homePageId: 'home',
+      pages: [expect.objectContaining({ path: '/', file: 'index.html' })],
     })
     expect(await zip.file('README.txt')!.async('string')).toContain('静态托管')
   })
