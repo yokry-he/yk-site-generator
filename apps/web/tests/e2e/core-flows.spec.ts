@@ -44,6 +44,31 @@ test('model settings distinguish demo mode from verified real generation', async
   await expect(dialog.getByPlaceholder(/模型 ID/)).toHaveValue('deepseek-v4-pro')
 })
 
+test('generator mounts when a real model is already persisted', async ({ page }) => {
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await mockPublicApi(page)
+  await page.addInitScript(() => {
+    localStorage.setItem('siteforge.models.v1', JSON.stringify({
+      active: 'deepseek',
+      connections: {
+        deepseek: {
+          apiKey: 'sk-browser-regression-test-key-123456',
+          baseUrl: 'https://api.deepseek.com',
+          model: 'deepseek-v4-pro',
+          verifiedAt: '2026-07-25T00:00:00.000Z',
+          latencyMs: 88,
+        },
+      },
+    }))
+  })
+
+  await page.goto('/generator')
+  await expect(page.getByRole('heading', { name: '亲眼看看,一句话如何变成网站' })).toBeVisible()
+  await expect(page.getByText(/当前模型:DeepSeek · deepseek-v4-pro/)).toBeVisible()
+  expect(pageErrors).toEqual([])
+})
+
 test('template detail customizes preview and links to AI', async ({ page }) => {
   await mockPublicApi(page)
   await page.goto('/templates/aurora-saas')
