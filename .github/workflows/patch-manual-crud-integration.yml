@@ -1,0 +1,92 @@
+name: Patch Manual CRUD Integration
+
+on:
+  push:
+    branches:
+      - Feature-dev-v0.1.0
+
+permissions:
+  contents: write
+
+concurrency:
+  group: patch-manual-crud-integration
+  cancel-in-progress: true
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: Feature-dev-v0.1.0
+          fetch-depth: 0
+      - name: Patch scaffold integration
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('apps/web/src/lib/manualProjectScaffold.ts')
+          text = path.read_text()
+
+          old = """  getBackendStackProfile,\n  type ArtifactFile,\n  type BackendDatabaseId,\n  type BackendStackId,\n} from 'shared'\n"""
+          new = """  getBackendStackProfile,\n  normalizeManualEntities,\n  type ArtifactFile,\n  type BackendDatabaseId,\n  type BackendStackId,\n  type ManualEntityDefinition,\n} from 'shared'\nimport { manualCrudFiles } from './manualCrudScaffold'\n"""
+          if text.count(old) != 1:
+              raise SystemExit('shared import anchor mismatch')
+          text = text.replace(old, new)
+
+          old = """  includeDocker?: boolean\n  includeGithubActions?: boolean\n}\n"""
+          new = """  includeDocker?: boolean\n  includeGithubActions?: boolean\n  entities?: readonly ManualEntityDefinition[]\n}\n"""
+          if text.count(old) != 1:
+              raise SystemExit('input anchor mismatch')
+          text = text.replace(old, new)
+
+          old = """export interface ManualProjectManifest {\n  schemaVersion: 1\n"""
+          new = """export interface ManualProjectManifest {\n  schemaVersion: 2\n"""
+          if text.count(old) != 1:
+              raise SystemExit('manifest schema anchor mismatch')
+          text = text.replace(old, new)
+
+          old = """  database: BackendDatabaseId\n  services: Array<{ id: 'web' | 'api'; cwd: string; port: number; healthPath?: string }>\n"""
+          new = """  database: BackendDatabaseId\n  entities: ManualEntityDefinition[]\n  services: Array<{ id: 'web' | 'api'; cwd: string; port: number; healthPath?: string }>\n"""
+          if text.count(old) != 1:
+              raise SystemExit('manifest entities anchor mismatch')
+          text = text.replace(old, new)
+
+          anchor = """export function createManualProjectScaffold(input: ManualProjectInput): ManualProjectScaffold {\n"""
+          helper = """function dedupeFiles(files: ArtifactFile[]): ArtifactFile[] {\n  const byPath = new Map<string, ArtifactFile>()\n  for (const file of files) byPath.set(file.path, file)\n  return [...byPath.values()]\n}\n\nexport function createManualProjectScaffold(input: ManualProjectInput): ManualProjectScaffold {\n"""
+          if text.count(anchor) != 1:
+              raise SystemExit('create scaffold anchor mismatch')
+          text = text.replace(anchor, helper)
+
+          old = """  const slug = safeSlug(name)\n  const commands = rootCommands(input.backendStack)\n  const manifest: ManualProjectManifest = {\n    schemaVersion: 1,\n"""
+          new = """  const slug = safeSlug(name)\n  const entities = normalizeManualEntities(input.entities)\n  const commands = rootCommands(input.backendStack)\n  const manifest: ManualProjectManifest = {\n    schemaVersion: 2,\n"""
+          if text.count(old) != 1:
+              raise SystemExit('normalize entities anchor mismatch')
+          text = text.replace(old, new)
+
+          old = """    backend: input.backendStack,\n    database: input.database,\n    services: [\n"""
+          new = """    backend: input.backendStack,\n    database: input.database,\n    entities,\n    services: [\n"""
+          if text.count(old) != 1:
+              raise SystemExit('manifest value anchor mismatch')
+          text = text.replace(old, new)
+
+          old = """  const files = [\n    ...commonFiles(input, slug),\n    ...apiFiles(input.backendStack, input.database),\n    json('siteforge.json', manifest),\n  ]\n"""
+          new = """  const files = dedupeFiles([\n    ...commonFiles(input, slug),\n    ...apiFiles(input.backendStack, input.database),\n    ...manualCrudFiles(name, input.backendStack, input.database, entities),\n    json('siteforge.json', manifest),\n  ])\n"""
+          if text.count(old) != 1:
+              raise SystemExit('files anchor mismatch')
+          text = text.replace(old, new)
+
+          path.write_text(text)
+          PY
+      - name: Commit patch and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/patch-manual-crud-integration.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/lib/manualProjectScaffold.ts
+          git diff --cached --check
+          git commit -m "feat(web): integrate manual CRUD models into scaffolds"
+          git push origin HEAD:Feature-dev-v0.1.0
