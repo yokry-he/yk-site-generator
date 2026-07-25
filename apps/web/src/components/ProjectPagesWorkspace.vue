@@ -71,6 +71,16 @@ function markDirty() {
   dirty.value = true
 }
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/gu, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character] ?? character)
+}
+
 function uniquePath(base: string, ignoreId?: string): string {
   const normalized = normalizeSitePath(base)
   const used = new Set(pages.value.filter((page) => page.id !== ignoreId).map((page) => page.path))
@@ -84,12 +94,13 @@ function uniquePath(base: string, ignoreId?: string): string {
 }
 
 function navigationMarkup(items = pages.value): string {
-  const links = items.map((page) => `<a href="${page.path}" style="color:inherit;text-decoration:none;font-weight:600">${page.title}</a>`).join('')
+  const links = items.map((page) => `<a href="${page.path}" style="color:inherit;text-decoration:none;font-weight:600">${escapeHtml(page.title)}</a>`).join('')
   return `<nav data-siteforge-page-navigation style="display:flex;flex-wrap:wrap;gap:18px;align-items:center;padding:18px 24px;border-bottom:1px solid color-mix(in srgb,currentColor 14%,transparent);font:14px/1.4 system-ui">${links}</nav>`
 }
 
 function blankPageHtml(title: string, navigationPages = pages.value): string {
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{margin:0;background:#f8fafc;color:#0f172a;font-family:Inter,ui-sans-serif,system-ui}main{min-height:70vh;display:grid;place-items:center;padding:64px 24px}.card{max-width:720px;border:1px solid #e2e8f0;border-radius:28px;background:#fff;padding:48px;box-shadow:0 24px 70px #0f172a12}h1{font-size:clamp(2.2rem,7vw,4.8rem);margin:0 0 18px}p{font-size:1.05rem;line-height:1.8;color:#475569}</style></head><body>${navigationMarkup(navigationPages)}<main><section class="card"><h1>${title}</h1><p>这是一个新页面。使用可视化编辑器添加内容、区块和品牌样式，然后保存为新的整站版本。</p></section></main></body></html>`
+  const safeTitle = escapeHtml(title)
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safeTitle}</title><style>body{margin:0;background:#f8fafc;color:#0f172a;font-family:Inter,ui-sans-serif,system-ui}main{min-height:70vh;display:grid;place-items:center;padding:64px 24px}.card{max-width:720px;border:1px solid #e2e8f0;border-radius:28px;background:#fff;padding:48px;box-shadow:0 24px 70px #0f172a12}h1{font-size:clamp(2.2rem,7vw,4.8rem);margin:0 0 18px}p{font-size:1.05rem;line-height:1.8;color:#475569}</style></head><body>${navigationMarkup(navigationPages)}<main><section class="card"><h1>${safeTitle}</h1><p>这是一个新页面。使用可视化编辑器添加内容、区块和品牌样式，然后保存为新的整站版本。</p></section></main></body></html>`
 }
 
 function addPage() {
