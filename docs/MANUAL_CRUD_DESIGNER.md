@@ -110,7 +110,7 @@ PATCH  /api/articles/:id
 DELETE /api/articles/:id
 ```
 
-外键冲突或 `restrict` 删除失败时，后端返回数据库或框架对应的 4xx 错误，而不是静默删除关联数据。
+外键冲突或 `restrict` 删除失败时，数据库会阻止破坏引用完整性的操作，不会静默删除关联数据。五套后端尚未统一异常响应格式；统一映射为 409 等结构化错误属于后续错误处理中间件工作。
 
 ### 多技术栈输出
 
@@ -155,12 +155,13 @@ SiteForge 当前只生成和下载源码 ZIP，不会安装或运行生成项目
 - 关系拖拽排序和循环依赖
 - 关系下拉框的远程搜索
 - 复合索引和复合唯一约束
+- 统一的外键冲突错误格式
 - 认证、角色和字段级权限
 - 文件、富文本和 JSON 字段
 - 云端保存工程源码
 - 在平台中实际编译五套生成工程
 
-下一阶段优先实现认证、角色与路由权限，然后进入云端工程文件存储和隔离构建；AI 生成仍暂停扩展。
+下一阶段优先实现认证、角色与路由权限，同时补统一错误处理中间件；之后进入云端工程文件存储和隔离构建。AI 生成仍暂停扩展。
 
 ---
 
@@ -246,7 +247,7 @@ Untrusted sort input is never appended directly to SQL. Every generated stack ma
 
 ### Generated API
 
-An entity whose route is `/articles` receives list, detail, create, patch, and delete endpoints. Foreign-key conflicts and restricted deletes surface as 4xx errors instead of silently deleting related data.
+An entity whose route is `/articles` receives list, detail, create, patch, and delete endpoints. The database rejects operations that violate foreign-key integrity, so related data is not silently removed. The five profiles do not yet share one structured conflict response; mapping constraint failures consistently to responses such as HTTP 409 remains follow-up middleware work.
 
 ### Backend-specific output
 
@@ -268,6 +269,6 @@ SiteForge still generates and downloads source ZIPs only. Until an isolated runn
 
 ### Current limitations
 
-This phase does not yet support one-to-one, many-to-many, or self-relations; cyclic dependency graphs; remote relation search; compound indexes; authentication, roles, or field-level authorization; file, rich-text, or JSON fields; cloud source storage; or real compilation of all five generated stacks inside SiteForge.
+This phase does not yet support one-to-one, many-to-many, or self-relations; cyclic dependency graphs; remote relation search; compound indexes; a shared structured constraint-error format; authentication, roles, or field-level authorization; file, rich-text, or JSON fields; cloud source storage; or real compilation of all five generated stacks inside SiteForge.
 
-The next phase prioritizes authentication, roles, and route permissions before cloud engineering-file storage and isolated builds. AI-generation expansion remains paused.
+The next phase prioritizes authentication, roles, route permissions, and shared error middleware before cloud engineering-file storage and isolated builds. AI-generation expansion remains paused.
