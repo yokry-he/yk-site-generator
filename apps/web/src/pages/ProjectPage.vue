@@ -12,6 +12,7 @@ import {
   Download,
   ExternalLink,
   FileClock,
+  Files,
   Gauge,
   History,
   LayoutDashboard,
@@ -30,6 +31,7 @@ import {
   WandSparkles,
 } from 'lucide-vue-next'
 import VisualEditor from '../components/VisualEditor.vue'
+import ProjectPagesWorkspace from '../components/ProjectPagesWorkspace.vue'
 import ProjectQualityWorkspace from '../components/ProjectQualityWorkspace.vue'
 import VersionVisualDiff from '../components/VersionVisualDiff.vue'
 import MobileVersionDrawer from '../components/MobileVersionDrawer.vue'
@@ -68,10 +70,11 @@ const { show: showAuth } = useAuthDialog()
 const { enabled } = useFeatures()
 const toast = useToast()
 
-type WorkspaceTab = 'overview' | 'preview' | 'quality' | 'versions' | 'compare'
+type WorkspaceTab = 'overview' | 'pages' | 'preview' | 'quality' | 'versions' | 'compare'
 const TABS = [
   { id: 'overview' as const, label: '项目概览', icon: LayoutDashboard },
-  { id: 'preview' as const, label: '页面预览', icon: Monitor },
+  { id: 'pages' as const, label: '页面管理', icon: Files },
+  { id: 'preview' as const, label: '首页预览', icon: Monitor },
   { id: 'quality' as const, label: '质量检查', icon: ShieldCheck },
   { id: 'versions' as const, label: '版本管理', icon: FileClock },
   { id: 'compare' as const, label: '版本对比', icon: Columns2 },
@@ -105,8 +108,9 @@ const publishedVersion = computed(() => versions.value.find((version) => version
 const nextActions = computed(() => {
   const result: Array<{ label: string; description: string; action: WorkspaceTab | 'publish' | 'brand' | 'edit' }> = []
   if (!selected.value) result.push({ label: '创建第一个页面版本', description: '从生成器或模板中心建立项目内容。', action: 'preview' })
+  if (selected.value && selected.value.pageCount <= 1) result.push({ label: '添加更多站点页面', description: '创建关于、产品、定价或联系页面，并作为整站版本保存。', action: 'pages' })
   if (quality.value && quality.value.counts.error > 0) result.push({ label: `修复 ${quality.value.counts.error} 个严重问题`, description: '先处理会影响发布、移动端或无障碍的问题。', action: 'quality' })
-  if (selected.value && enabled('visual-editor')) result.push({ label: '继续完善页面内容', description: '使用结构树、区块库和响应式样式编辑。', action: 'edit' })
+  if (selected.value && enabled('visual-editor')) result.push({ label: '继续完善首页内容', description: '使用结构树、区块库和响应式样式编辑。', action: 'edit' })
   if (selected.value && enabled('brand-kits') && !detail.value?.project.brandKitId) result.push({ label: '应用品牌套件', description: '统一颜色、字体和视觉语言。', action: 'brand' })
   if (selected.value && !publication.value && enabled('site-publishing')) result.push({ label: '发布网站', description: '质量检查完成后生成独立访问地址。', action: 'publish' })
   if (versions.value.length > 1) result.push({ label: '对比最近版本', description: '并排检查修改是否符合预期。', action: 'compare' })
@@ -190,14 +194,16 @@ async function saveEdited(html: string) {
   if (!enabled('visual-editor') || !selected.value) return
   actionBusy.value = 'editor'
   try {
+    const pages = selected.value.pages.map((page) => page.id === selected.value?.homePageId ? { ...page, html } : { ...page })
     const created = await addProjectVersion(projectId.value, {
-      html,
+      pages,
+      homePageId: selected.value.homePageId,
       source: 'editor',
-      instruction: '可视化编辑器修改',
+      instruction: '可视化编辑器修改首页',
       name: `编辑版本 ${versions.value.length + 1}`,
       parentVersionId: selected.value.id,
     })
-    toast.success('编辑已保存', `已创建第 ${created.version} 版；编辑器保持打开，可继续修改。`)
+    toast.success('编辑已保存', `已创建第 ${created.version} 版；其他页面保持不变。`)
     await load(created.id)
   } catch (err) { toast.error('保存失败', messageOf(err)) }
   finally { actionBusy.value = '' }
@@ -216,10 +222,10 @@ async function publish() {
   try {
     if (publication.value) {
       publication.value = await republish(publication.value.id, { versionId: version.id })
-      toast.success('重新发布完成', `线上站点已更新为第 ${version.version} 版。`)
+      toast.success('重新发布完成', `线上站点已更新为第 ${version.version} 版，共 ${version.pageCount} 个页面。`)
     } else {
       publication.value = await createPublication({ title: detail.value.project.title, projectId: detail.value.project.id, versionId: version.id })
-      toast.success('站点已发布', '已生成独立访问地址。')
+      toast.success('站点已发布', `已生成包含 ${version.pageCount} 个页面的独立访问地址。`)
     }
   } catch (err) { toast.error('发布失败', messageOf(err)) }
   finally { actionBusy.value = '' }
@@ -244,8 +250,8 @@ async function exportZip() {
   if (!selected.value || !detail.value) return
   actionBusy.value = 'export'
   try {
-    const fileName = await downloadSiteZip({ html: selected.value.html, title: detail.value.project.title, siteType: detail.value.project.siteType, requirement: detail.value.project.requirement, model: selected.value.model, generatedAt: selected.value.createdAt })
-    toast.success('ZIP 已导出', fileName)
+    const fileName = await downloadSiteZip({ pages: selected.value.pages, homePageId: selected.value.homePageId, title: detail.value.project.title, siteType: detail.value.project.siteType, requirement: detail.value.project.requirement, model: selected.value.model, generatedAt: selected.value.createdAt })
+    toast.success('ZIP 已导出', `${fileName} · ${selected.value.pageCount} 个页面`)
   } catch (err) { toast.error('导出失败', messageOf(err)) }
   finally { actionBusy.value = '' }
 }
@@ -281,8 +287,9 @@ async function createQualityVersion(html: string, name: string, summary: string[
   if (!selected.value) return
   actionBusy.value = 'quality'
   try {
-    const created = await addProjectVersion(projectId.value, { html, source: 'editor', instruction: name, name, parentVersionId: selected.value.id, changeSummary: summary })
-    toast.success('质量修复已保存', `已创建第 ${created.version} 版，原版本保持不变。`)
+    const pages = selected.value.pages.map((page) => page.id === selected.value?.homePageId ? { ...page, html } : { ...page })
+    const created = await addProjectVersion(projectId.value, { pages, homePageId: selected.value.homePageId, source: 'editor', instruction: name, name, parentVersionId: selected.value.id, changeSummary: summary })
+    toast.success('质量修复已保存', `已创建第 ${created.version} 版，其他页面保持不变。`)
     await load(created.id)
   } catch (err) { toast.error('修复保存失败', messageOf(err)) }
   finally { actionBusy.value = '' }
@@ -301,7 +308,6 @@ function applyAllIssues(issues: QualityIssue[]) {
 function ignoreRule(rule: string) {
   if (!ignoredQualityRules.value.includes(rule)) ignoredQualityRules.value.push(rule)
 }
-
 
 function runNextAction(action: (typeof nextActions.value)[number]['action']) {
   if (action === 'publish') void publish()
@@ -336,7 +342,7 @@ onMounted(() => void load())
           <button class="flex items-center gap-1.5 rounded-xl border border-line/12 bg-ink/[0.04] px-3 py-2.5 text-xs font-medium text-sub lg:hidden" @click="mobileVersionsOpen = true"><History class="h-3.5 w-3.5" />版本</button>
           <button v-if="selected" :disabled="actionBusy === 'export'" class="flex items-center gap-1.5 rounded-xl border border-line/12 bg-ink/[0.04] px-3.5 py-2.5 text-xs font-medium text-sub" @click="exportZip"><Loader2 v-if="actionBusy === 'export'" class="h-3.5 w-3.5 animate-spin" /><Download v-else class="h-3.5 w-3.5" />导出 ZIP</button>
           <button v-if="selected && enabled('brand-kits')" class="flex items-center gap-1.5 rounded-xl border border-brand2/20 bg-brand2/[0.07] px-3.5 py-2.5 text-xs font-semibold text-brand2" @click="openBrandKits"><Palette class="h-3.5 w-3.5" />应用品牌</button>
-          <button v-if="selected && enabled('visual-editor')" class="flex items-center gap-1.5 rounded-xl border border-brand1/20 bg-brand1/[0.08] px-3.5 py-2.5 text-xs font-semibold text-brand1" @click="editorOpen = true"><PencilRuler class="h-3.5 w-3.5" />可视化编辑</button>
+          <button v-if="selected && enabled('visual-editor')" class="flex items-center gap-1.5 rounded-xl border border-brand1/20 bg-brand1/[0.08] px-3.5 py-2.5 text-xs font-semibold text-brand1" @click="editorOpen = true"><PencilRuler class="h-3.5 w-3.5" />编辑首页</button>
           <button v-if="selected && enabled('site-publishing')" :disabled="actionBusy === 'publish'" class="bg-brand-gradient flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold text-white disabled:opacity-50" @click="publish"><Loader2 v-if="actionBusy === 'publish'" class="h-3.5 w-3.5 animate-spin" /><Rocket v-else class="h-3.5 w-3.5" />{{ publication ? '发布当前版本' : '一键发布' }}</button>
         </div>
       </header>
@@ -351,13 +357,13 @@ onMounted(() => void load())
             <button v-for="version in versions" :key="version.id" class="group w-full rounded-xl border p-3 text-left" :class="selected?.id === version.id ? 'border-brand1/25 bg-brand1/[0.09]' : 'border-transparent hover:border-line/10 hover:bg-ink/[0.035]'" @click="selectVersion(version)">
               <div class="flex items-center justify-between gap-2"><span class="truncate text-xs font-semibold" :class="selected?.id === version.id ? 'text-brand1' : 'text-ink'">{{ version.name || `第 ${version.version} 版` }}</span><Star v-if="version.starred" class="h-3 w-3 shrink-0 fill-current text-amber-500" /></div>
               <p class="mt-1 line-clamp-2 text-[10px] leading-4 text-mut">{{ version.note || version.instruction || '未添加版本说明' }}</p>
-              <div class="mt-2 flex items-center justify-between text-[9px] text-faint"><span>{{ sourceLabel(version.source) }}</span><span>v{{ version.version }} · {{ (version.sizeBytes / 1024).toFixed(1) }}KB</span></div>
+              <div class="mt-2 flex items-center justify-between text-[9px] text-faint"><span>{{ sourceLabel(version.source) }} · {{ version.pageCount }} 页</span><span>v{{ version.version }} · {{ (version.sizeBytes / 1024).toFixed(1) }}KB</span></div>
               <button v-if="selected?.id !== version.id" :disabled="actionBusy === `rollback:${version.id}`" class="mt-2 flex items-center gap-1 rounded-md px-2 py-1 text-[9px] text-faint opacity-0 hover:bg-brand1/10 hover:text-brand1 group-hover:opacity-100" @click.stop="rollback(version)"><Loader2 v-if="actionBusy === `rollback:${version.id}`" class="h-3 w-3 animate-spin" /><RotateCcw v-else class="h-3 w-3" />以此版本创建新版本</button>
             </button>
           </div>
           <div v-else class="p-8 text-center text-xs text-faint">该项目还没有可预览的版本</div>
 
-          <div v-if="publication" class="border-t border-line/10 p-4"><div class="flex items-center justify-between gap-2"><p class="flex items-center gap-1.5 text-xs font-medium"><span class="h-2 w-2 rounded-full" :class="publication.status === 'published' ? 'bg-emerald-500' : 'bg-zinc-400'" />{{ publication.status === 'published' ? '线上运行中' : '当前已下线' }}</p><button :disabled="actionBusy === 'status'" class="text-[10px] text-faint hover:text-brand1" @click="togglePublication">{{ publication.status === 'published' ? '下线' : '恢复上线' }}</button></div><a v-if="publication.status === 'published'" :href="publication.url" target="_blank" rel="noopener noreferrer" class="mt-2 flex items-center gap-1.5 truncate text-[11px] text-brand1 hover:underline"><ExternalLink class="h-3 w-3" />{{ publication.url }}</a><p v-else class="mt-2 flex items-center gap-1.5 text-[11px] text-faint"><CloudOff class="h-3 w-3" />访问地址暂不可用</p></div>
+          <div v-if="publication" class="border-t border-line/10 p-4"><div class="flex items-center justify-between gap-2"><p class="flex items-center gap-1.5 text-xs font-medium"><span class="h-2 w-2 rounded-full" :class="publication.status === 'published' ? 'bg-emerald-500' : 'bg-zinc-400'" />{{ publication.status === 'published' ? '线上运行中' : '当前已下线' }}</p><button :disabled="actionBusy === 'status'" class="text-[10px] text-faint hover:text-brand1" @click="togglePublication">{{ publication.status === 'published' ? '下线' : '恢复上线' }}</button></div><a v-if="publication.status === 'published'" :href="publication.url" target="_blank" rel="noopener noreferrer" class="mt-2 flex items-center gap-1.5 truncate text-[11px] text-brand1 hover:underline"><ExternalLink class="h-3 w-3" />{{ publication.url }}</a><p class="mt-1 text-[9px] text-faint">{{ publication.pageCount }} 个页面</p><p v-if="publication.status !== 'published'" class="mt-2 flex items-center gap-1.5 text-[11px] text-faint"><CloudOff class="h-3 w-3" />访问地址暂不可用</p></div>
         </aside>
 
         <section class="min-w-0 overflow-hidden rounded-2xl border border-line/10 bg-soft/60">
@@ -366,43 +372,46 @@ onMounted(() => void load())
           </nav>
 
           <div v-if="activeTab === 'overview'" class="p-5 sm:p-7">
-            <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
               <article class="rounded-2xl border border-line/10 bg-app/45 p-4"><span class="grid h-9 w-9 place-items-center rounded-xl bg-violet-500/10 text-violet-500"><FileClock class="h-4.5 w-4.5" /></span><strong class="mt-4 block text-2xl">{{ versions.length }}</strong><p class="mt-1 text-[10px] text-faint">不可变项目版本</p></article>
-              <article class="rounded-2xl border border-line/10 bg-app/45 p-4"><span class="grid h-9 w-9 place-items-center rounded-xl bg-emerald-500/10 text-emerald-500"><Gauge class="h-4.5 w-4.5" /></span><strong class="mt-4 block text-2xl">{{ quality?.score ?? '—' }}</strong><p class="mt-1 text-[10px] text-faint">当前版本质量分</p></article>
+              <article class="rounded-2xl border border-line/10 bg-app/45 p-4"><span class="grid h-9 w-9 place-items-center rounded-xl bg-cyan-500/10 text-cyan-500"><Files class="h-4.5 w-4.5" /></span><strong class="mt-4 block text-2xl">{{ selected?.pageCount ?? 0 }}</strong><p class="mt-1 text-[10px] text-faint">当前版本页面</p></article>
+              <article class="rounded-2xl border border-line/10 bg-app/45 p-4"><span class="grid h-9 w-9 place-items-center rounded-xl bg-emerald-500/10 text-emerald-500"><Gauge class="h-4.5 w-4.5" /></span><strong class="mt-4 block text-2xl">{{ quality?.score ?? '—' }}</strong><p class="mt-1 text-[10px] text-faint">首页质量分</p></article>
               <article class="rounded-2xl border border-line/10 bg-app/45 p-4"><span class="grid h-9 w-9 place-items-center rounded-xl bg-sky-500/10 text-sky-500"><Rocket class="h-4.5 w-4.5" /></span><strong class="mt-4 block text-sm">{{ publication ? (publication.status === 'published' ? '已发布' : '已下线') : '未发布' }}</strong><p class="mt-1 text-[10px] text-faint">{{ publishedVersion ? `线上为第 ${publishedVersion.version} 版` : '尚无线上版本' }}</p></article>
               <article class="rounded-2xl border border-line/10 bg-app/45 p-4"><span class="grid h-9 w-9 place-items-center rounded-xl bg-amber-500/10 text-amber-500"><BadgeCheck class="h-4.5 w-4.5" /></span><strong class="mt-4 block truncate text-sm">{{ selectedSummary?.name || (selectedSummary ? `第 ${selectedSummary.version} 版` : '暂无版本') }}</strong><p class="mt-1 text-[10px] text-faint">当前工作版本</p></article>
             </div>
 
             <div class="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,.8fr)]">
-              <article class="rounded-2xl border border-line/10 bg-app/45 p-5"><h2 class="text-sm font-semibold">当前版本摘要</h2><div v-if="selectedSummary" class="mt-4 grid gap-3"><div class="flex items-center justify-between rounded-xl border border-line/8 bg-soft/55 p-3"><span class="text-xs text-mut">来源</span><strong class="text-xs">{{ sourceLabel(selectedSummary.source) }}</strong></div><div class="flex items-center justify-between rounded-xl border border-line/8 bg-soft/55 p-3"><span class="text-xs text-mut">创建时间</span><strong class="text-xs">{{ formatDate(selectedSummary.createdAt) }}</strong></div><div class="rounded-xl border border-line/8 bg-soft/55 p-3"><span class="text-xs text-mut">变更摘要</span><ul class="mt-2 grid gap-1.5 text-[11px] text-sub"><li v-for="item in selectedSummary.changeSummary" :key="item" class="flex gap-2"><CheckCircle2 class="mt-0.5 h-3 w-3 shrink-0 text-emerald-500" />{{ item }}</li><li v-if="!selectedSummary.changeSummary.length" class="text-faint">暂无自动摘要</li></ul></div></div></article>
+              <article class="rounded-2xl border border-line/10 bg-app/45 p-5"><h2 class="text-sm font-semibold">当前版本摘要</h2><div v-if="selectedSummary" class="mt-4 grid gap-3"><div class="flex items-center justify-between rounded-xl border border-line/8 bg-soft/55 p-3"><span class="text-xs text-mut">来源</span><strong class="text-xs">{{ sourceLabel(selectedSummary.source) }}</strong></div><div class="flex items-center justify-between rounded-xl border border-line/8 bg-soft/55 p-3"><span class="text-xs text-mut">页面</span><strong class="text-xs">{{ selectedSummary.pageCount }} 页</strong></div><div class="flex items-center justify-between rounded-xl border border-line/8 bg-soft/55 p-3"><span class="text-xs text-mut">创建时间</span><strong class="text-xs">{{ formatDate(selectedSummary.createdAt) }}</strong></div><div class="rounded-xl border border-line/8 bg-soft/55 p-3"><span class="text-xs text-mut">变更摘要</span><ul class="mt-2 grid gap-1.5 text-[11px] text-sub"><li v-for="item in selectedSummary.changeSummary" :key="item" class="flex gap-2"><CheckCircle2 class="mt-0.5 h-3 w-3 shrink-0 text-emerald-500" />{{ item }}</li><li v-if="!selectedSummary.changeSummary.length" class="text-faint">暂无自动摘要</li></ul></div></div></article>
               <article class="rounded-2xl border border-line/10 bg-app/45 p-5"><div class="flex items-center justify-between"><h2 class="text-sm font-semibold">推荐下一步</h2><WandSparkles class="h-4 w-4 text-brand1" /></div><div class="mt-4 grid gap-2"><button v-for="item in nextActions" :key="item.label" class="rounded-xl border border-line/8 bg-soft/55 p-3 text-left hover:border-brand1/25" @click="runNextAction(item.action)"><strong class="text-xs">{{ item.label }}</strong><span class="mt-1 block text-[10px] leading-4 text-faint">{{ item.description }}</span></button><p v-if="!nextActions.length" class="py-8 text-center text-xs text-faint">当前项目已完成主要步骤。</p></div></article>
             </div>
           </div>
 
+          <ProjectPagesWorkspace v-else-if="activeTab === 'pages' && selected" :project-id="projectId" :version="selected" :site-type="detail.project.siteType" :brand-kit-id="detail.project.brandKitId" :visual-editor-enabled="enabled('visual-editor')" @saved="load($event)" />
+
           <div v-else-if="activeTab === 'preview'" class="flex min-h-[680px] flex-col">
-            <div class="flex items-center gap-3 border-b border-line/10 bg-app/45 px-4 py-3"><div class="flex gap-1.5"><span v-for="item in 3" :key="item" class="h-2.5 w-2.5 rounded-full bg-line/25" /></div><div class="min-w-0 flex-1 truncate rounded-md bg-ink/[0.04] px-3 py-1.5 text-[11px] text-faint">{{ selected ? `${detail.project.title} / v${selected.version}` : '暂无版本' }}</div><div class="flex rounded-lg bg-ink/[0.04] p-1"><button class="rounded-md px-2 py-1 text-[10px]" :class="previewWidth === 'desktop' ? 'bg-soft text-ink shadow' : 'text-faint'" @click="previewWidth = 'desktop'"><Monitor class="h-3.5 w-3.5" /></button><button class="rounded-md px-2 py-1 text-[10px]" :class="previewWidth === 'mobile' ? 'bg-soft text-ink shadow' : 'text-faint'" @click="previewWidth = 'mobile'"><Smartphone class="h-3.5 w-3.5" /></button></div></div>
-            <div class="relative min-h-0 flex-1 bg-ink/[0.035] p-3 sm:p-5"><div v-if="previewLoading" class="absolute inset-0 z-10 flex items-center justify-center bg-app/45 backdrop-blur-sm"><Loader2 class="h-6 w-6 animate-spin text-brand1" /></div><div v-if="selected" class="mx-auto h-full min-h-[610px] overflow-hidden rounded-xl border border-line/12 bg-white shadow-2xl shadow-black/15" :class="previewWidth === 'mobile' ? 'max-w-[390px]' : 'max-w-none'"><iframe :srcdoc="selected.html" sandbox="allow-scripts" referrerpolicy="no-referrer" class="h-full min-h-[610px] w-full" title="项目版本预览" /></div><div v-else class="flex h-full min-h-[610px] flex-col items-center justify-center text-center"><CheckCircle2 class="h-8 w-8 text-faint" /><p class="mt-3 text-sm text-mut">尚无项目版本</p><RouterLink to="/generator" class="mt-3 text-xs text-brand1">前往生成器创建内容</RouterLink></div></div>
+            <div class="flex items-center gap-3 border-b border-line/10 bg-app/45 px-4 py-3"><div class="flex gap-1.5"><span v-for="item in 3" :key="item" class="h-2.5 w-2.5 rounded-full bg-line/25" /></div><div class="min-w-0 flex-1 truncate rounded-md bg-ink/[0.04] px-3 py-1.5 text-[11px] text-faint">{{ selected ? `${detail.project.title} / v${selected.version} / 首页` : '暂无版本' }}</div><div class="flex rounded-lg bg-ink/[0.04] p-1"><button class="rounded-md px-2 py-1 text-[10px]" :class="previewWidth === 'desktop' ? 'bg-soft text-ink shadow' : 'text-faint'" @click="previewWidth = 'desktop'"><Monitor class="h-3.5 w-3.5" /></button><button class="rounded-md px-2 py-1 text-[10px]" :class="previewWidth === 'mobile' ? 'bg-soft text-ink shadow' : 'text-faint'" @click="previewWidth = 'mobile'"><Smartphone class="h-3.5 w-3.5" /></button></div></div>
+            <div class="relative min-h-0 flex-1 bg-ink/[0.035] p-3 sm:p-5"><div v-if="previewLoading" class="absolute inset-0 z-10 flex items-center justify-center bg-app/45 backdrop-blur-sm"><Loader2 class="h-6 w-6 animate-spin text-brand1" /></div><div v-if="selected" class="mx-auto h-full min-h-[610px] overflow-hidden rounded-xl border border-line/12 bg-white shadow-2xl shadow-black/15" :class="previewWidth === 'mobile' ? 'max-w-[390px]' : 'max-w-none'"><iframe :srcdoc="selected.html" sandbox="allow-scripts" referrerpolicy="no-referrer" class="h-full min-h-[610px] w-full" title="项目首页预览" /></div><div v-else class="flex h-full min-h-[610px] flex-col items-center justify-center text-center"><CheckCircle2 class="h-8 w-8 text-faint" /><p class="mt-3 text-sm text-mut">尚无项目版本</p><RouterLink to="/generator" class="mt-3 text-xs text-brand1">前往生成器创建内容</RouterLink></div></div>
           </div>
 
           <ProjectQualityWorkspace v-else-if="activeTab === 'quality' && selected" :html="selected.html" :ignored-rules="ignoredQualityRules" @apply="applyIssue" @apply-all="applyAllIssues" @ignore="ignoreRule" />
 
-          <div v-else-if="activeTab === 'versions'" class="p-5 sm:p-7"><div class="flex items-end justify-between"><div><h2 class="text-lg font-semibold">版本管理</h2><p class="mt-1 text-xs text-faint">为重要版本命名、添加备注或收藏。</p></div><span class="text-[10px] text-faint">共 {{ versions.length }} 版</span></div><div class="mt-5 grid gap-3"><article v-for="version in versions" :key="version.id" class="rounded-2xl border border-line/10 bg-app/45 p-4"><div v-if="editingVersionId === version.id" class="grid gap-3"><input v-model="versionName" maxlength="80" placeholder="版本名称" class="rounded-xl border border-line/10 bg-soft/65 px-3 py-2.5 text-sm outline-none" /><textarea v-model="versionNote" rows="3" maxlength="500" placeholder="记录这版解决了什么问题、需要继续关注什么。" class="resize-y rounded-xl border border-line/10 bg-soft/65 p-3 text-xs leading-5 outline-none" /><div class="flex justify-end gap-2"><button class="rounded-lg border border-line/10 px-3 py-2 text-xs text-faint" @click="editingVersionId = ''">取消</button><button :disabled="actionBusy === `meta:${version.id}`" class="bg-brand-gradient flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white" @click="saveVersionMetadata(version)"><Loader2 v-if="actionBusy === `meta:${version.id}`" class="h-3.5 w-3.5 animate-spin" /><Check v-else class="h-3.5 w-3.5" />保存</button></div></div><template v-else><div class="flex items-start gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand1/10 text-brand1"><FileClock class="h-4.5 w-4.5" /></span><div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2"><h3 class="text-sm font-semibold">{{ version.name || `第 ${version.version} 版` }}</h3><span class="rounded bg-ink/5 px-2 py-0.5 text-[9px] text-faint">{{ sourceLabel(version.source) }}</span><span v-if="selected?.id === version.id" class="rounded bg-emerald-500/10 px-2 py-0.5 text-[9px] text-emerald-500">当前版本</span></div><p class="mt-2 text-xs leading-5 text-mut">{{ version.note || version.instruction || '未添加版本备注' }}</p><div class="mt-3 flex flex-wrap gap-2 text-[9px] text-faint"><span>{{ formatDate(version.createdAt) }}</span><span>{{ (version.sizeBytes / 1024).toFixed(1) }}KB</span><span v-for="item in version.changeSummary.slice(0,3)" :key="item" class="rounded bg-ink/5 px-1.5 py-0.5">{{ item }}</span></div></div><div class="flex gap-1"><button class="rounded-lg p-2" :class="version.starred ? 'text-amber-500' : 'text-faint hover:text-amber-500'" @click="toggleVersionStar(version)"><Star class="h-4 w-4" :fill="version.starred ? 'currentColor' : 'none'" /></button><button class="rounded-lg p-2 text-faint hover:bg-ink/5 hover:text-brand1" @click="editMetadata(version)"><Pencil class="h-4 w-4" /></button></div></div></template></article></div></div>
+          <div v-else-if="activeTab === 'versions'" class="p-5 sm:p-7"><div class="flex items-end justify-between"><div><h2 class="text-lg font-semibold">版本管理</h2><p class="mt-1 text-xs text-faint">每个版本包含完整页面集合；为重要版本命名、添加备注或收藏。</p></div><span class="text-[10px] text-faint">共 {{ versions.length }} 版</span></div><div class="mt-5 grid gap-3"><article v-for="version in versions" :key="version.id" class="rounded-2xl border border-line/10 bg-app/45 p-4"><div v-if="editingVersionId === version.id" class="grid gap-3"><input v-model="versionName" maxlength="80" placeholder="版本名称" class="rounded-xl border border-line/10 bg-soft/65 px-3 py-2.5 text-sm outline-none" /><textarea v-model="versionNote" rows="3" maxlength="500" placeholder="记录这版解决了什么问题、需要继续关注什么。" class="resize-y rounded-xl border border-line/10 bg-soft/65 p-3 text-xs leading-5 outline-none" /><div class="flex justify-end gap-2"><button class="rounded-lg border border-line/10 px-3 py-2 text-xs text-faint" @click="editingVersionId = ''">取消</button><button :disabled="actionBusy === `meta:${version.id}`" class="bg-brand-gradient flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white" @click="saveVersionMetadata(version)"><Loader2 v-if="actionBusy === `meta:${version.id}`" class="h-3.5 w-3.5 animate-spin" /><Check v-else class="h-3.5 w-3.5" />保存</button></div></div><template v-else><div class="flex items-start gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand1/10 text-brand1"><FileClock class="h-4.5 w-4.5" /></span><div class="min-w-0 flex-1"><div class="flex flex-wrap items-center gap-2"><h3 class="text-sm font-semibold">{{ version.name || `第 ${version.version} 版` }}</h3><span class="rounded bg-ink/5 px-2 py-0.5 text-[9px] text-faint">{{ sourceLabel(version.source) }}</span><span class="rounded bg-cyan-500/10 px-2 py-0.5 text-[9px] text-cyan-600">{{ version.pageCount }} 页</span><span v-if="selected?.id === version.id" class="rounded bg-emerald-500/10 px-2 py-0.5 text-[9px] text-emerald-500">当前版本</span></div><p class="mt-2 text-xs leading-5 text-mut">{{ version.note || version.instruction || '未添加版本备注' }}</p><div class="mt-3 flex flex-wrap gap-2 text-[9px] text-faint"><span>{{ formatDate(version.createdAt) }}</span><span>{{ (version.sizeBytes / 1024).toFixed(1) }}KB</span><span v-for="item in version.changeSummary.slice(0,3)" :key="item" class="rounded bg-ink/5 px-1.5 py-0.5">{{ item }}</span></div></div><div class="flex gap-1"><button class="rounded-lg p-2" :class="version.starred ? 'text-amber-500' : 'text-faint hover:text-amber-500'" @click="toggleVersionStar(version)"><Star class="h-4 w-4" :fill="version.starred ? 'currentColor' : 'none'" /></button><button class="rounded-lg p-2 text-faint hover:bg-ink/5 hover:text-brand1" @click="editMetadata(version)"><Pencil class="h-4 w-4" /></button></div></div></template></article></div></div>
 
           <div v-else-if="activeTab === 'compare'" class="min-h-[680px] p-3 sm:p-5">
-  <div class="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-line/10 bg-app/45 p-3">
-    <label class="relative min-w-56 flex-1 sm:max-w-sm"><select v-model="compareVersionId" class="w-full appearance-none rounded-xl border border-line/10 bg-soft/65 py-2.5 pr-9 pl-3 text-xs outline-none"><option value="">选择对比版本</option><option v-for="version in versions.filter(item => item.id !== selected?.id)" :key="version.id" :value="version.id">{{ version.name || `第 ${version.version} 版` }}</option></select><ChevronDown class="pointer-events-none absolute top-1/2 right-3 h-3.5 w-3.5 -translate-y-1/2 text-faint" /></label>
-    <button v-if="publishedVersion && publishedVersion.id !== selected?.id" class="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2.5 text-[10px] font-semibold text-emerald-600" @click="compareVersionId = publishedVersion.id">与线上第 {{ publishedVersion.version }} 版对比</button>
-    <span v-if="compareVersion" class="ml-auto text-[10px] text-faint">{{ selected?.name || `第 ${selected?.version} 版` }} ↔ {{ compareVersion.name || `第 ${compareVersion.version} 版` }}</span>
-  </div>
-  <div v-if="compareLoading" class="flex min-h-[600px] items-center justify-center"><Loader2 class="h-6 w-6 animate-spin text-brand1" /></div>
-  <VersionVisualDiff v-else-if="selected && compareVersion" :before-html="compareVersion.html" :after-html="selected.html" :before-label="compareVersion.name || `第 ${compareVersion.version} 版`" :after-label="selected.name || `第 ${selected.version} 版`" />
-  <div v-else class="flex min-h-[600px] flex-col items-center justify-center rounded-2xl border border-dashed border-line/15 text-center"><Columns2 class="h-9 w-9 text-faint" /><h3 class="mt-4 text-sm font-semibold">选择一个版本开始对比</h3><p class="mt-2 text-xs text-mut">可滑动查看视觉变化，并按区块、内容、图片、链接、SEO 和样式筛选差异。</p></div>
-</div>
+            <div class="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-line/10 bg-app/45 p-3">
+              <label class="relative min-w-56 flex-1 sm:max-w-sm"><select v-model="compareVersionId" class="w-full appearance-none rounded-xl border border-line/10 bg-soft/65 py-2.5 pr-9 pl-3 text-xs outline-none"><option value="">选择对比版本</option><option v-for="version in versions.filter(item => item.id !== selected?.id)" :key="version.id" :value="version.id">{{ version.name || `第 ${version.version} 版` }} · {{ version.pageCount }} 页</option></select><ChevronDown class="pointer-events-none absolute top-1/2 right-3 h-3.5 w-3.5 -translate-y-1/2 text-faint" /></label>
+              <button v-if="publishedVersion && publishedVersion.id !== selected?.id" class="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2.5 text-[10px] font-semibold text-emerald-600" @click="compareVersionId = publishedVersion.id">与线上第 {{ publishedVersion.version }} 版对比</button>
+              <span v-if="compareVersion" class="ml-auto text-[10px] text-faint">{{ selected?.name || `第 ${selected?.version} 版` }} ↔ {{ compareVersion.name || `第 ${compareVersion.version} 版` }}</span>
+            </div>
+            <div v-if="compareLoading" class="flex min-h-[600px] items-center justify-center"><Loader2 class="h-6 w-6 animate-spin text-brand1" /></div>
+            <VersionVisualDiff v-else-if="selected && compareVersion" :before-html="compareVersion.html" :after-html="selected.html" :before-label="compareVersion.name || `第 ${compareVersion.version} 版`" :after-label="selected.name || `第 ${selected.version} 版`" />
+            <div v-else class="flex min-h-[600px] flex-col items-center justify-center rounded-2xl border border-dashed border-line/15 text-center"><Columns2 class="h-9 w-9 text-faint" /><h3 class="mt-4 text-sm font-semibold">选择一个版本开始对比</h3><p class="mt-2 text-xs text-mut">当前先对比两个版本的首页；页面增删会显示在版本变更摘要中。</p></div>
+          </div>
         </section>
       </div>
     </div>
 
     <MobileVersionDrawer :open="mobileVersionsOpen" :versions="versions" :selected-id="selected?.id" :busy="actionBusy" @close="mobileVersionsOpen = false" @select="selectVersion" @rollback="rollback" />
-    <VisualEditor v-if="selected" :open="editorOpen" :html="selected.html" :title="`${detail?.project.title ?? '项目'} · ${selected.name || `第 ${selected.version} 版`}`" :draft-key="`${projectId}:${selected.id}`" :site-type="detail?.project.siteType" :brand-kit-id="detail?.project.brandKitId" @close="editorOpen = false" @save="saveEdited" />
+    <VisualEditor v-if="selected" :open="editorOpen" :html="selected.html" :title="`${detail?.project.title ?? '项目'} · 首页 · ${selected.name || `第 ${selected.version} 版`}`" :draft-key="`${projectId}:${selected.id}:home`" :site-type="detail?.project.siteType" :brand-kit-id="detail?.project.brandKitId" @close="editorOpen = false" @save="saveEdited" />
   </main>
 </template>
