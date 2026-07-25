@@ -32,7 +32,7 @@ test('@visual project workspace and editor', async ({ page, isMobile }) => {
   await stabilize(page)
   await expect(page).toHaveScreenshot('project-workspace.png', { fullPage: true })
   if (!isMobile) {
-    await page.getByRole('button', { name: '可视化编辑', exact: true }).click()
+    await page.getByRole('button', { name: '编辑首页', exact: true }).click()
     await stabilize(page)
     await expect(page).toHaveScreenshot('visual-editor.png')
   }
