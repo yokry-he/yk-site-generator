@@ -73,6 +73,6 @@ export function springCrudFiles(
     sqlTables.push(`CREATE TABLE ${tableName(entity)} (\n  id BIGSERIAL PRIMARY KEY,\n${[...sqlFields, ...sqlRelations].join(',\n')},\n  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);`)
   }
 
-  files.push(text('apps/api/src/main/resources/db/migration/V1__create_resources.sql', sqlTables.join('\n\n')))
+  files.push(text('apps/api/src/main/resources/db/migration/V1__create_tasks.sql', sqlTables.join('\n\n')))
   return files
 }
