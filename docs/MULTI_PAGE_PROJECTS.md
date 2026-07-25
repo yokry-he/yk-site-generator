@@ -59,6 +59,17 @@ SiteForge 项目版本现在可以包含完整的页面集合，而不再只能�
 
 本地发布目录和 S3/R2 兼容对象存储都会写入完整页面集合。ZIP 导出使用 `siteforge-export-v2` 清单，并记录每个页面的公开路径和文件位置。
 
+### 自动验证
+
+普通 PR CI 会验证：
+
+- 旧单页数据自动迁移与旧客户端仅更新首页时保留其他页面
+- 多页面创建、读取、回滚、重复路径拒绝和发布路由
+- ZIP 中的嵌套页面文件与 `siteforge-export-v2` 清单
+- 浏览器中从两页项目新增联系页并保存为三页整站版本
+- 页面工作区没有浏览器运行时错误、严重 Axe 问题或移动端横向溢出
+- 桌面与移动端项目工作区视觉快照
+
 ### 限制与后续
 
 当前 AI 初次生成仍然优先生成一个完整首页。用户可以在项目工作区添加其余页面。后续阶段将增加：
@@ -125,6 +136,17 @@ A published multi-page version maps routes to static files as follows:
 ```
 
 Both local publication storage and S3/R2-compatible object storage write the complete page set. ZIP exports use a `siteforge-export-v2` manifest that records every public route and output file.
+
+### Automated validation
+
+The standard pull-request CI verifies:
+
+- Automatic legacy single-page migration and preservation of other pages when an older client updates only the home page
+- Multi-page creation, reading, rollback, duplicate-route rejection, and published-route resolution
+- Nested page files and the `siteforge-export-v2` manifest in ZIP exports
+- A browser flow that adds a contact page to a two-page project and saves a three-page whole-site version
+- No browser runtime errors, serious Axe violations, or mobile horizontal overflow in the pages workspace
+- Desktop and mobile project-workspace visual snapshots
 
 ### Limits and next steps
 
