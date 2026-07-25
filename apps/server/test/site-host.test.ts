@@ -24,13 +24,49 @@ beforeEach(() => {
 })
 
 describe('发布站点子域名路由', () => {
-  it('通过 slug.siteforge.local 的任意 GET 路径返回入口 HTML', async () => {
+  it('旧单页发布通过任意 GET 路径返回入口 HTML', async () => {
     const response = await app.request('http://brand-site.siteforge.local/products/detail', {
       headers: { host: 'brand-site.siteforge.local' },
     })
     expect(response.status).toBe(200)
     expect(await response.text()).toContain('<h1>Published</h1>')
     expect(response.headers.get('content-security-policy')).toContain('sandbox')
+  })
+
+  it('多页面发布按路径返回页面并对未知路径返回 404', async () => {
+    resetDataStoreForTest({
+      publications: [
+        {
+          id: 'publication-pages',
+          userId: 'user-1',
+          slug: 'multi-site',
+          title: '多页面站点',
+          html,
+          homePageId: 'home',
+          pages: [
+            { id: 'home', title: '首页', path: '/', html },
+            { id: 'about', title: '关于', path: '/about', html: '<!doctype html><html><body><h1>About page</h1></body></html>' },
+          ],
+          status: 'published',
+          createdAt: '2026-07-25T00:00:00.000Z',
+          updatedAt: '2026-07-25T00:00:00.000Z',
+          publishedAt: '2026-07-25T00:00:00.000Z',
+        },
+      ],
+    })
+
+    const about = await app.request('http://multi-site.siteforge.local/about', {
+      headers: { host: 'multi-site.siteforge.local' },
+    })
+    expect(about.status).toBe(200)
+    expect(await about.text()).toContain('About page')
+    expect(about.headers.get('x-siteforge-page')).toBe('/about')
+
+    const missing = await app.request('http://multi-site.siteforge.local/missing', {
+      headers: { host: 'multi-site.siteforge.local' },
+    })
+    expect(missing.status).toBe(404)
+    expect(await missing.text()).toContain('页面不存在')
   })
 
   it('平台主域名和嵌套子域名不会被误识别为站点 slug', async () => {
