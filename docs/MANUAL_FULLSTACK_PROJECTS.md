@@ -16,6 +16,8 @@
 /projects/new
 ```
 
+数据模型与 CRUD 的详细协议参见 [`MANUAL_CRUD_DESIGNER.md`](./MANUAL_CRUD_DESIGNER.md)。
+
 ### 统一前端
 
 第一阶段所有工程统一使用：
@@ -51,6 +53,7 @@ apps/api/
 package.json
 pnpm-workspace.yaml
 siteforge.json
+openapi.yaml
 README.md
 ```
 
@@ -62,15 +65,18 @@ README.md
 - `/api/health` 健康检查
 - ORM Schema 或数据模型
 - 数据库迁移配置
+- 用户配置实体对应的 CRUD API
+- Vue 列表、表单、新建、编辑与删除界面
 - 中英双语项目 README
 
 ### siteforge.json
 
-工程清单记录：
+工程清单 schema v2 记录：
 
 - `projectKind: fullstack-app`
 - 前端和后端档案
 - 数据库类型
+- 数据实体、路由和字段
 - Web/API 服务目录和端口
 - API 健康检查路径
 - 安装、开发、构建、测试和迁移命令
@@ -92,19 +98,22 @@ README.md
 
 - 五套后端档案均包含完整的 Runtime、框架、ORM、迁移和命令元数据
 - 不兼容的后端与数据库组合会在生成前被拒绝
-- 每套档案都能生成 Vue 前端、API 骨架、健康检查、工程清单和 Docker 基线
+- 数据模型名称、路由、字段、枚举和规模限制
+- 每套档案都能生成 Vue CRUD、API 路由、ORM、迁移、OpenAPI 和工程清单
+- Spring 只保留一个 V1 Flyway 资源迁移
+- Gin 只导入选定数据库驱动，并生成对应 Goose SQL
 - ZIP 选项会正确包含或省略 Docker Compose 与 GitHub Actions 文件
-- `/projects/new` 可以切换全部后端，并只展示当前档案支持的数据库
+- `/projects/new` 可以配置多个实体，并在错误模型下禁止下载
 - 手动向导在桌面和手机端无严重 Axe 问题、运行时错误或横向溢出
 
 当前门禁验证 SiteForge 生成器和输出文件契约；在隔离 Runner 完成前，不会冒充已经安装、构建或执行每个生成的 Java、Python、Go 和 Node.js 工程。
 
 ### 当前限制
 
-第一阶段是可运行的工程骨架和技术栈选择基础，还没有完成：
+当前已经完成可视化数据模型和基础 CRUD，但还没有完成：
 
-- 可视化数据模型设计器
-- CRUD 模块拼装
+- 实体关系与外键
+- 服务端分页、搜索和排序
 - 认证与权限模块
 - 云端工程文件版本存储
 - 隔离构建和在线预览
@@ -125,6 +134,8 @@ Entry point:
 ```text
 /projects/new
 ```
+
+See [`MANUAL_CRUD_DESIGNER.md`](./MANUAL_CRUD_DESIGNER.md) for the data-model and CRUD protocol.
 
 ### Shared frontend
 
@@ -161,63 +172,30 @@ apps/api/
 package.json
 pnpm-workspace.yaml
 siteforge.json
+openapi.yaml
 README.md
 ```
 
-The default output also includes:
-
-- Frontend and backend Dockerfiles
-- `docker-compose.yml`
-- A baseline GitHub Actions workflow
-- An `/api/health` endpoint
-- An ORM schema or data model
-- Database migration configuration
-- A bilingual project README
+The default output also includes frontend and backend Dockerfiles, `docker-compose.yml`, a baseline GitHub Actions workflow, `/api/health`, ORM and migration files, CRUD APIs for configured entities, a Vue list/form/create/update/delete interface, and a bilingual README.
 
 ### siteforge.json
 
-The engineering manifest records:
-
-- `projectKind: fullstack-app`
-- Frontend and backend profiles
-- Database type
-- Web/API service directories and ports
-- API health-check path
-- Install, development, build, test, and migration commands
+The schema-v2 engineering manifest records the project kind, frontend and backend profiles, database, entities and fields, service directories and ports, health-check path, and install/development/build/test/migration commands.
 
 Future isolated runners, engineering workspaces, and deployment features must read this manifest instead of guessing commands from file names.
 
 ### Current safety boundary
 
-- Generation happens entirely in the browser.
-- SiteForge does not install generated dependencies.
-- SiteForge does not start the generated API.
-- SiteForge does not execute database migrations.
-- The ZIP contains `.env.example`, never real credentials.
-- The platform must not execute user-generated code until an isolated runner exists.
+Generation happens entirely in the browser. SiteForge does not install generated dependencies, start generated APIs, execute database migrations, access user databases, or write real credentials. The platform must not execute generated code until an isolated runner exists.
 
 ### Automated validation
 
-The standard pull-request CI verifies:
+Standard pull-request CI verifies backend profile metadata, rejected database combinations, data-model identifiers and limits, Vue CRUD and backend-specific output for all profiles, single-version Spring migrations, selected Gin drivers and Goose SQL, optional ZIP files, multi-entity browser configuration, invalid-model download prevention, Axe accessibility, runtime errors, and mobile overflow.
 
-- All five backend profiles provide complete runtime, framework, ORM, migration, and command metadata
-- Unsupported backend/database combinations are rejected before generation
-- Every profile produces a Vue frontend, API skeleton, health endpoint, engineering manifest, and Docker baseline
-- ZIP options correctly include or omit Docker Compose and GitHub Actions files
-- `/projects/new` can select every backend while exposing only databases supported by the active profile
-- The manual wizard has no serious Axe violations, runtime errors, or horizontal overflow on desktop and mobile
-
-These gates validate the SiteForge generator and generated-file contracts. Until an isolated runner exists, they do not pretend to install, build, or execute every generated Java, Python, Go, and Node.js repository.
+These gates validate the generator and file contracts. They do not claim that every generated Java, Python, Go, and Node.js repository has been installed and executed in an isolated environment.
 
 ### Current limitations
 
-The first phase provides runnable engineering skeletons and a backend selection foundation. It does not yet include:
-
-- A visual data-model designer
-- CRUD module composition
-- Authentication and authorization modules
-- Cloud engineering-file version storage
-- Isolated builds and online previews
-- Full backend-ecosystem CI execution
+Visual data models and baseline CRUD are complete. Entity relationships and foreign keys, server-side pagination/search/sorting, authentication and authorization, cloud engineering-file versioning, isolated builds and online previews, and full backend-ecosystem execution are not yet complete.
 
 These capabilities will continue on `Feature-dev-v0.1.0` and long-lived Draft PR #44 without expanding AI generation.
