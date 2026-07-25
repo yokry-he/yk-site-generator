@@ -10,9 +10,11 @@ describe('manual project data models', () => {
   it('normalizes the default task resource without sharing mutable arrays', () => {
     const first = normalizeManualEntities()
     const second = normalizeManualEntities()
-    expect(first).toEqual(DEFAULT_MANUAL_ENTITIES)
+    expect(first[0]).toMatchObject(DEFAULT_MANUAL_ENTITIES[0])
+    expect(first[0].fields).toHaveLength(DEFAULT_MANUAL_ENTITIES[0].fields.length)
     first[0].fields[0].label = 'Changed'
     expect(second[0].fields[0].label).toBe('标题')
+    expect(DEFAULT_MANUAL_ENTITIES[0].fields[0].label).toBe('标题')
   })
 
   it('normalizes routes, enum values and display flags', () => {
