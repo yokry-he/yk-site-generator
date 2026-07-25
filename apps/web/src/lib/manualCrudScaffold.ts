@@ -350,7 +350,7 @@ function springCrudFiles(entities: readonly ManualEntityDefinition[]): ArtifactF
     })
     sqlTables.push(`CREATE TABLE ${tableName(entity)} (\n  id BIGSERIAL PRIMARY KEY,\n${sqlFields.join(',\n')},\n  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);`)
   }
-  files.push(text('apps/api/src/main/resources/db/migration/V1__create_resources.sql', sqlTables.join('\n\n')))
+  files.push(text('apps/api/src/main/resources/db/migration/V1__create_tasks.sql', sqlTables.join('\n\n')))
   return files
 }
 
@@ -359,20 +359,40 @@ function goType(field: ManualFieldDefinition, pointer = false): string {
   return pointer ? `*${type}` : type
 }
 
-function ginCrudFiles(entities: readonly ManualEntityDefinition[]): ArtifactFile[] {
+function ginCrudFiles(database: BackendDatabaseId, entities: readonly ManualEntityDefinition[]): ArtifactFile[] {
+  const sqlite = database === 'sqlite'
   const structs = entities.map((entity) => `type ${entity.name} struct {\n  ID uint \`json:"id" gorm:"primaryKey"\`\n${entity.fields.map((field) => `  ${field.name[0].toUpperCase() + field.name.slice(1)} ${goType(field)} \`json:"${field.name}"${field.unique ? ' gorm:"uniqueIndex"' : ''}\``).join('\n')}\n  CreatedAt time.Time \`json:"createdAt"\`\n  UpdatedAt time.Time \`json:"updatedAt"\`\n}`).join('\n\n')
   const migrate = entities.map((entity) => `&${entity.name}{}`).join(', ')
+  const migrationUp = entities.map((entity) => {
+    const id = sqlite ? 'INTEGER PRIMARY KEY AUTOINCREMENT' : 'BIGSERIAL PRIMARY KEY'
+    const fields = entity.fields.map((field) => {
+      const sqlType = field.type === 'integer'
+        ? 'INTEGER'
+        : field.type === 'decimal'
+          ? 'NUMERIC'
+          : field.type === 'boolean'
+            ? 'BOOLEAN'
+            : field.type === 'date'
+              ? 'DATE'
+              : field.type === 'datetime'
+                ? 'TIMESTAMP'
+                : 'TEXT'
+      return `  ${toSnakeCase(field.name)} ${sqlType}${field.required ? ' NOT NULL' : ''}${field.unique ? ' UNIQUE' : ''}`
+    })
+    return `CREATE TABLE ${tableName(entity)} (\n  id ${id},\n${fields.join(',\n')},\n  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP\n);`
+  }).join('\n\n')
+  const migrationDown = [...entities].reverse().map((entity) => `DROP TABLE IF EXISTS ${tableName(entity)};`).join('\n')
   const handlers = entities.map((entity) => {
     const plural = routeName(entity)
-    const varName = lowerFirst(entity.name)
     const updateFields = entity.fields.map((field) => `  ${field.name[0].toUpperCase() + field.name.slice(1)} ${goType(field, true)} \`json:"${field.name}"\``).join('\n')
-    return `type ${entity.name}Update struct {\n${updateFields}\n}\n\nfunc Register${entity.name}Routes(router *gin.Engine) {\n  group := router.Group("/api/${plural}")\n  group.GET("", func(c *gin.Context) { var items []database.${entity.name}; database.DB.Order("id desc").Find(&items); c.JSON(http.StatusOK, items) })\n  group.GET("/:id", func(c *gin.Context) { var item database.${entity.name}; if database.DB.First(&item, c.Param("id")).Error != nil { c.JSON(http.StatusNotFound, gin.H{"error":"NOT_FOUND"}); return }; c.JSON(http.StatusOK, item) })\n  group.POST("", func(c *gin.Context) { var item database.${entity.name}; if err := c.ShouldBindJSON(&item); err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":err.Error()}); return }; database.DB.Create(&item); c.JSON(http.StatusCreated, item) })\n  group.PATCH("/:id", func(c *gin.Context) { var item database.${entity.name}; if database.DB.First(&item, c.Param("id")).Error != nil { c.JSON(http.StatusNotFound, gin.H{"error":"NOT_FOUND"}); return }; var input ${entity.name}Update; if err := c.ShouldBindJSON(&input); err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":err.Error()}); return }; database.DB.Model(&item).Updates(input); c.JSON(http.StatusOK, item) })\n  group.DELETE("/:id", func(c *gin.Context) { var item database.${entity.name}; if database.DB.First(&item, c.Param("id")).Error != nil { c.JSON(http.StatusNotFound, gin.H{"error":"NOT_FOUND"}); return }; database.DB.Delete(&item); c.Status(http.StatusNoContent) })\n}\n\nvar _ = ${quote(varName)}`
+    return `type ${entity.name}Update struct {\n${updateFields}\n}\n\nfunc Register${entity.name}Routes(router *gin.Engine) {\n  group := router.Group("/api/${plural}")\n  group.GET("", func(c *gin.Context) { var items []database.${entity.name}; database.DB.Order("id desc").Find(&items); c.JSON(http.StatusOK, items) })\n  group.GET("/:id", func(c *gin.Context) { var item database.${entity.name}; if database.DB.First(&item, c.Param("id")).Error != nil { c.JSON(http.StatusNotFound, gin.H{"error":"NOT_FOUND"}); return }; c.JSON(http.StatusOK, item) })\n  group.POST("", func(c *gin.Context) { var item database.${entity.name}; if err := c.ShouldBindJSON(&item); err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":err.Error()}); return }; database.DB.Create(&item); c.JSON(http.StatusCreated, item) })\n  group.PATCH("/:id", func(c *gin.Context) { var item database.${entity.name}; if database.DB.First(&item, c.Param("id")).Error != nil { c.JSON(http.StatusNotFound, gin.H{"error":"NOT_FOUND"}); return }; var input ${entity.name}Update; if err := c.ShouldBindJSON(&input); err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":err.Error()}); return }; database.DB.Model(&item).Updates(input); c.JSON(http.StatusOK, item) })\n  group.DELETE("/:id", func(c *gin.Context) { var item database.${entity.name}; if database.DB.First(&item, c.Param("id")).Error != nil { c.JSON(http.StatusNotFound, gin.H{"error":"NOT_FOUND"}); return }; database.DB.Delete(&item); c.Status(http.StatusNoContent) })\n}`
   }).join('\n\n')
   const routeRegisters = entities.map((entity) => `handlers.Register${entity.name}Routes(router)`).join('\n  ')
   return [
     text('apps/api/internal/database/models.go', `package database\n\nimport "time"\n\n${structs}`),
-    text('apps/api/internal/database/database.go', `package database\n\nimport (\n  "os"\n  "gorm.io/driver/${'sqlite'}"\n  "gorm.io/driver/postgres"\n  "gorm.io/gorm"\n)\nvar DB *gorm.DB\nfunc Connect() {\n  url := os.Getenv("DATABASE_URL")\n  var dialector gorm.Dialector\n  if url == "" || len(url) < 11 || url[:11] != "postgresql" { if url == "" { url = "data/app.db" }; dialector = sqlite.Open(url) } else { dialector = postgres.Open(url) }\n  db, err := gorm.Open(dialector, &gorm.Config{}); if err != nil { panic(err) }\n  if err := db.AutoMigrate(${migrate}); err != nil { panic(err) }; DB = db\n}`),
-    text('apps/api/internal/handlers/resources.go', `package handlers\n\nimport (\n  "net/http"\n  "github.com/gin-gonic/gin"\n  "siteforge.dev/api/internal/database"\n)\n\n${handlers}`),
+    text('apps/api/internal/database/database.go', `package database\n\nimport (\n  "os"\n  "gorm.io/driver/${sqlite ? 'sqlite' : 'postgres'}"\n  "gorm.io/gorm"\n)\nvar DB *gorm.DB\nfunc Connect() {\n  url := os.Getenv("DATABASE_URL"); if url == "" { url = "${sqlite ? 'data/app.db' : 'postgresql://siteforge:siteforge@localhost:5432/siteforge_app'}" }\n  db, err := gorm.Open(${sqlite ? 'sqlite.Open(url)' : 'postgres.Open(url)'}, &gorm.Config{}); if err != nil { panic(err) }\n  if err := db.AutoMigrate(${migrate}); err != nil { panic(err) }; DB = db\n}`),
+    text('apps/api/internal/handlers/resources.go', `package handlers\n\nimport (\n  "net/http"\n  "time"\n  "github.com/gin-gonic/gin"\n  "siteforge.dev/api/internal/database"\n)\n\n${handlers}`),
+    text('apps/api/migrations/00001_create_tasks.sql', `-- +goose Up\n${migrationUp}\n\n-- +goose Down\n${migrationDown}`),
     text('apps/api/cmd/api/main.go', `package main\n\nimport (\n  "net/http"\n  "os"\n  "github.com/gin-gonic/gin"\n  "siteforge.dev/api/internal/database"\n  "siteforge.dev/api/internal/handlers"\n)\nfunc main() {\n  database.Connect()\n  router := gin.Default()\n  router.Use(func(c *gin.Context) { c.Header("Access-Control-Allow-Origin", "http://localhost:5173"); c.Header("Access-Control-Allow-Headers", "Content-Type"); c.Header("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS"); if c.Request.Method == http.MethodOptions { c.AbortWithStatus(http.StatusNoContent); return }; c.Next() })\n  router.GET("/api/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status":"ok", "stack":"Gin + GORM"}) })\n  ${routeRegisters}\n  port := os.Getenv("API_PORT"); if port == "" { port = "8787" }; _ = router.Run(":" + port)\n}`),
   ]
 }
@@ -396,6 +416,6 @@ export function manualCrudFiles(
         ? fastApiCrudFiles(entities)
         : stack === 'spring-boot-jpa'
           ? springCrudFiles(entities)
-          : ginCrudFiles(entities)
+          : ginCrudFiles(database, entities)
   return [...frontendFiles(projectName, entities), ...backend, openApiFile(projectName, entities)]
 }
