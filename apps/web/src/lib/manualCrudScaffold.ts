@@ -2,8 +2,10 @@ import {
   type ArtifactFile,
   type BackendDatabaseId,
   type BackendStackId,
+  type ManualAccessDefinition,
   type ManualEntityDefinition,
 } from 'shared'
+import { applyManualAuthorization } from './manualAuthScaffold'
 import { ginCrudFiles } from './manualCrudGoBackend'
 import { manualCrudFrontendFiles } from './manualCrudFrontend'
 import { springCrudFiles } from './manualCrudJavaBackend'
@@ -16,6 +18,7 @@ export function manualCrudFiles(
   stack: BackendStackId,
   database: BackendDatabaseId,
   entities: readonly ManualEntityDefinition[],
+  access?: ManualAccessDefinition,
 ): ArtifactFile[] {
   const backend = stack === 'hono-drizzle'
     ? honoCrudFiles(database, entities)
@@ -27,9 +30,9 @@ export function manualCrudFiles(
           ? springCrudFiles(entities)
           : ginCrudFiles(database, entities)
 
-  return [
+  return applyManualAuthorization([
     ...manualCrudFrontendFiles(projectName, entities),
     ...backend,
     openApiFile(projectName, entities),
-  ]
+  ], stack, database, entities, access)
 }
