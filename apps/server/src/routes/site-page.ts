@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono'
 import {
   normalizeSiteProject,
+  siteProjectHomePage,
   siteProjectPageForPath,
 } from 'shared'
 import { readData } from '../lib/data-store'
@@ -33,7 +34,11 @@ async function renderPublishedSite(c: Context, slug: string, requestPath = '/') 
   }
 
   const document = normalizeSiteProject(record, '首页')
+  // Legacy one-page publications historically behaved like an SPA and returned the
+  // entry document for every GET path. Preserve that behavior while multi-page sites
+  // use strict route matching so broken links are visible instead of masking errors.
   const page = siteProjectPageForPath(document, requestPath)
+    ?? (document.pages.length === 1 ? siteProjectHomePage(document) : undefined)
   if (!page) {
     c.header('Cache-Control', 'private, no-store')
     return c.html(offlinePage('页面不存在', '当前站点中没有这个页面，请返回首页继续浏览。'), 404)
