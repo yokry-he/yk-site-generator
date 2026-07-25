@@ -77,7 +77,9 @@ providers.post('/test', async (c) => {
 
     const payload = await readProviderCatalog(res)
     const models = parseProviderModelCatalog(body.provider, payload)
-    const selectedModelAvailable = body.model ? models.includes(body.model) : undefined
+    const selectedModelAvailable = body.model && models.length > 0
+      ? models.includes(body.model)
+      : undefined
 
     return c.json({
       ok: true,
