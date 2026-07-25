@@ -83,7 +83,14 @@ export async function mockPublicApi(page: Page) {
 }
 
 export async function mockAuthenticatedApi(page: Page) {
-  await page.addInitScript(({ token, expires }) => { localStorage.setItem('siteforge:access-token', token); localStorage.setItem('siteforge:access-token-expires', expires) }, { token: 'browser-e2e-token', expires: '2099-01-01T00:00:00.000Z' })
+  await page.addInitScript(({ token, expires }) => {
+    // Playwright init scripts also run in srcdoc frames. Keep authentication state in
+    // the top-level application only so sandboxed previews remain isolated and do not
+    // emit localStorage SecurityErrors from the test harness itself.
+    if (window.top !== window) return
+    localStorage.setItem('siteforge:access-token', token)
+    localStorage.setItem('siteforge:access-token-expires', expires)
+  }, { token: 'browser-e2e-token', expires: '2099-01-01T00:00:00.000Z' })
   await page.route('**/api/**', async (route) => {
     const request = route.request()
     const url = new URL(request.url())
