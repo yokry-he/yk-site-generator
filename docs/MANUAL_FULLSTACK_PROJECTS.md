@@ -104,6 +104,8 @@ README.md
 
 这些门禁验证 SiteForge 生成器和输出文件契约。在隔离 Runner 完成前，不会声称已经实际安装、构建或执行每个生成的 Java、Python、Go 和 Node.js 工程。
 
+当前阶段最新的 CI 与 Preview Run 在 GitHub Actions 创建 Job 之前以 `startup_failure` 结束，未产生步骤或测试日志。因此该状态不能解释为代码检查失败，也不能作为通过证明；恢复 Runner 后需要重新执行完整门禁。
+
 ### 当前限制
 
 当前已经完成可视化数据模型、属于关系、外键、删除策略、分页、搜索、排序和基础 CRUD。仍未完成：
@@ -169,6 +171,8 @@ Generation happens entirely in the browser. SiteForge does not install generated
 Standard pull-request CI verifies profile metadata, rejected database combinations, model and relation validation, safe search and sort allowlists, backend-native CRUD and foreign-key output for all five profiles, migration consistency, optional ZIP files, multi-entity browser configuration, invalid-model download prevention, accessibility, runtime errors, mobile overflow, and visual regression.
 
 These gates validate the generator and file contracts. They do not claim that every generated Java, Python, Go, and Node.js repository has been installed and executed in isolation.
+
+The latest CI and Preview runs for this phase ended with `startup_failure` before GitHub Actions created any job or step, so they produced no test logs. This is neither a code-test failure nor evidence of a passing build; the full gates must be rerun once runner startup is available.
 
 ### Current limitations
 
