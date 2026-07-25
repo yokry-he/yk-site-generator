@@ -8,7 +8,7 @@
 
 ### 定位
 
-手动全栈工程向导通过确定性模板生成完整源码，不调用 AI、不需要模型 API Key，也不会在 SiteForge 主服务中执行生成代码。相同输入会产生相同的目录结构和配置，便于测试、审查和问题复现。
+手动全栈工程向导通过确定性模板生成完整源码，不调用 AI、不需要模型 API Key，也不会在 SiteForge 主服务中执行生成代码。相同输入会产生相同的目录结构、数据库协议和 API 契约，便于测试、审查和问题复现。
 
 入口：
 
@@ -16,19 +16,11 @@
 /projects/new
 ```
 
-数据模型与 CRUD 的详细协议参见 [`MANUAL_CRUD_DESIGNER.md`](./MANUAL_CRUD_DESIGNER.md)。
+数据模型、关系、分页和 CRUD 的详细协议参见 [`MANUAL_CRUD_DESIGNER.md`](./MANUAL_CRUD_DESIGNER.md)。
 
 ### 统一前端
 
-第一阶段所有工程统一使用：
-
-- Vue 3
-- Vite
-- TypeScript
-- Vitest
-- 独立 `apps/web` 服务
-
-统一前端可以先把后端技术栈、数据库、构建和部署矩阵做稳定，再扩展 React、Nuxt 等前端档案。
+当前所有工程统一使用 Vue 3、Vite、TypeScript、Vitest 和独立 `apps/web` 服务。统一前端使后端、数据库、查询和部署矩阵先达到稳定，再扩展 React、Nuxt 等前端档案。
 
 ### 可选后端
 
@@ -40,7 +32,7 @@
 | Spring Boot + JPA | Java 21 | Spring Data JPA | Flyway | 否 | 是 |
 | Gin + GORM | Go 1.25 | GORM | Goose | 是 | 是 |
 
-系统只展示已经声明支持的数据库组合。Spring Boot 第一版只开放 PostgreSQL，避免生成缺少稳定 SQLite 驱动和迁移约束的工程。
+系统只展示档案明确支持的数据库组合。Spring Boot 第一版只开放 PostgreSQL。
 
 ### 输出内容
 
@@ -62,11 +54,12 @@ README.md
 - 前后端 Dockerfile
 - `docker-compose.yml`
 - GitHub Actions 基础工作流
-- `/api/health` 健康检查
-- ORM Schema 或数据模型
-- 数据库迁移配置
+- `/api/health`
+- ORM Schema、实体和数据库迁移
 - 用户配置实体对应的 CRUD API
-- Vue 列表、表单、新建、编辑与删除界面
+- 外键与 `restrict`、`cascade`、`set-null` 删除策略
+- 服务端分页、字段白名单搜索和排序
+- Vue 列表、分页、搜索、排序、关系选择、新建、编辑与删除界面
 - 中英双语项目 README
 
 ### siteforge.json
@@ -76,7 +69,8 @@ README.md
 - `projectKind: fullstack-app`
 - 前端和后端档案
 - 数据库类型
-- 数据实体、路由和字段
+- 数据实体、字段、属于关系和删除策略
+- 列表页大小、默认排序字段和方向
 - Web/API 服务目录和端口
 - API 健康检查路径
 - 安装、开发、构建、测试和迁移命令
@@ -85,41 +79,44 @@ README.md
 
 ### 当前安全边界
 
-- 生成完全在浏览器内完成。
-- SiteForge 不安装生成工程的依赖。
-- SiteForge 不启动生成的 API。
-- SiteForge 不运行数据库迁移。
-- ZIP 中只包含 `.env.example`，不会写入真实凭据。
-- 隔离 Runner 上线前，不允许平台执行用户生成代码。
+- 生成完全在浏览器内完成
+- SiteForge 不安装生成工程的依赖
+- 不启动生成的 API
+- 不运行数据库迁移
+- 不访问用户数据库
+- ZIP 只包含 `.env.example`
+- 隔离 Runner 上线前，不允许平台执行用户生成代码
 
 ### 自动验证
 
-普通 PR CI 会验证：
+标准 PR CI 会验证：
 
-- 五套后端档案均包含完整的 Runtime、框架、ORM、迁移和命令元数据
+- 五套后端档案的 Runtime、框架、ORM、迁移和命令元数据
 - 不兼容的后端与数据库组合会在生成前被拒绝
-- 数据模型名称、路由、字段、枚举和规模限制
-- 每套档案都能生成 Vue CRUD、API 路由、ORM、迁移、OpenAPI 和工程清单
+- 数据模型、关系目标、删除策略、搜索字段和排序白名单
+- 五套档案均生成 Vue 管理端、原生 CRUD、外键、迁移、OpenAPI 和工程清单
 - Spring 只保留一个 V1 Flyway 资源迁移
-- Gin 只导入选定数据库驱动，并生成对应 Goose SQL
-- ZIP 选项会正确包含或省略 Docker Compose 与 GitHub Actions 文件
-- `/projects/new` 可以配置多个实体，并在错误模型下禁止下载
-- 手动向导在桌面和手机端无严重 Axe 问题、运行时错误或横向溢出
+- Gin 只导入所选数据库驱动并生成匹配的 Goose SQL
+- ZIP 可选文件和路径去重
+- 浏览器可以配置多个实体、外键、分页和排序
+- 错误模型会阻止下载
+- 桌面和手机端 Axe、运行时错误、横向溢出与视觉回归
 
-当前门禁验证 SiteForge 生成器和输出文件契约；在隔离 Runner 完成前，不会冒充已经安装、构建或执行每个生成的 Java、Python、Go 和 Node.js 工程。
+这些门禁验证 SiteForge 生成器和输出文件契约。在隔离 Runner 完成前，不会声称已经实际安装、构建或执行每个生成的 Java、Python、Go 和 Node.js 工程。
 
 ### 当前限制
 
-当前已经完成可视化数据模型和基础 CRUD，但还没有完成：
+当前已经完成可视化数据模型、属于关系、外键、删除策略、分页、搜索、排序和基础 CRUD。仍未完成：
 
-- 实体关系与外键
-- 服务端分页、搜索和排序
-- 认证与权限模块
+- 一对一、多对多、自引用与循环关系
+- 远程关系搜索和超大关系数据集选择
+- 复合索引和复合唯一约束
+- 认证、角色与路由权限
 - 云端工程文件版本存储
 - 隔离构建和在线预览
-- 自动执行后端各生态的完整 CI
+- 自动执行五套生成工程的真实构建矩阵
 
-这些能力会继续在 `Feature-dev-v0.1.0` 和长期 Draft PR #44 中开发，不扩展 AI 生成。
+这些能力继续在 `Feature-dev-v0.1.0` 和长期 Draft PR #44 中开发，不扩展 AI 生成。
 
 ---
 
@@ -127,7 +124,7 @@ README.md
 
 ### Purpose
 
-The manual full-stack wizard generates complete source repositories from deterministic templates. It does not call AI, require a model API key, or execute generated code inside the SiteForge server. The same input produces the same structure and configuration, making the output testable, reviewable, and reproducible.
+The manual full-stack wizard generates complete source repositories from deterministic templates. It does not call AI, require a model API key, or execute generated code inside SiteForge. Identical inputs produce identical structure, database rules, and API contracts.
 
 Entry point:
 
@@ -135,19 +132,11 @@ Entry point:
 /projects/new
 ```
 
-See [`MANUAL_CRUD_DESIGNER.md`](./MANUAL_CRUD_DESIGNER.md) for the data-model and CRUD protocol.
+See [`MANUAL_CRUD_DESIGNER.md`](./MANUAL_CRUD_DESIGNER.md) for the data-model, relation, pagination, and CRUD protocol.
 
 ### Shared frontend
 
-The first phase standardizes every project on:
-
-- Vue 3
-- Vite
-- TypeScript
-- Vitest
-- A dedicated `apps/web` service
-
-A shared frontend lets the project stabilize backend, database, build, and deployment matrices before introducing React, Nuxt, or other frontend profiles.
+All current projects use Vue 3, Vite, TypeScript, Vitest, and a dedicated `apps/web` service. A shared frontend lets the backend, database, query, and deployment matrices stabilize before additional frontend profiles are introduced.
 
 ### Backend choices
 
@@ -159,43 +148,30 @@ A shared frontend lets the project stabilize backend, database, build, and deplo
 | Spring Boot + JPA | Java 21 | Spring Data JPA | Flyway | No | Yes |
 | Gin + GORM | Go 1.25 | GORM | Goose | Yes | Yes |
 
-The wizard only exposes combinations explicitly supported by a profile. Spring Boot initially supports PostgreSQL only, avoiding a generated configuration that lacks a stable SQLite driver and migration contract.
+Only combinations declared by a profile are exposed. Spring Boot initially supports PostgreSQL only.
 
 ### Generated output
 
-Every ZIP contains at least:
-
-```text
-apps/web/
-apps/api/
-.env.example
-package.json
-pnpm-workspace.yaml
-siteforge.json
-openapi.yaml
-README.md
-```
-
-The default output also includes frontend and backend Dockerfiles, `docker-compose.yml`, a baseline GitHub Actions workflow, `/api/health`, ORM and migration files, CRUD APIs for configured entities, a Vue list/form/create/update/delete interface, and a bilingual README.
+Every ZIP contains `apps/web`, `apps/api`, `.env.example`, root workspace configuration, `siteforge.json`, `openapi.yaml`, and a bilingual README. The default output additionally includes Dockerfiles, Compose, a baseline GitHub Actions workflow, health checks, ORM models, migrations, CRUD APIs, foreign keys and referential actions, allowlisted server-side pagination/search/sorting, and a Vue administration interface with relation selects.
 
 ### siteforge.json
 
-The schema-v2 engineering manifest records the project kind, frontend and backend profiles, database, entities and fields, service directories and ports, health-check path, and install/development/build/test/migration commands.
+The schema-v2 engineering manifest records project and stack profiles, database, entities, fields, belongs-to relations, referential actions, list page size and default sorting, service locations and ports, health checks, and install/development/build/test/migration commands.
 
-Future isolated runners, engineering workspaces, and deployment features must read this manifest instead of guessing commands from file names.
+Future runners, engineering workspaces, and deployments must read this manifest instead of guessing commands from file names.
 
 ### Current safety boundary
 
-Generation happens entirely in the browser. SiteForge does not install generated dependencies, start generated APIs, execute database migrations, access user databases, or write real credentials. The platform must not execute generated code until an isolated runner exists.
+Generation happens entirely in the browser. SiteForge does not install generated dependencies, start APIs, execute migrations, access user databases, or write real credentials. Generated code must not be executed until an isolated runner exists.
 
 ### Automated validation
 
-Standard pull-request CI verifies backend profile metadata, rejected database combinations, data-model identifiers and limits, Vue CRUD and backend-specific output for all profiles, single-version Spring migrations, selected Gin drivers and Goose SQL, optional ZIP files, multi-entity browser configuration, invalid-model download prevention, Axe accessibility, runtime errors, and mobile overflow.
+Standard pull-request CI verifies profile metadata, rejected database combinations, model and relation validation, safe search and sort allowlists, backend-native CRUD and foreign-key output for all five profiles, migration consistency, optional ZIP files, multi-entity browser configuration, invalid-model download prevention, accessibility, runtime errors, mobile overflow, and visual regression.
 
-These gates validate the generator and file contracts. They do not claim that every generated Java, Python, Go, and Node.js repository has been installed and executed in an isolated environment.
+These gates validate the generator and file contracts. They do not claim that every generated Java, Python, Go, and Node.js repository has been installed and executed in isolation.
 
 ### Current limitations
 
-Visual data models and baseline CRUD are complete. Entity relationships and foreign keys, server-side pagination/search/sorting, authentication and authorization, cloud engineering-file versioning, isolated builds and online previews, and full backend-ecosystem execution are not yet complete.
+Visual data models, belongs-to relations, foreign keys, referential actions, pagination, search, sorting, and baseline CRUD are complete. One-to-one, many-to-many, self and cyclic relations, remote relation search, compound indexes, authentication and authorization, cloud source versioning, isolated builds, online previews, and a real five-stack execution matrix remain future work.
 
-These capabilities will continue on `Feature-dev-v0.1.0` and long-lived Draft PR #44 without expanding AI generation.
+Development continues on `Feature-dev-v0.1.0` and long-lived Draft PR #44 without expanding AI generation.
