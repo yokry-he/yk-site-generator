@@ -97,6 +97,23 @@ SiteForge 当前只生成和下载源码 ZIP，不会安装或运行生成项目
 - 不访问用户数据库
 - 不写入真实 Secret
 
+### 自动验证
+
+标准 CI 验证：
+
+- 数据模型标识符、路由、枚举、重复项和规模限制
+- 五套后端均生成实体、CRUD、迁移和 OpenAPI
+- `siteforge.json` schema v2 保存规范化后的实体定义
+- ZIP 中无重复路径
+- Spring 只保留一个 V1 Flyway 迁移
+- Gin 只导入选定数据库驱动并生成匹配的 Goose SQL
+- 浏览器可以新增第二个实体和枚举字段
+- 非法路由会显示错误并禁用 ZIP 下载
+- 桌面和手机端无严重 Axe 问题、运行时异常或横向溢出
+- 原有桌面和移动端视觉快照无回退
+
+完整浏览器套件已在 CI Run `30151277253` 通过。
+
 ### 当前限制
 
 本阶段暂不支持：
@@ -185,6 +202,12 @@ The generated Vue application can switch between resources, load API lists, crea
 ### Security and execution boundary
 
 SiteForge currently generates and downloads source ZIPs only. Until an isolated runner exists, it does not install dependencies, execute migrations, start generated APIs, access user databases, or write real secrets.
+
+### Automated validation
+
+Standard CI validates identifiers, routes, enum values, duplicates, limits, native CRUD and migration output for all five backends, schema-v2 manifests, unique ZIP paths, one Spring V1 migration, selected Gin drivers and Goose SQL, multi-entity browser configuration, invalid-route download prevention, Axe accessibility, runtime errors, mobile overflow, and existing visual snapshots.
+
+The complete browser suite passed in CI Run `30151277253`.
 
 ### Current limitations
 
