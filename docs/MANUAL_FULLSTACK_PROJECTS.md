@@ -86,6 +86,19 @@ README.md
 - ZIP 中只包含 `.env.example`，不会写入真实凭据。
 - 隔离 Runner 上线前，不允许平台执行用户生成代码。
 
+### 自动验证
+
+普通 PR CI 会验证：
+
+- 五套后端档案均包含完整的 Runtime、框架、ORM、迁移和命令元数据
+- 不兼容的后端与数据库组合会在生成前被拒绝
+- 每套档案都能生成 Vue 前端、API 骨架、健康检查、工程清单和 Docker 基线
+- ZIP 选项会正确包含或省略 Docker Compose 与 GitHub Actions 文件
+- `/projects/new` 可以切换全部后端，并只展示当前档案支持的数据库
+- 手动向导在桌面和手机端无严重 Axe 问题、运行时错误或横向溢出
+
+当前门禁验证 SiteForge 生成器和输出文件契约；在隔离 Runner 完成前，不会冒充已经安装、构建或执行每个生成的 Java、Python、Go 和 Node.js 工程。
+
 ### 当前限制
 
 第一阶段是可运行的工程骨架和技术栈选择基础，还没有完成：
@@ -182,6 +195,19 @@ Future isolated runners, engineering workspaces, and deployment features must re
 - SiteForge does not execute database migrations.
 - The ZIP contains `.env.example`, never real credentials.
 - The platform must not execute user-generated code until an isolated runner exists.
+
+### Automated validation
+
+The standard pull-request CI verifies:
+
+- All five backend profiles provide complete runtime, framework, ORM, migration, and command metadata
+- Unsupported backend/database combinations are rejected before generation
+- Every profile produces a Vue frontend, API skeleton, health endpoint, engineering manifest, and Docker baseline
+- ZIP options correctly include or omit Docker Compose and GitHub Actions files
+- `/projects/new` can select every backend while exposing only databases supported by the active profile
+- The manual wizard has no serious Axe violations, runtime errors, or horizontal overflow on desktop and mobile
+
+These gates validate the SiteForge generator and generated-file contracts. Until an isolated runner exists, they do not pretend to install, build, or execute every generated Java, Python, Go, and Node.js repository.
 
 ### Current limitations
 
