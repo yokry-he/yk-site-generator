@@ -114,6 +114,7 @@ describe('manual full-stack project scaffolds', () => {
       expect(models).toContain('AuthorID *uint')
       expect(models).toContain('OnDelete:SET NULL')
       expect(migration).toContain('CREATE TABLE articles')
+      expect(migration).toContain(`author_id ${database === 'sqlite' ? 'INTEGER' : 'BIGINT'}`)
       expect(migration).toContain('REFERENCES users(id) ON DELETE SET NULL')
       expect(migration).not.toContain('CREATE TABLE IF NOT EXISTS tasks')
     }
