@@ -1,8 +1,16 @@
 import JSZip from 'jszip'
-import { singleHtmlToArtifact } from 'shared'
+import {
+  normalizeSiteProject,
+  singleHtmlToArtifact,
+  sitePageOutputPath,
+  siteProjectHomePage,
+  type SitePage,
+} from 'shared'
 
 export interface ExportSiteInput {
-  html: string
+  html?: string
+  pages?: SitePage[]
+  homePageId?: string
   title: string
   siteType: string
   requirement?: string
@@ -22,17 +30,33 @@ function safeFileName(value: string): string {
 
 export async function buildSiteZip(input: ExportSiteInput): Promise<Blob> {
   const zip = new JSZip()
-  const tree = singleHtmlToArtifact(input.html)
-  for (const file of tree.files) {
-    zip.file(file.path, file.content, file.binary ? { base64: true } : undefined)
+  const document = normalizeSiteProject(input, '首页')
+  const home = siteProjectHomePage(document)
+
+  if (document.pages.length === 1) {
+    const tree = singleHtmlToArtifact(home.html)
+    for (const file of tree.files) {
+      zip.file(file.path, file.content, file.binary ? { base64: true } : undefined)
+    }
+  } else {
+    for (const page of document.pages) zip.file(sitePageOutputPath(page), page.html)
   }
 
+  const entry = sitePageOutputPath(home)
   zip.file(
     'siteforge.json',
     JSON.stringify(
       {
-        format: 'siteforge-export-v1',
-        entry: tree.entry,
+        format: 'siteforge-export-v2',
+        schemaVersion: document.schemaVersion,
+        entry,
+        homePageId: document.homePageId,
+        pages: document.pages.map((page) => ({
+          id: page.id,
+          title: page.title,
+          path: page.path,
+          file: sitePageOutputPath(page),
+        })),
         title: input.title,
         siteType: input.siteType,
         requirement: input.requirement,
@@ -49,12 +73,14 @@ export async function buildSiteZip(input: ExportSiteInput): Promise<Blob> {
     [
       'SiteForge 网站导出包',
       '',
-      `入口文件:${tree.entry}`,
+      `入口文件:${entry}`,
+      `页面数量:${document.pages.length}`,
       `站点类型:${input.siteType}`,
       `标题:${input.title}`,
       '',
-      '使用方式:解压后直接打开入口 HTML,或将整个目录部署到任意静态托管服务。',
-      '注意:生成内容可能包含第三方链接或脚本,正式上线前请自行审核。',
+      '使用方式:解压后从入口 HTML 打开，或将整个目录部署到支持目录索引的静态托管服务。',
+      '多页面路径使用 <path>/index.html，例如 /about 对应 about/index.html。',
+      '注意:生成内容可能包含第三方链接或脚本，正式上线前请自行审核。',
     ].join('\n'),
   )
   return zip.generateAsync({
