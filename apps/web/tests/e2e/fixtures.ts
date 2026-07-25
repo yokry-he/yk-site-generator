@@ -13,19 +13,34 @@ export const versions = [
   {
     id: '00000000-0000-4000-8000-000000000201', projectId: '00000000-0000-4000-8000-000000000301', userId: user.id,
     version: 2, source: 'editor', name: '移动端优化', note: '优化首屏与 CTA', starred: true, parentVersionId: '00000000-0000-4000-8000-000000000202',
-    changeSummary: ['移动 Hero 区块', '调整按钮文案'], createdAt: '2026-07-23T10:00:00.000Z', sizeBytes: 1700,
+    changeSummary: ['移动 Hero 区块', '新增关于页面', '调整按钮文案'], createdAt: '2026-07-23T10:00:00.000Z', sizeBytes: 3200,
+    homePageId: 'home', pageCount: 2,
+    pages: [
+      { id: 'home', title: '首页', path: '/', sizeBytes: 1700 },
+      { id: 'about', title: '关于', path: '/about', sizeBytes: 1500 },
+    ],
   },
   {
     id: '00000000-0000-4000-8000-000000000202', projectId: '00000000-0000-4000-8000-000000000301', userId: user.id,
     version: 1, source: 'generate', name: '初始生成', note: '第一版内容', starred: false, changeSummary: ['创建初始页面版本'], createdAt: '2026-07-22T10:00:00.000Z', sizeBytes: 1400,
+    homePageId: 'home', pageCount: 1,
+    pages: [{ id: 'home', title: '首页', path: '/', sizeBytes: 1400 }],
   },
 ] as const
 
-const pageHtml = (title: string, mobile = false) => `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><meta name="description" content="用于浏览器交互测试的稳定页面"><meta property="og:title" content="${title}"><style>*{box-sizing:border-box}body{margin:0;font-family:system-ui;background:#fff;color:#18181b}nav{display:flex;justify-content:space-between;padding:18px 5vw;border-bottom:1px solid #eee}main{max-width:1100px;margin:auto;padding:70px 28px}.hero{display:grid;grid-template-columns:1.2fr .8fr;gap:48px;align-items:center}.card{padding:28px;border:1px solid #ddd;border-radius:20px}.actions{display:flex;gap:12px}button,a{min-height:44px;padding:12px 18px}.features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:54px}@media(max-width:640px){.hero,.features{grid-template-columns:1fr}.hero{gap:24px}h1{font-size:40px}}</style></head><body><nav><strong>Browser Studio</strong><a href="#contact">联系</a></nav><main><section class="hero" data-sf-section-label="Hero"><div><h1>${title}</h1><p>让复杂工作流变得清晰、可控，并能在手机端顺畅完成。</p><div class="actions"><button>免费开始</button><a href="#features">查看能力</a></div></div><div class="card"><img alt="产品界面" loading="lazy" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2MDAiIGhlaWdodD0iNDAwIj48cmVjdCB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iIzhCNUNGNiIvPjwvc3ZnPg==" style="width:100%;object-fit:cover;border-radius:16px"></div></section><section id="features" class="features" data-sf-section-label="能力"><article class="card"><h2>结构编辑</h2><p>拖拽、复制和响应式设置。</p></article><article class="card"><h2>质量检查</h2><p>静态与真实渲染双重检查。</p></article><article class="card"><h2>版本管理</h2><p>保存不可变版本并进行对比。</p></article></section><section id="contact"><h2>联系团队</h2><label>邮箱<input aria-label="邮箱" type="email"></label></section></main></body></html>`
+const pageHtml = (title: string) => `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><meta name="description" content="用于浏览器交互测试的稳定页面"><meta property="og:title" content="${title}"><style>*{box-sizing:border-box}body{margin:0;font-family:system-ui;background:#fff;color:#18181b}nav{display:flex;justify-content:space-between;padding:18px 5vw;border-bottom:1px solid #eee}main{max-width:1100px;margin:auto;padding:70px 28px}.hero{display:grid;grid-template-columns:1.2fr .8fr;gap:48px;align-items:center}.card{padding:28px;border:1px solid #ddd;border-radius:20px}.actions{display:flex;gap:12px}button,a{min-height:44px;padding:12px 18px}.features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:54px}@media(max-width:640px){.hero,.features{grid-template-columns:1fr}.hero{gap:24px}h1{font-size:40px}}</style></head><body><nav><strong>Browser Studio</strong><a href="#contact">联系</a></nav><main><section class="hero" data-sf-section-label="Hero"><div><h1>${title}</h1><p>让复杂工作流变得清晰、可控，并能在手机端顺畅完成。</p><div class="actions"><button>免费开始</button><a href="#features">查看能力</a></div></div><div class="card"><img alt="产品界面" loading="lazy" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2MDAiIGhlaWdodD0iNDAwIj48cmVjdCB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iIzhCNUNGNiIvPjwvc3ZnPg==" style="width:100%;object-fit:cover;border-radius:16px"></div></section><section id="features" class="features" data-sf-section-label="能力"><article class="card"><h2>结构编辑</h2><p>拖拽、复制和响应式设置。</p></article><article class="card"><h2>质量检查</h2><p>静态与真实渲染双重检查。</p></article><article class="card"><h2>版本管理</h2><p>保存不可变版本并进行对比。</p></article></section><section id="contact"><h2>联系团队</h2><label>邮箱<input aria-label="邮箱" type="email"></label></section></main></body></html>`
 
 export const versionHtml: Record<string, string> = {
-  [versions[0].id]: pageHtml('更成熟的网站工作台', true),
+  [versions[0].id]: pageHtml('更成熟的网站工作台'),
   [versions[1].id]: pageHtml('一句话生成完整网站'),
+}
+
+const versionPages: Record<string, Array<{ id: string; title: string; path: string; html: string }>> = {
+  [versions[0].id]: [
+    { id: 'home', title: '首页', path: '/', html: versionHtml[versions[0].id] },
+    { id: 'about', title: '关于', path: '/about', html: pageHtml('关于 Browser Studio') },
+  ],
+  [versions[1].id]: [{ id: 'home', title: '首页', path: '/', html: versionHtml[versions[1].id] }],
 }
 
 export const project = {
@@ -81,9 +96,9 @@ export async function mockAuthenticatedApi(page: Page) {
     const versionMatch = url.pathname.match(new RegExp(`/api/projects/${project.id}/versions/([^/]+)$`))
     if (versionMatch && method === 'GET') {
       const summary = versions.find((item) => item.id === versionMatch[1]) ?? versions[0]
-      return json(route, { version: { ...summary, html: versionHtml[summary.id] } })
+      return json(route, { version: { ...summary, html: versionHtml[summary.id], pages: versionPages[summary.id] } })
     }
-    if (url.pathname === `/api/projects/${project.id}/versions` && method === 'POST') return json(route, { version: { ...versions[0], id: '00000000-0000-4000-8000-000000000299', version: 3, name: '浏览器保存版本', createdAt: new Date().toISOString() } }, 201)
+    if (url.pathname === `/api/projects/${project.id}/versions` && method === 'POST') return json(route, { version: { ...versions[0], id: '00000000-0000-4000-8000-000000000299', version: 3, name: '浏览器保存版本', createdAt: new Date().toISOString(), pageCount: 3 } }, 201)
     if (url.pathname === '/api/publications') return json(route, { publications: [] })
     if (url.pathname === '/api/brand-kits') return json(route, { brandKits: [brandKit] })
     if (url.pathname === '/api/brand-assets') return json(route, { assets: [] })
