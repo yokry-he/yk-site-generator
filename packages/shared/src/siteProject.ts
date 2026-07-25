@@ -44,11 +44,7 @@ function normalizedSegment(value: string): string {
     .slice(0, 63)
 }
 
-/**
- * Convert user input into a safe canonical site path.
- * Chinese or otherwise non-ASCII titles should provide an explicit slug; an empty
- * result falls back to `/page` so callers can make it unique.
- */
+/** Convert user input into a safe canonical site path. */
 export function normalizeSitePath(value: string): string {
   const raw = value.trim().split(/[?#]/u, 1)[0] || '/'
   const segments = raw
@@ -60,7 +56,7 @@ export function normalizeSitePath(value: string): string {
 
 export function isCanonicalSitePath(value: string): boolean {
   if (value === '/') return true
-  return /^\/(?:[a-z0-9](?:[a-z0-9-]{0,62})(?:\/[a-z0-9](?:[a-z0-9-]{0,62})*)?)$/u.test(value)
+  return /^\/[a-z0-9](?:[a-z0-9-]{0,62})(?:\/[a-z0-9](?:[a-z0-9-]{0,62}))*$/u.test(value)
 }
 
 export function canonicalSiteRequestPath(value: string): string | null {
