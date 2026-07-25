@@ -50,6 +50,36 @@ describe('manual full-stack project scaffolds', () => {
     }
   })
 
+  it('keeps generated migration versions and selected Go database drivers consistent', () => {
+    const spring = createManualProjectScaffold({
+      name: 'Spring Content',
+      backendStack: 'spring-boot-jpa',
+      database: 'postgresql',
+      entities: [articleEntity],
+    })
+    const springMigrations = spring.files.filter((file) => file.path.includes('/db/migration/V1__'))
+    expect(springMigrations).toHaveLength(1)
+    expect(springMigrations[0].content).toContain('CREATE TABLE articles')
+    expect(springMigrations[0].content).not.toContain('CREATE TABLE tasks')
+
+    for (const database of ['sqlite', 'postgresql'] as const) {
+      const gin = createManualProjectScaffold({
+        name: `Gin ${database}`,
+        backendStack: 'gin-gorm',
+        database,
+        entities: [articleEntity],
+      })
+      const databaseFile = gin.files.find((file) => file.path === 'apps/api/internal/database/database.go')!.content
+      const goMod = gin.files.find((file) => file.path === 'apps/api/go.mod')!.content
+      const migration = gin.files.find((file) => file.path === 'apps/api/migrations/00001_create_tasks.sql')!.content
+      expect(databaseFile).toContain(`gorm.io/driver/${database === 'sqlite' ? 'sqlite' : 'postgres'}`)
+      expect(databaseFile).not.toContain(`gorm.io/driver/${database === 'sqlite' ? 'postgres' : 'sqlite'}`)
+      expect(goMod).toContain(`gorm.io/driver/${database === 'sqlite' ? 'sqlite' : 'postgres'}`)
+      expect(migration).toContain('CREATE TABLE articles')
+      expect(migration).not.toContain('CREATE TABLE IF NOT EXISTS tasks')
+    }
+  })
+
   it('rejects invalid models and unsupported database combinations', () => {
     expect(() => createManualProjectScaffold({
       name: 'Invalid Spring SQLite',
