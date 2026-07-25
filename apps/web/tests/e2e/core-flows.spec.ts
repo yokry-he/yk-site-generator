@@ -12,6 +12,27 @@ test('command palette supports keyboard navigation', async ({ page }) => {
   await expect(page).toHaveURL(/\/templates$/)
 })
 
+test('manual project wizard exposes supported backend and database combinations', async ({ page }) => {
+  await mockPublicApi(page)
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.goto('/projects/new')
+
+  await expect(page.getByRole('heading', { name: '手动创建全栈项目' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Hono \+ Drizzle/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /NestJS \+ Prisma/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /FastAPI \+ SQLAlchemy/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Spring Boot \+ JPA/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Gin \+ GORM/ })).toBeVisible()
+
+  await page.getByRole('button', { name: /Spring Boot \+ JPA/ }).click()
+  await expect(page.getByRole('button', { name: /^PostgreSQL/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^SQLite/ })).toHaveCount(0)
+  await expect(page.getByText(/Spring Data JPA · Flyway/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /生成并下载工程 ZIP/ })).toBeEnabled()
+  expect(pageErrors).toEqual([])
+})
+
 test('model settings distinguish demo mode from verified real generation', async ({ page, isMobile }) => {
   test.skip(isMobile, 'desktop navigation exposes the model settings trigger')
   await mockPublicApi(page)
