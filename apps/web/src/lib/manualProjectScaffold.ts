@@ -3,10 +3,13 @@ import {
   backendDatabaseLabel,
   backendStackSupportsDatabase,
   getBackendStackProfile,
+  normalizeManualEntities,
   type ArtifactFile,
   type BackendDatabaseId,
   type BackendStackId,
+  type ManualEntityDefinition,
 } from 'shared'
+import { manualCrudFiles } from './manualCrudScaffold'
 
 export interface ManualProjectInput {
   name: string
@@ -15,16 +18,18 @@ export interface ManualProjectInput {
   database: BackendDatabaseId
   includeDocker?: boolean
   includeGithubActions?: boolean
+  entities?: readonly ManualEntityDefinition[]
 }
 
 export interface ManualProjectManifest {
-  schemaVersion: 1
+  schemaVersion: 2
   projectKind: 'fullstack-app'
   name: string
   slug: string
   frontend: 'vue-vite'
   backend: BackendStackId
   database: BackendDatabaseId
+  entities: ManualEntityDefinition[]
   services: Array<{ id: 'web' | 'api'; cwd: string; port: number; healthPath?: string }>
   commands: { install: string; dev: string; build: string; test: string; migrate: string }
 }
@@ -249,6 +254,12 @@ function githubActionsFile(): ArtifactFile {
   return text('.github/workflows/ci.yml', `name: CI\non:\n  push:\n  pull_request:\njobs:\n  verify:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: pnpm/action-setup@v4\n        with:\n          version: 11\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 24\n          cache: pnpm\n      - run: pnpm install --no-frozen-lockfile\n      - run: pnpm --filter web test\n      - run: pnpm --filter web build\n      - name: Backend verification\n        run: echo "Run the backend-specific build command documented in siteforge.json"\n`)
 }
 
+function dedupeFiles(files: ArtifactFile[]): ArtifactFile[] {
+  const byPath = new Map<string, ArtifactFile>()
+  for (const file of files) byPath.set(file.path, file)
+  return [...byPath.values()]
+}
+
 export function createManualProjectScaffold(input: ManualProjectInput): ManualProjectScaffold {
   const name = input.name.trim()
   if (!name) throw new Error('请输入项目名称')
@@ -258,15 +269,17 @@ export function createManualProjectScaffold(input: ManualProjectInput): ManualPr
     throw new Error(`${profile.name} 暂不支持 ${backendDatabaseLabel(input.database)}`)
   }
   const slug = safeSlug(name)
+  const entities = normalizeManualEntities(input.entities)
   const commands = rootCommands(input.backendStack)
   const manifest: ManualProjectManifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     projectKind: 'fullstack-app',
     name,
     slug,
     frontend: 'vue-vite',
     backend: input.backendStack,
     database: input.database,
+    entities,
     services: [
       { id: 'web', cwd: 'apps/web', port: 5173 },
       { id: 'api', cwd: 'apps/api', port: profile.defaultPort, healthPath: '/api/health' },
@@ -279,11 +292,12 @@ export function createManualProjectScaffold(input: ManualProjectInput): ManualPr
       migrate: commands.migrate,
     },
   }
-  const files = [
+  const files = dedupeFiles([
     ...commonFiles(input, slug),
     ...apiFiles(input.backendStack, input.database),
+    ...manualCrudFiles(name, input.backendStack, input.database, entities),
     json('siteforge.json', manifest),
-  ]
+  ])
   if (input.includeDocker !== false) files.push(dockerCompose(input.database))
   if (input.includeGithubActions !== false) files.push(githubActionsFile())
   return { slug, files, manifest }
