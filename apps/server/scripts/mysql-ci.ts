@@ -5,7 +5,7 @@ import { createConnection } from 'mysql2/promise'
 import { createEmptyData } from '../src/lib/data-store'
 import { getMysqlSnapshotStore } from '../src/lib/mysql-store'
 
-const EXPECTED_SCHEMA_VERSION = 6
+const EXPECTED_SCHEMA_VERSION = 7
 const REQUIRED_MIGRATIONS = [
   '004_transactional_state.sql',
   '005_operations_rbac.sql',
