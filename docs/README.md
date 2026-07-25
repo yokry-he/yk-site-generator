@@ -14,6 +14,7 @@
 | --- | --- |
 | [`DEVELOPMENT.md`](./DEVELOPMENT.md) | 本地环境、项目结构、环境变量、数据库、调试、测试和贡献流程 |
 | [`DEPLOYMENT.md`](./DEPLOYMENT.md) | 生产构建、前后端分离、Nginx、MySQL、对象存储、健康检查、监控、备份与回滚 |
+| [`MODEL_PROVIDERS.md`](./MODEL_PROVIDERS.md) | 演示模式与真实生成切换、模型厂商、实时模型目录和自定义模型 ID |
 | [`BUILTIN_PROJECTS.md`](./BUILTIN_PROJECTS.md) | 无需模型与登录即可使用的内置成品项目 |
 | [`GENERATION_QUALITY.md`](./GENERATION_QUALITY.md) | 极速、平衡、精致三档生成策略及性能指标 |
 | [`BETA_READINESS.md`](./BETA_READINESS.md) | Beta 阶段质量、性能、安全和 CI 门槛 |
@@ -41,6 +42,7 @@ This directory is the canonical home for SiteForge development, deployment, qual
 | --- | --- |
 | [`DEVELOPMENT.md`](./DEVELOPMENT.md) | Local setup, repository structure, environment variables, databases, debugging, testing, and contribution workflow |
 | [`DEPLOYMENT.md`](./DEPLOYMENT.md) | Production builds, split frontend/backend deployment, Nginx, MySQL, object storage, health checks, monitoring, backups, and rollback |
+| [`MODEL_PROVIDERS.md`](./MODEL_PROVIDERS.md) | Demo versus real generation, providers, live model catalogs, and custom model IDs |
 | [`BUILTIN_PROJECTS.md`](./BUILTIN_PROJECTS.md) | Ready-to-use projects that require neither a model nor authentication |
 | [`GENERATION_QUALITY.md`](./GENERATION_QUALITY.md) | Fast, balanced, and quality generation modes plus performance signals |
 | [`BETA_READINESS.md`](./BETA_READINESS.md) | Beta quality, performance, security, and CI gates |
