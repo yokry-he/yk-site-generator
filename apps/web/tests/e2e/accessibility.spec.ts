@@ -15,6 +15,7 @@ const PUBLIC_ROUTES = [
   '/templates',
   '/templates/aurora-saas',
   '/generator',
+  '/projects/new',
 ]
 
 for (const path of PUBLIC_ROUTES) {
