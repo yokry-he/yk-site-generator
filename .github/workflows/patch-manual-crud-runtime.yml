@@ -1,0 +1,93 @@
+name: Patch Manual CRUD Runtime Contracts
+
+on:
+  push:
+    branches:
+      - Feature-dev-v0.1.0
+
+permissions:
+  contents: write
+
+concurrency:
+  group: patch-manual-crud-runtime
+  cancel-in-progress: true
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: Feature-dev-v0.1.0
+          fetch-depth: 0
+      - name: Patch generated runtime contracts
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('apps/web/src/lib/manualCrudScaffold.ts')
+          text = path.read_text()
+
+          replacements = [
+            (
+              "files.push(text('apps/api/src/main/resources/db/migration/V1__create_resources.sql', sqlTables.join('\\n\\n')))",
+              "files.push(text('apps/api/src/main/resources/db/migration/V1__create_tasks.sql', sqlTables.join('\\n\\n')))"
+            ),
+            (
+              "function ginCrudFiles(entities: readonly ManualEntityDefinition[]): ArtifactFile[] {\n  const structs =",
+              "function ginCrudFiles(database: BackendDatabaseId, entities: readonly ManualEntityDefinition[]): ArtifactFile[] {\n  const sqlite = database === 'sqlite'\n  const structs ="
+            ),
+            (
+              "    const varName = lowerFirst(entity.name)\n",
+              ""
+            ),
+            (
+              "}\\n\\nvar _ = ${quote(varName)}`",
+              "}`"
+            ),
+            (
+              "text('apps/api/internal/handlers/resources.go', `package handlers\\n\\nimport (\\n  \"net/http\"",
+              "text('apps/api/internal/handlers/resources.go', `package handlers\\n\\nimport (\\n  \"net/http\"\\n  \"time\""
+            ),
+            (
+              ": ginCrudFiles(entities)",
+              ": ginCrudFiles(database, entities)"
+            ),
+          ]
+          for old, new in replacements:
+            if text.count(old) != 1:
+              raise SystemExit(f'anchor mismatch: {old[:80]}')
+            text = text.replace(old, new)
+
+          old = """  const migrate = entities.map((entity) => `&${entity.name}{}`).join(', ')\n  const handlers = entities.map((entity) => {\n"""
+          new = """  const migrate = entities.map((entity) => `&${entity.name}{}`).join(', ')\n  const migrationUp = entities.map((entity) => {\n    const id = sqlite ? 'INTEGER PRIMARY KEY AUTOINCREMENT' : 'BIGSERIAL PRIMARY KEY'\n    const fields = entity.fields.map((field) => {\n      const sqlType = field.type === 'integer'\n        ? 'INTEGER'\n        : field.type === 'decimal'\n          ? 'NUMERIC'\n          : field.type === 'boolean'\n            ? 'BOOLEAN'\n            : field.type === 'date'\n              ? 'DATE'\n              : field.type === 'datetime'\n                ? 'TIMESTAMP'\n                : 'TEXT'\n      return `  ${toSnakeCase(field.name)} ${sqlType}${field.required ? ' NOT NULL' : ''}${field.unique ? ' UNIQUE' : ''}`\n    })\n    return `CREATE TABLE ${tableName(entity)} (\\n  id ${id},\\n${fields.join(',\\n')},\\n  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\\n  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP\\n);`\n  }).join('\\n\\n')\n  const migrationDown = [...entities].reverse().map((entity) => `DROP TABLE IF EXISTS ${tableName(entity)};`).join('\\n')\n  const handlers = entities.map((entity) => {\n"""
+          if text.count(old) != 1:
+            raise SystemExit('gin migration insertion anchor mismatch')
+          text = text.replace(old, new)
+
+          old = """    text('apps/api/internal/database/database.go', `package database\\n\\nimport (\\n  \"os\"\\n  \"gorm.io/driver/${'sqlite'}\"\\n  \"gorm.io/driver/postgres\"\\n  \"gorm.io/gorm\"\\n)\\nvar DB *gorm.DB\\nfunc Connect() {\\n  url := os.Getenv(\"DATABASE_URL\")\\n  var dialector gorm.Dialector\\n  if url == \"\" || len(url) < 11 || url[:11] != \"postgresql\" { if url == \"\" { url = \"data/app.db\" }; dialector = sqlite.Open(url) } else { dialector = postgres.Open(url) }\\n  db, err := gorm.Open(dialector, &gorm.Config{}); if err != nil { panic(err) }\\n  if err := db.AutoMigrate(${migrate}); err != nil { panic(err) }; DB = db\\n}`),\n"""
+          new = """    text('apps/api/internal/database/database.go', `package database\\n\\nimport (\\n  \"os\"\\n  \"gorm.io/driver/${sqlite ? 'sqlite' : 'postgres'}\"\\n  \"gorm.io/gorm\"\\n)\\nvar DB *gorm.DB\\nfunc Connect() {\\n  url := os.Getenv(\"DATABASE_URL\"); if url == \"\" { url = \"${sqlite ? 'data/app.db' : 'postgresql://siteforge:siteforge@localhost:5432/siteforge_app'}\" }\\n  db, err := gorm.Open(${sqlite ? 'sqlite.Open(url)' : 'postgres.Open(url)'}, &gorm.Config{}); if err != nil { panic(err) }\\n  if err := db.AutoMigrate(${migrate}); err != nil { panic(err) }; DB = db\\n}`),\n"""
+          if text.count(old) != 1:
+            raise SystemExit('gin database anchor mismatch')
+          text = text.replace(old, new)
+
+          old = """    text('apps/api/cmd/api/main.go', `package main"""
+          new = """    text('apps/api/migrations/00001_create_tasks.sql', `-- +goose Up\\n${migrationUp}\\n\\n-- +goose Down\\n${migrationDown}`),\n    text('apps/api/cmd/api/main.go', `package main"""
+          if text.count(old) != 1:
+            raise SystemExit('gin migration file anchor mismatch')
+          text = text.replace(old, new)
+
+          path.write_text(text)
+          PY
+      - name: Commit patch and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/patch-manual-crud-runtime.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/lib/manualCrudScaffold.ts
+          git diff --cached --check
+          git commit -m "fix(web): align generated CRUD runtime dependencies"
+          git push origin HEAD:Feature-dev-v0.1.0
