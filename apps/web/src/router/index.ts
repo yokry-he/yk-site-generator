@@ -11,6 +11,7 @@ export const router = createRouter({
     { path: '/templates', name: 'templates', component: () => import('../pages/TemplatesPage.vue'), meta: { title: '官方模板 · SiteForge' } },
     { path: '/templates/:slug', name: 'template-detail', component: () => import('../pages/TemplateDetailPage.vue'), meta: { title: '模板详情 · SiteForge' } },
     { path: '/projects', name: 'projects', component: () => import('../pages/ProjectsPage.vue'), meta: { title: '项目工作区 · SiteForge' } },
+    { path: '/projects/new', name: 'manual-project', component: () => import('../pages/ManualProjectPage.vue'), meta: { title: '手动创建全栈工程 · SiteForge' } },
     { path: '/projects/:id', name: 'project-detail', component: () => import('../pages/ProjectPage.vue'), meta: { title: '项目详情 · SiteForge' } },
     { path: '/brand', name: 'brand-kits', component: () => import('../pages/BrandKitsPage.vue'), meta: { title: '品牌套件 · SiteForge' } },
     { path: '/brand/assets', name: 'brand-assets', component: () => import('../pages/BrandAssetsPage.vue'), meta: { title: '品牌资源库 · SiteForge' } },
