@@ -1,4 +1,5 @@
 import { createHash, createHmac } from 'node:crypto'
+import { sitePageOutputPath, type SitePage } from 'shared'
 import { env } from '../env'
 
 function sha256(value: string | Uint8Array): string {
@@ -81,12 +82,38 @@ async function signedRequest(input: {
   }
 }
 
+function pageObjectKey(slug: string, page: Pick<SitePage, 'path'>): string {
+  return `sites/${slug}/${sitePageOutputPath(page)}`
+}
+
+export async function putPublishedObjects(slug: string, pages: readonly SitePage[]): Promise<void> {
+  const uploaded: string[] = []
+  try {
+    for (const page of pages) {
+      const key = pageObjectKey(slug, page)
+      await signedRequest({ method: 'PUT', key, body: page.html })
+      uploaded.push(key)
+    }
+  } catch (error) {
+    await Promise.allSettled(uploaded.map((key) => signedRequest({ method: 'DELETE', key })))
+    throw error
+  }
+}
+
+export async function deletePublishedObjects(slug: string, pages: readonly Pick<SitePage, 'path'>[]): Promise<void> {
+  const targets = pages.length ? pages : [{ path: '/' }]
+  const results = await Promise.allSettled(targets.map((page) => signedRequest({ method: 'DELETE', key: pageObjectKey(slug, page) })))
+  const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+  if (rejected) throw rejected.reason
+}
+
+/** Backwards-compatible one-page wrappers. */
 export async function putPublishedObject(slug: string, html: string): Promise<void> {
-  await signedRequest({ method: 'PUT', key: `sites/${slug}/index.html`, body: html })
+  await putPublishedObjects(slug, [{ id: 'home', title: '首页', path: '/', html }])
 }
 
 export async function deletePublishedObject(slug: string): Promise<void> {
-  await signedRequest({ method: 'DELETE', key: `sites/${slug}/index.html` })
+  await deletePublishedObjects(slug, [{ path: '/' }])
 }
 
 export function s3PublicationUrl(slug: string): string {
@@ -94,8 +121,14 @@ export function s3PublicationUrl(slug: string): string {
   return objectUrl(`sites/${slug}/index.html`).toString()
 }
 
-export async function invalidatePublicationCache(slug: string, action: 'publish' | 'delete'): Promise<void> {
+export async function invalidatePublicationCache(
+  slug: string,
+  action: 'publish' | 'delete',
+  pages: readonly Pick<SitePage, 'path'>[] = [{ path: '/' }],
+): Promise<void> {
   if (!env.CDN_INVALIDATION_WEBHOOK_URL) return
+  const objectPaths = pages.map((page) => `/sites/${slug}/${sitePageOutputPath(page)}`)
+  const appPaths = pages.map((page) => `/site/${slug}${page.path === '/' ? '' : page.path}`)
   try {
     const response = await fetch(env.CDN_INVALIDATION_WEBHOOK_URL, {
       method: 'POST',
@@ -105,7 +138,7 @@ export async function invalidatePublicationCache(slug: string, action: 'publish'
           ? { authorization: `Bearer ${env.CDN_INVALIDATION_WEBHOOK_TOKEN}` }
           : {}),
       },
-      body: JSON.stringify({ action, paths: [`/sites/${slug}/index.html`, `/site/${slug}`] }),
+      body: JSON.stringify({ action, paths: [...new Set([...objectPaths, ...appPaths])] }),
     })
     if (!response.ok) console.warn(`[cdn] 缓存失效 Webhook 返回 ${response.status}`)
   } catch (err) {
