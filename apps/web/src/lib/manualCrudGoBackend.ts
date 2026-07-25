@@ -71,7 +71,8 @@ export function ginCrudFiles(
     const fields = entity.fields.map((field) => `  ${toSnakeCase(field.name)} ${sqlType(field)}${field.required ? ' NOT NULL' : ''}${field.unique ? ' UNIQUE' : ''}`)
     const relations = (entity.relations ?? []).map((relation) => {
       const target = entityByName(entities, relation.targetEntity)
-      return `  ${toSnakeCase(relationIdField(relation))} INTEGER${relation.required ? ' NOT NULL' : ''} REFERENCES ${tableName(target)}(id) ON DELETE ${sqlOnDelete(relation.onDelete)}`
+      const foreignKeyType = sqlite ? 'INTEGER' : 'BIGINT'
+      return `  ${toSnakeCase(relationIdField(relation))} ${foreignKeyType}${relation.required ? ' NOT NULL' : ''} REFERENCES ${tableName(target)}(id) ON DELETE ${sqlOnDelete(relation.onDelete)}`
     })
     return `CREATE TABLE ${tableName(entity)} (\n  id ${id},\n${[...fields, ...relations].join(',\n')},\n  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP\n);`
   }).join('\n\n')
