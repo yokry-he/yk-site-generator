@@ -1,31 +1,47 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../src/app'
-import { createAccessTokenForTest } from '../src/lib/auth'
 import { resetDataStoreForTest } from '../src/lib/data-store'
 
+const app = createApp()
+const now = '2026-07-25T00:00:00.000Z'
 const userId = '00000000-0000-4000-8000-000000000901'
 const projectIdPattern = /^[0-9a-f-]{36}$/u
-
-async function authHeader() {
-  return { authorization: `Bearer ${await createAccessTokenForTest({ sub: userId, email: 'pages@example.com', role: 'user' })}` }
-}
-
 const homeHtml = '<!doctype html><html><body><h1>Home</h1></body></html>'
 const aboutHtml = '<!doctype html><html><body><h1>About</h1></body></html>'
 
-describe('multi-page projects', () => {
-  beforeEach(() => {
-    resetDataStoreForTest({
-      users: [{ id: userId, email: 'pages@example.com', role: 'user', status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }],
-    })
+beforeEach(() => {
+  resetDataStoreForTest({
+    users: [{ id: userId, email: 'pages@example.com', role: 'user', status: 'active', createdAt: now, updatedAt: now }],
   })
+})
 
+async function login(): Promise<string> {
+  const request = await app.request('/api/auth/request-code', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'pages@example.com' }),
+  })
+  expect(request.status).toBe(202)
+  const code = (await request.json()).debugCode as string
+  const response = await app.request('/api/auth/verify', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'pages@example.com', code }),
+  })
+  expect(response.status).toBe(200)
+  return (await response.json()).accessToken as string
+}
+
+function headers(token: string): Record<string, string> {
+  return { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
+}
+
+describe('multi-page projects', () => {
   it('creates, reads, and rolls back an immutable whole-site version', async () => {
-    const app = createApp()
-    const headers = { ...(await authHeader()), 'content-type': 'application/json' }
+    const token = await login()
     const createdResponse = await app.request('/api/projects', {
       method: 'POST',
-      headers,
+      headers: headers(token),
       body: JSON.stringify({
         title: '多页面测试',
         siteType: 'business',
@@ -43,7 +59,7 @@ describe('multi-page projects', () => {
     expect(created.project.id).toMatch(projectIdPattern)
     expect(created.project.latestVersion.pageCount).toBe(2)
 
-    const versionResponse = await app.request(`/api/projects/${created.project.id}/versions/${created.project.latestVersion.id}`, { headers: await authHeader() })
+    const versionResponse = await app.request(`/api/projects/${created.project.id}/versions/${created.project.latestVersion.id}`, { headers: headers(token) })
     expect(versionResponse.status).toBe(200)
     const version = await versionResponse.json() as { version: { pages: Array<{ path: string; html: string }>; homePageId: string; pageCount: number } }
     expect(version.version.pageCount).toBe(2)
@@ -52,7 +68,7 @@ describe('multi-page projects', () => {
 
     const secondResponse = await app.request(`/api/projects/${created.project.id}/versions`, {
       method: 'POST',
-      headers,
+      headers: headers(token),
       body: JSON.stringify({
         source: 'editor',
         parentVersionId: created.project.latestVersion.id,
@@ -71,24 +87,23 @@ describe('multi-page projects', () => {
 
     const rollbackResponse = await app.request(`/api/projects/${created.project.id}/rollback`, {
       method: 'POST',
-      headers,
+      headers: headers(token),
       body: JSON.stringify({ versionId: created.project.latestVersion.id }),
     })
     expect(rollbackResponse.status).toBe(201)
     const rollback = await rollbackResponse.json() as { version: { id: string; pageCount: number } }
     expect(rollback.version.pageCount).toBe(2)
 
-    const rolledVersionResponse = await app.request(`/api/projects/${created.project.id}/versions/${rollback.version.id}`, { headers: await authHeader() })
+    const rolledVersionResponse = await app.request(`/api/projects/${created.project.id}/versions/${rollback.version.id}`, { headers: headers(token) })
     const rolled = await rolledVersionResponse.json() as { version: { pages: Array<{ path: string }> } }
     expect(rolled.version.pages.map((page) => page.path)).toEqual(['/', '/about'])
   })
 
-  it('rejects duplicate routes and oversized page sets before persistence', async () => {
-    const app = createApp()
-    const headers = { ...(await authHeader()), 'content-type': 'application/json' }
+  it('rejects duplicate routes before persistence', async () => {
+    const token = await login()
     const response = await app.request('/api/projects', {
       method: 'POST',
-      headers,
+      headers: headers(token),
       body: JSON.stringify({
         title: '非法路径',
         siteType: 'business',
