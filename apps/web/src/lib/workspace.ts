@@ -1,3 +1,4 @@
+import type { SitePage, SitePageSummary } from 'shared'
 import { authFetch } from '../composables/useAuth'
 import { ensureOk } from './api'
 
@@ -17,11 +18,16 @@ export interface ProjectVersionSummary {
   parentVersionId?: string
   changeSummary: string[]
   createdAt: string
+  homePageId: string
+  pages: SitePageSummary[]
+  pageCount: number
   sizeBytes: number
 }
 
-export interface ProjectVersion extends Omit<ProjectVersionSummary, 'sizeBytes'> {
+export interface ProjectVersion extends Omit<ProjectVersionSummary, 'sizeBytes' | 'pages'> {
   html: string
+  pages: SitePage[]
+  sizeBytes: number
 }
 
 export interface CloudProject {
@@ -58,6 +64,8 @@ export interface Publication {
   createdAt: string
   updatedAt: string
   publishedAt: string
+  homePageId?: string
+  pageCount: number
   sizeBytes: number
   url: string
   host: string
@@ -91,6 +99,8 @@ export async function createProject(input: {
   siteType: string
   requirement: string
   html?: string
+  pages?: SitePage[]
+  homePageId?: string
   source?: ProjectVersionSummary['source']
   instruction?: string
   model?: string
@@ -137,7 +147,9 @@ export async function deleteProject(id: string): Promise<void> {
 export async function addProjectVersion(
   id: string,
   input: {
-    html: string
+    html?: string
+    pages?: SitePage[]
+    homePageId?: string
     source: ProjectVersionSummary['source']
     instruction?: string
     model?: string
@@ -203,6 +215,8 @@ export async function createPublication(input: {
   projectId?: string
   versionId?: string
   html?: string
+  pages?: SitePage[]
+  homePageId?: string
 }): Promise<Publication> {
   const response = await ensureOk(
     await authFetch('/api/publications', {
@@ -230,7 +244,7 @@ export async function updatePublication(
 
 export async function republish(
   id: string,
-  input: { versionId?: string; html?: string },
+  input: { versionId?: string; html?: string; pages?: SitePage[]; homePageId?: string },
 ): Promise<Publication> {
   const response = await ensureOk(
     await authFetch(`/api/publications/${encodeURIComponent(id)}/republish`, {
