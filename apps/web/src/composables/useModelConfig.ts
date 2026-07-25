@@ -1,4 +1,4 @@
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { providerById } from '../data/providers'
 
 export interface ModelConnection {
@@ -72,8 +72,20 @@ watch(
 )
 
 export function useModelConfig() {
-  const activeProvider = computed(() => (store.active ? providerById(store.active) : undefined))
-  const activeConnection = computed(() => (store.active ? store.connections[store.active] : undefined))
+  // Persisted state is already loaded, but exposing it one microtask later prevents
+  // eager computed/watch callbacks in newly mounted consumers from observing real
+  // mode before their own setup declarations have finished initializing.
+  const consumerReady = ref(false)
+  queueMicrotask(() => {
+    consumerReady.value = true
+  })
+
+  const activeProvider = computed(() => (
+    consumerReady.value && store.active ? providerById(store.active) : undefined
+  ))
+  const activeConnection = computed(() => (
+    consumerReady.value && store.active ? store.connections[store.active] : undefined
+  ))
   const isConfigured = computed(() => Boolean(activeProvider.value && activeConnection.value?.apiKey && activeConnection.value.model))
   const isVerified = computed(() => Boolean(isConfigured.value && activeConnection.value?.verifiedAt))
 
