@@ -13,6 +13,7 @@ import { manualCrudFiles } from './manualCrudScaffold'
 import { applyManualSessionData } from './manualSessionDataScaffold'
 import { applyManualSessionRuntime } from './manualSessionRuntimeScaffold'
 import { applyManualSessionProtection } from './manualSessionProtectionScaffold'
+import { applyManualFineAuthorization } from './manualFineAuthorizationScaffold'
 
 export interface ManualAccessProjectInput extends ManualProjectInput {
   access?: ManualAccessDefinition
@@ -38,56 +39,22 @@ export function createManualAccessProjectScaffold(
   }
   const base = createManualProjectScaffold(baseInput)
   const filesByPath = new Map(base.files.map((file) => [file.path, file]))
-  const defaultCrudFiles = manualCrudFiles(
-    base.manifest.name,
-    input.backendStack,
-    input.database,
-    entities,
-  )
+  const defaultCrudFiles = manualCrudFiles(base.manifest.name, input.backendStack, input.database, entities)
   for (const file of defaultCrudFiles) filesByPath.delete(file.path)
 
-  for (const file of manualCrudFiles(
-    base.manifest.name,
-    input.backendStack,
-    input.database,
-    entities,
-    access,
-  )) {
+  for (const file of manualCrudFiles(base.manifest.name, input.backendStack, input.database, entities, access)) {
     filesByPath.set(file.path, file)
   }
 
-  const sessionDataFiles = applyManualSessionData(
-    [...filesByPath.values()],
-    input.backendStack,
-    input.database,
-    entities,
-    access,
-  )
-  const sessionRuntimeFiles = applyManualSessionRuntime(
-    sessionDataFiles,
-    input.backendStack,
-    input.database,
-    entities,
-    access,
-  )
-  const files = applyManualSessionProtection(
-    sessionRuntimeFiles,
-    input.backendStack,
-    input.database,
-    entities,
-    access,
-  )
+  const sessionDataFiles = applyManualSessionData([...filesByPath.values()], input.backendStack, input.database, entities, access)
+  const sessionRuntimeFiles = applyManualSessionRuntime(sessionDataFiles, input.backendStack, input.database, entities, access)
+  const protectedFiles = applyManualSessionProtection(sessionRuntimeFiles, input.backendStack, input.database, entities, access)
+  const files = applyManualFineAuthorization(protectedFiles, input.backendStack, entities, access)
 
-  return {
-    ...base,
-    files,
-    access,
-  }
+  return { ...base, files, access }
 }
 
-export async function buildManualAccessProjectZip(
-  input: ManualAccessProjectInput,
-): Promise<Blob> {
+export async function buildManualAccessProjectZip(input: ManualAccessProjectInput): Promise<Blob> {
   const scaffold = createManualAccessProjectScaffold(input)
   const zip = new JSZip()
   for (const file of scaffold.files) zip.file(file.path, file.content)
