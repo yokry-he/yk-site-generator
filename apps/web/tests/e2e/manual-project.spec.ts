@@ -41,6 +41,30 @@ test('manual data model designer configures relations and paginated CRUD resourc
   expect(pageErrors).toEqual([])
 })
 
+test('manual role designer configures a custom resource permission matrix', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'the permission matrix is covered at desktop width; mobile accessibility remains in the shared matrix')
+  await mockPublicApi(page)
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.goto('/projects/new')
+
+  await expect(page.getByRole('heading', { name: '5. 认证与角色权限' })).toBeVisible()
+  await expect(page.getByText(/权限配置有效：3 个角色/)).toBeVisible()
+  await page.getByRole('button', { name: '新增角色' }).click()
+  await page.getByLabel('角色标识').fill('auditor')
+  await page.getByLabel('角色名称').fill('审计员')
+  await page.getByRole('button', { name: '只读预设' }).click()
+
+  await expect(page.getByRole('tab', { name: /审计员/ })).toBeVisible()
+  await expect(page.getByText(/权限配置有效：4 个角色/)).toBeVisible()
+  await expect(page.getByLabel('审计员 任务 列表')).toBeChecked()
+  await expect(page.getByLabel('审计员 任务 详情')).toBeChecked()
+  await expect(page.getByLabel('审计员 任务 修改')).not.toBeChecked()
+  await expect(page.getByText('访问角色').locator('..').getByText('4')).toBeVisible()
+  await expect(page.getByRole('button', { name: /生成并下载工程 ZIP/ })).toBeEnabled()
+  expect(pageErrors).toEqual([])
+})
+
 test('manual data model validation prevents invalid downloads', async ({ page }) => {
   await mockPublicApi(page)
   await page.goto('/projects/new')
