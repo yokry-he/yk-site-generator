@@ -17,6 +17,7 @@
 | [`MANUAL_FULLSTACK_PROJECTS.md`](./MANUAL_FULLSTACK_PROJECTS.md) | 无 AI 的全栈工程向导、后端技术矩阵、工程清单与安全边界 |
 | [`MANUAL_CRUD_DESIGNER.md`](./MANUAL_CRUD_DESIGNER.md) | 可视化数据模型、外键关系、分页搜索排序、五栈确定性 CRUD 与 OpenAPI |
 | [`MANUAL_AUTHORIZATION.md`](./MANUAL_AUTHORIZATION.md) | 五栈 Opaque Bearer Token、默认角色、资源级路由权限和安全边界 |
+| [`MANUAL_ERROR_HANDLING.md`](./MANUAL_ERROR_HANDLING.md) | 五栈统一校验、约束冲突、404、内部错误协议与信息泄露边界 |
 | [`MODEL_PROVIDERS.md`](./MODEL_PROVIDERS.md) | 演示模式与真实生成切换、模型厂商、实时模型目录和自定义模型 ID |
 | [`MULTI_PAGE_PROJECTS.md`](./MULTI_PAGE_PROJECTS.md) | 多页面项目协议、页面工作区、整站版本、发布和导出 |
 | [`BUILTIN_PROJECTS.md`](./BUILTIN_PROJECTS.md) | 无需模型与登录即可使用的内置成品项目 |
@@ -49,6 +50,7 @@ This directory is the canonical home for SiteForge development, deployment, qual
 | [`MANUAL_FULLSTACK_PROJECTS.md`](./MANUAL_FULLSTACK_PROJECTS.md) | AI-free full-stack wizard, backend matrix, engineering manifest, and safety boundary |
 | [`MANUAL_CRUD_DESIGNER.md`](./MANUAL_CRUD_DESIGNER.md) | Visual data models, foreign-key relations, pagination/search/sorting, deterministic CRUD for five stacks, and OpenAPI |
 | [`MANUAL_AUTHORIZATION.md`](./MANUAL_AUTHORIZATION.md) | Opaque bearer tokens, default roles, resource-level route permissions, and security boundaries across five stacks |
+| [`MANUAL_ERROR_HANDLING.md`](./MANUAL_ERROR_HANDLING.md) | Shared validation, constraint-conflict, 404, internal-error, and disclosure boundaries across five stacks |
 | [`MODEL_PROVIDERS.md`](./MODEL_PROVIDERS.md) | Demo versus real generation, providers, live model catalogs, and custom model IDs |
 | [`MULTI_PAGE_PROJECTS.md`](./MULTI_PAGE_PROJECTS.md) | Multi-page project protocol, pages workspace, whole-site versions, publishing, and export |
 | [`BUILTIN_PROJECTS.md`](./BUILTIN_PROJECTS.md) | Ready-to-use projects that require neither a model nor authentication |

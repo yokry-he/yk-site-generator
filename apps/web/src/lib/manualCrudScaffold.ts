@@ -7,6 +7,7 @@ import {
 } from 'shared'
 import { applyManualAuthorization } from './manualAuthScaffold'
 import { ginCrudFiles } from './manualCrudGoBackend'
+import { applyManualErrorHandling } from './manualErrorScaffold'
 import { manualCrudFrontendFiles } from './manualCrudFrontend'
 import { springCrudFiles } from './manualCrudJavaBackend'
 import { honoCrudFiles, nestCrudFiles } from './manualCrudNodeBackends'
@@ -30,9 +31,10 @@ export function manualCrudFiles(
           ? springCrudFiles(entities)
           : ginCrudFiles(database, entities)
 
-  return applyManualAuthorization([
+  const authorized = applyManualAuthorization([
     ...manualCrudFrontendFiles(projectName, entities),
     ...backend,
     openApiFile(projectName, entities),
   ], stack, database, entities, access)
+  return applyManualErrorHandling(authorized, stack)
 }
