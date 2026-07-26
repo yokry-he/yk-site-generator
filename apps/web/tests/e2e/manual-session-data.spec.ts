@@ -12,7 +12,7 @@ test('manual project wizard configures persistent session data', async ({ page, 
   await page.getByLabel('Session 有效期（秒）').fill('43200')
   await page.getByLabel('单用户活动 Session 上限').fill('3')
 
-  await expect(page.getByText(/持久化 Session 数据层/)).toBeVisible()
+  await expect(page.getByText(/权限配置有效：.*持久化 Session 数据层/)).toBeVisible()
   await expect(page.getByRole('button', { name: /生成并下载工程 ZIP/ })).toBeEnabled()
   expect(pageErrors).toEqual([])
 })
