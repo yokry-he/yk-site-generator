@@ -1,0 +1,5 @@
+import { describe, expect, it } from 'vitest'
+import { createDefaultManualAccess, DEFAULT_MANUAL_ENTITIES } from 'shared'
+import { applyManualSessionDevices } from '../src/lib/manualSessionDevicesScaffold'
+
+describe('session device scaffold',()=>{it('emits device metadata, endpoints and adapters',()=>{const access=createDefaultManualAccess(DEFAULT_MANUAL_ENTITIES);access.persistentSessions=true;for(const stack of ['hono-drizzle','nestjs-prisma','fastapi-sqlalchemy','spring-boot-jpa','gin-gorm'] as const){const files=applyManualSessionDevices([{path:'openapi.yaml',content:'openapi: 3.1.0\n'},{path:'apps/api/prisma/schema.prisma',content:'  createdAt  DateTime  @default(now())\n\n  @@index([userId])'}],stack,access);expect(files.some((file)=>file.content.includes('device_label')||file.content.includes('deviceLabel'))).toBe(true);expect(files.find((file)=>file.path==='openapi.yaml')!.content).toContain('/api/auth/sessions');expect(files.find((file)=>file.path==='siteforge.session-devices.json')).toBeTruthy()}})})
