@@ -28,14 +28,17 @@ function cleanText(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value.trim() : fallback
 }
 
-function cloneRoles(roles: readonly ManualRoleDefinition[]): ManualRoleDefinition[] {
-  return roles.map((role) => ({
-    ...role,
-    permissions: role.permissions.map((permission) => ({
-      entity: permission.entity,
-      actions: [...permission.actions],
+export function cloneManualAccess(access: ManualAccessDefinition): ManualAccessDefinition {
+  return {
+    enabled: access.enabled,
+    roles: access.roles.map((role) => ({
+      ...role,
+      permissions: role.permissions.map((permission) => ({
+        entity: permission.entity,
+        actions: [...permission.actions],
+      })),
     })),
-  }))
+  }
 }
 
 function permissionsFor(
@@ -43,6 +46,13 @@ function permissionsFor(
   actions: readonly ManualPermissionAction[],
 ): ManualRolePermission[] {
   return entities.map((entity) => ({ entity: entity.name, actions: [...actions] }))
+}
+
+function defaultActionsForRoleKey(roleKey: string): ManualPermissionAction[] {
+  if (roleKey === 'admin') return [...MANUAL_PERMISSION_ACTIONS]
+  if (roleKey === 'editor') return ['list', 'read', 'create', 'update']
+  if (roleKey === 'viewer') return ['list', 'read']
+  return []
 }
 
 export function createDefaultManualAccess(
@@ -73,11 +83,47 @@ export function createDefaultManualAccess(
   }
 }
 
+export function reconcileManualAccessEntities(
+  input: ManualAccessDefinition,
+  previousEntities: readonly ManualEntityDefinition[],
+  nextEntities: readonly ManualEntityDefinition[],
+): ManualAccessDefinition {
+  const access = cloneManualAccess(input)
+
+  access.roles = access.roles.map((role) => {
+    const permissions = new Map(role.permissions.map((permission) => [
+      permission.entity,
+      [...permission.actions],
+    ]))
+    const previouslyCoveredAll = previousEntities.length > 0 && previousEntities.every((entity) => {
+      const actions = permissions.get(entity.name)
+      return MANUAL_PERMISSION_ACTIONS.every((action) => actions?.includes(action))
+    })
+
+    return {
+      ...role,
+      permissions: nextEntities.map((entity, index) => {
+        const previousName = previousEntities[index]?.name
+        const existing = permissions.get(entity.name)
+          ?? (previousName ? permissions.get(previousName) : undefined)
+        const actions = existing
+          ?? (previouslyCoveredAll ? [...MANUAL_PERMISSION_ACTIONS] : defaultActionsForRoleKey(role.key))
+        return {
+          entity: entity.name,
+          actions: MANUAL_PERMISSION_ACTIONS.filter((action) => actions.includes(action)),
+        }
+      }),
+    }
+  })
+
+  return access
+}
+
 export function normalizeManualAccess(
   input: ManualAccessDefinition | undefined,
   entities: readonly ManualEntityDefinition[],
 ): ManualAccessDefinition {
-  const source = input ? { enabled: input.enabled !== false, roles: cloneRoles(input.roles) } : createDefaultManualAccess(entities)
+  const source = input ? cloneManualAccess({ enabled: input.enabled !== false, roles: input.roles }) : createDefaultManualAccess(entities)
   if (!source.roles.length) throw new Error('至少需要一个访问角色')
   if (source.roles.length > MAX_MANUAL_ROLES) throw new Error(`访问角色不能超过 ${MAX_MANUAL_ROLES} 个`)
 
