@@ -8,6 +8,7 @@
 | --- | --- |
 | [`DEVELOPMENT.md`](./DEVELOPMENT.md) | 本地开发、测试和贡献 |
 | [`DEPLOYMENT.md`](./DEPLOYMENT.md) | 生产部署、存储、监控和回滚 |
+| [`RC_INTEGRITY_AUDIT.md`](./RC_INTEGRITY_AUDIT.md) | v0.1.0 RC 生成链路完整性审计 |
 | [`MANUAL_FULLSTACK_PROJECTS.md`](./MANUAL_FULLSTACK_PROJECTS.md) | 无 AI 全栈工程向导 |
 | [`MANUAL_CRUD_DESIGNER.md`](./MANUAL_CRUD_DESIGNER.md) | 数据模型、关系和五栈 CRUD |
 | [`MANUAL_AUTHORIZATION.md`](./MANUAL_AUTHORIZATION.md) | Bearer Token 与资源权限 |
@@ -40,6 +41,7 @@
 | --- | --- |
 | [`DEVELOPMENT.md`](./DEVELOPMENT.md) | Local development, tests, and contribution |
 | [`DEPLOYMENT.md`](./DEPLOYMENT.md) | Production deployment, storage, monitoring, and rollback |
+| [`RC_INTEGRITY_AUDIT.md`](./RC_INTEGRITY_AUDIT.md) | v0.1.0 RC generation-pipeline integrity audit |
 | [`MANUAL_FULLSTACK_PROJECTS.md`](./MANUAL_FULLSTACK_PROJECTS.md) | AI-free full-stack wizard |
 | [`MANUAL_CRUD_DESIGNER.md`](./MANUAL_CRUD_DESIGNER.md) | Data models, relations, and five-stack CRUD |
 | [`MANUAL_AUTHORIZATION.md`](./MANUAL_AUTHORIZATION.md) | Bearer tokens and resource permissions |

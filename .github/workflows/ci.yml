@@ -23,6 +23,8 @@ jobs:
         run: pnpm lint
       - name: 双语文档检查 / Bilingual docs
         run: pnpm docs:check
+      - name: RC 生成链路完整性审计
+        run: pnpm rc:audit
       - name: Typecheck
         shell: bash
         run: |
