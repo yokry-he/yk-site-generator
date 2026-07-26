@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { Clock3, Database, KeyRound, Plus, RotateCcw, ShieldCheck, Trash2 } from 'lucide-vue-next'
 import {
+  DEFAULT_MANUAL_ACTIVE_SESSIONS,
+  DEFAULT_MANUAL_SESSION_TTL_SECONDS,
   MANUAL_PERMISSION_ACTIONS,
   MAX_MANUAL_ACTIVE_SESSIONS,
   MAX_MANUAL_ROLES,
@@ -10,7 +12,6 @@ import {
   MIN_MANUAL_SESSION_TTL_SECONDS,
   cloneManualAccess,
   normalizeManualAccess,
-  normalizeManualSession,
   type ManualAccessDefinition,
   type ManualEntityDefinition,
   type ManualPermissionAction,
@@ -33,7 +34,10 @@ const actionLabels: Record<ManualPermissionAction, string> = {
 }
 
 const activeRole = computed(() => props.modelValue.roles[activeIndex.value])
-const session = computed(() => normalizeManualSession(props.modelValue.session))
+const session = computed(() => ({
+  ttlSeconds: props.modelValue.session?.ttlSeconds ?? DEFAULT_MANUAL_SESSION_TTL_SECONDS,
+  maxActiveSessions: props.modelValue.session?.maxActiveSessions ?? DEFAULT_MANUAL_ACTIVE_SESSIONS,
+}))
 const validationMessage = computed(() => {
   try {
     normalizeManualAccess(props.modelValue, props.entities)
@@ -59,7 +63,11 @@ function updateAccess(transform: (next: ManualAccessDefinition) => void) {
 
 function updateSession(patch: Partial<NonNullable<ManualAccessDefinition['session']>>) {
   updateAccess((next) => {
-    next.session = { ...normalizeManualSession(next.session), ...patch }
+    next.session = {
+      ttlSeconds: next.session?.ttlSeconds ?? DEFAULT_MANUAL_SESSION_TTL_SECONDS,
+      maxActiveSessions: next.session?.maxActiveSessions ?? DEFAULT_MANUAL_ACTIVE_SESSIONS,
+      ...patch,
+    }
   })
 }
 
