@@ -19,6 +19,7 @@
 | [`MANUAL_AUTHORIZATION.md`](./MANUAL_AUTHORIZATION.md) | 五栈 Opaque Bearer Token、默认角色、资源级路由权限和安全边界 |
 | [`MANUAL_ROLE_DESIGNER.md`](./MANUAL_ROLE_DESIGNER.md) | 可视化自定义角色、实体动作矩阵、模型同步和管理员锁死保护 |
 | [`MANUAL_ERROR_HANDLING.md`](./MANUAL_ERROR_HANDLING.md) | 五栈统一校验、约束冲突、404、内部错误协议与信息泄露边界 |
+| [`MANUAL_SESSION_DATA.md`](./MANUAL_SESSION_DATA.md) | 持久化用户与 Session 表、迁移、密码参数和当前运行时边界 |
 | [`MODEL_PROVIDERS.md`](./MODEL_PROVIDERS.md) | 演示模式与真实生成切换、模型厂商、实时模型目录和自定义模型 ID |
 | [`MULTI_PAGE_PROJECTS.md`](./MULTI_PAGE_PROJECTS.md) | 多页面项目协议、页面工作区、整站版本、发布和导出 |
 | [`BUILTIN_PROJECTS.md`](./BUILTIN_PROJECTS.md) | 无需模型与登录即可使用的内置成品项目 |
@@ -53,6 +54,7 @@ This directory is the canonical home for SiteForge development, deployment, qual
 | [`MANUAL_AUTHORIZATION.md`](./MANUAL_AUTHORIZATION.md) | Opaque bearer tokens, default roles, resource-level route permissions, and security boundaries across five stacks |
 | [`MANUAL_ROLE_DESIGNER.md`](./MANUAL_ROLE_DESIGNER.md) | Visual custom roles, per-entity action matrices, model synchronization, and administrator lockout protection |
 | [`MANUAL_ERROR_HANDLING.md`](./MANUAL_ERROR_HANDLING.md) | Shared validation, constraint-conflict, 404, internal-error, and disclosure boundaries across five stacks |
+| [`MANUAL_SESSION_DATA.md`](./MANUAL_SESSION_DATA.md) | Persistent user/session tables, migrations, password parameters, and the current runtime boundary |
 | [`MODEL_PROVIDERS.md`](./MODEL_PROVIDERS.md) | Demo versus real generation, providers, live model catalogs, and custom model IDs |
 | [`MULTI_PAGE_PROJECTS.md`](./MULTI_PAGE_PROJECTS.md) | Multi-page project protocol, pages workspace, whole-site versions, publishing, and export |
 | [`BUILTIN_PROJECTS.md`](./BUILTIN_PROJECTS.md) | Ready-to-use projects that require neither a model nor authentication |
