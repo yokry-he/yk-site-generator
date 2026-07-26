@@ -95,7 +95,7 @@ Token 仍只保存在当前标签页的 `sessionStorage`。
 
 ### 当前边界
 
-本阶段不包含公开注册、密码找回、邮箱验证、MFA、OAuth/OIDC、登录限流、IP 风险策略、设备管理页面或自动 Session 清理任务。额度恢复后还需要执行五套真实工程的安装、迁移、启动和端点矩阵。
+登录限流、隐私保护审计和保留数据清理由 [`MANUAL_SESSION_PROTECTION.md`](./MANUAL_SESSION_PROTECTION.md) 说明。本阶段仍不包含公开注册、密码找回、邮箱验证、MFA、OAuth/OIDC、设备管理页面、全局多实例限流或独立调度器。额度恢复后还需要执行五套真实工程的安装、迁移、启动和端点矩阵。
 
 ---
 
@@ -190,4 +190,4 @@ The token remains limited to the current tab's `sessionStorage`.
 
 ### Current boundary
 
-This phase does not include public registration, password recovery, email verification, MFA, OAuth/OIDC, login rate limiting, IP-risk policies, a device-management page, or an automatic session-cleanup job. After the Actions quota resets, all five generated projects still require real installation, migration, startup, and endpoint-matrix validation.
+Login throttling, privacy-preserving audit, and retained-data cleanup are documented in [`MANUAL_SESSION_PROTECTION.md`](./MANUAL_SESSION_PROTECTION.md). This phase still excludes public registration, password recovery, email verification, MFA, OAuth/OIDC, device management, globally shared multi-instance lockouts, and a standalone scheduler. After the Actions quota resets, all five generated projects still require real installation, migration, startup, and endpoint-matrix validation.

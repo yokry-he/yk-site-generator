@@ -20,6 +20,7 @@
 | [`MANUAL_ROLE_DESIGNER.md`](./MANUAL_ROLE_DESIGNER.md) | 可视化自定义角色、实体动作矩阵、模型同步和管理员锁死保护 |
 | [`MANUAL_SESSION_DATA.md`](./MANUAL_SESSION_DATA.md) | 五栈持久化用户、Session 数据结构、迁移、密码哈希参数和运行时边界 |
 | [`MANUAL_SESSION_RUNTIME.md`](./MANUAL_SESSION_RUNTIME.md) | 管理员引导、密码登录、Session 创建、轮换、退出、撤销和前端认证面板 |
+| [`MANUAL_SESSION_PROTECTION.md`](./MANUAL_SESSION_PROTECTION.md) | 登录失败限流、HMAC 审计、保留策略和管理员清理端点 |
 | [`MANUAL_ERROR_HANDLING.md`](./MANUAL_ERROR_HANDLING.md) | 五栈统一校验、约束冲突、404、内部错误协议与信息泄露边界 |
 | [`MODEL_PROVIDERS.md`](./MODEL_PROVIDERS.md) | 演示模式与真实生成切换、模型厂商、实时模型目录和自定义模型 ID |
 | [`MULTI_PAGE_PROJECTS.md`](./MULTI_PAGE_PROJECTS.md) | 多页面项目协议、页面工作区、整站版本、发布和导出 |
@@ -56,6 +57,7 @@ This directory is the canonical home for SiteForge development, deployment, qual
 | [`MANUAL_ROLE_DESIGNER.md`](./MANUAL_ROLE_DESIGNER.md) | Visual custom roles, per-entity action matrices, model synchronization, and administrator lockout protection |
 | [`MANUAL_SESSION_DATA.md`](./MANUAL_SESSION_DATA.md) | Persistent users, session data structures, migrations, password-hashing parameters, and runtime boundaries across five stacks |
 | [`MANUAL_SESSION_RUNTIME.md`](./MANUAL_SESSION_RUNTIME.md) | Administrator bootstrap, password login, session creation, rotation, logout, revocation, and the generated authentication panel |
+| [`MANUAL_SESSION_PROTECTION.md`](./MANUAL_SESSION_PROTECTION.md) | Failed-login throttling, HMAC audit events, retention policy, and administrator cleanup |
 | [`MANUAL_ERROR_HANDLING.md`](./MANUAL_ERROR_HANDLING.md) | Shared validation, constraint-conflict, 404, internal-error, and disclosure boundaries across five stacks |
 | [`MODEL_PROVIDERS.md`](./MODEL_PROVIDERS.md) | Demo versus real generation, providers, live model catalogs, and custom model IDs |
 | [`MULTI_PAGE_PROJECTS.md`](./MULTI_PAGE_PROJECTS.md) | Multi-page project protocol, pages workspace, whole-site versions, publishing, and export |

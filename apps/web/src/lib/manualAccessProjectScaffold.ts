@@ -12,6 +12,7 @@ import {
 import { manualCrudFiles } from './manualCrudScaffold'
 import { applyManualSessionData } from './manualSessionDataScaffold'
 import { applyManualSessionRuntime } from './manualSessionRuntimeScaffold'
+import { applyManualSessionProtection } from './manualSessionProtectionScaffold'
 
 export interface ManualAccessProjectInput extends ManualProjectInput {
   access?: ManualAccessDefinition
@@ -62,8 +63,15 @@ export function createManualAccessProjectScaffold(
     entities,
     access,
   )
-  const files = applyManualSessionRuntime(
+  const sessionRuntimeFiles = applyManualSessionRuntime(
     sessionDataFiles,
+    input.backendStack,
+    input.database,
+    entities,
+    access,
+  )
+  const files = applyManualSessionProtection(
+    sessionRuntimeFiles,
     input.backendStack,
     input.database,
     entities,
