@@ -2,6 +2,12 @@ import type { ManualEntityDefinition } from './manualProject'
 
 export const MANUAL_PERMISSION_ACTIONS = ['list', 'read', 'create', 'update', 'delete'] as const
 export const MAX_MANUAL_ROLES = 8
+export const MIN_MANUAL_SESSION_TTL_SECONDS = 900
+export const MAX_MANUAL_SESSION_TTL_SECONDS = 2_592_000
+export const MIN_MANUAL_ACTIVE_SESSIONS = 1
+export const MAX_MANUAL_ACTIVE_SESSIONS = 20
+export const DEFAULT_MANUAL_SESSION_TTL_SECONDS = 28_800
+export const DEFAULT_MANUAL_ACTIVE_SESSIONS = 5
 
 export type ManualPermissionAction = (typeof MANUAL_PERMISSION_ACTIONS)[number]
 
@@ -17,8 +23,15 @@ export interface ManualRoleDefinition {
   permissions: ManualRolePermission[]
 }
 
+export interface ManualSessionDefinition {
+  ttlSeconds: number
+  maxActiveSessions: number
+}
+
 export interface ManualAccessDefinition {
   enabled: boolean
+  persistentSessions?: boolean
+  session?: ManualSessionDefinition
   roles: ManualRoleDefinition[]
 }
 
@@ -28,9 +41,44 @@ function cleanText(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value.trim() : fallback
 }
 
+function normalizeBoundedInteger(
+  value: unknown,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+  label: string,
+): number {
+  const number = typeof value === 'number' ? value : Number(value)
+  if (!Number.isInteger(number) || number < minimum || number > maximum) {
+    throw new Error(`${label}必须是 ${minimum} 到 ${maximum} 之间的整数`)
+  }
+  return number
+}
+
+export function normalizeManualSession(input?: Partial<ManualSessionDefinition>): ManualSessionDefinition {
+  return {
+    ttlSeconds: normalizeBoundedInteger(
+      input?.ttlSeconds ?? DEFAULT_MANUAL_SESSION_TTL_SECONDS,
+      DEFAULT_MANUAL_SESSION_TTL_SECONDS,
+      MIN_MANUAL_SESSION_TTL_SECONDS,
+      MAX_MANUAL_SESSION_TTL_SECONDS,
+      'Session 有效期',
+    ),
+    maxActiveSessions: normalizeBoundedInteger(
+      input?.maxActiveSessions ?? DEFAULT_MANUAL_ACTIVE_SESSIONS,
+      DEFAULT_MANUAL_ACTIVE_SESSIONS,
+      MIN_MANUAL_ACTIVE_SESSIONS,
+      MAX_MANUAL_ACTIVE_SESSIONS,
+      '单用户活动 Session 数量',
+    ),
+  }
+}
+
 export function cloneManualAccess(access: ManualAccessDefinition): ManualAccessDefinition {
   return {
     enabled: access.enabled,
+    persistentSessions: Boolean(access.persistentSessions),
+    session: normalizeManualSession(access.session),
     roles: access.roles.map((role) => ({
       ...role,
       permissions: role.permissions.map((permission) => ({
@@ -60,6 +108,8 @@ export function createDefaultManualAccess(
 ): ManualAccessDefinition {
   return {
     enabled: true,
+    persistentSessions: false,
+    session: normalizeManualSession(),
     roles: [
       {
         key: 'admin',
@@ -123,7 +173,14 @@ export function normalizeManualAccess(
   input: ManualAccessDefinition | undefined,
   entities: readonly ManualEntityDefinition[],
 ): ManualAccessDefinition {
-  const source = input ? cloneManualAccess({ enabled: input.enabled !== false, roles: input.roles }) : createDefaultManualAccess(entities)
+  const source = input
+    ? cloneManualAccess({
+      enabled: input.enabled !== false,
+      persistentSessions: Boolean(input.persistentSessions),
+      session: input.session,
+      roles: input.roles,
+    })
+    : createDefaultManualAccess(entities)
   if (!source.roles.length) throw new Error('至少需要一个访问角色')
   if (source.roles.length > MAX_MANUAL_ROLES) throw new Error(`访问角色不能超过 ${MAX_MANUAL_ROLES} 个`)
 
@@ -177,7 +234,12 @@ export function normalizeManualAccess(
     if (!fullAccessRole) throw new Error('启用访问控制时，至少需要一个拥有全部资源权限的角色')
   }
 
-  return { enabled: source.enabled, roles }
+  return {
+    enabled: source.enabled,
+    persistentSessions: Boolean(source.persistentSessions),
+    session: normalizeManualSession(source.session),
+    roles,
+  }
 }
 
 export function manualRoleCan(
