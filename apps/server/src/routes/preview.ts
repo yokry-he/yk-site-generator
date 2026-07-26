@@ -1,0 +1,7 @@
+import { Hono } from 'hono'
+import { previewFile } from '../lib/delivery-store'
+const preview=new Hono()
+const mime=(name:string)=>name.endsWith('.html')?'text/html; charset=utf-8':name.endsWith('.js')?'text/javascript; charset=utf-8':name.endsWith('.css')?'text/css; charset=utf-8':name.endsWith('.json')?'application/json; charset=utf-8':name.endsWith('.svg')?'image/svg+xml':name.endsWith('.png')?'image/png':name.endsWith('.jpg')||name.endsWith('.jpeg')?'image/jpeg':name.endsWith('.webp')?'image/webp':'application/octet-stream'
+preview.get('/:slug/*',async(c)=>{const slug=c.req.param('slug');const filePath=c.req.path.split(`/preview/${slug}/`)[1]||'index.html';const file=await previewFile(slug,filePath);if(!file)return c.text('Preview not found',404);c.header('Content-Type',mime(file.path));c.header('X-Content-Type-Options','nosniff');c.header('Referrer-Policy','no-referrer');c.header('Cache-Control',file.path==='index.html'?'no-store':'public, max-age=300');c.header('Content-Security-Policy',"sandbox allow-scripts allow-forms allow-modals; default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'");return c.body(file.content)})
+preview.get('/:slug',c=>c.redirect(`/preview/${c.req.param('slug')}/`,302))
+export default preview

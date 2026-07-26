@@ -2,76 +2,66 @@
 
 [中文](#中文) · [English](#english)
 
----
-
 ## 中文
-
-本目录集中记录 SiteForge 的开发、部署、质量、安全和产品约束。所有面向贡献者与部署人员的 Markdown 文档都应同时提供中文和英文内容。
-
-### 快速导航
 
 | 文档 | 内容 |
 | --- | --- |
-| [`DEVELOPMENT.md`](./DEVELOPMENT.md) | 本地环境、项目结构、环境变量、数据库、调试、测试和贡献流程 |
-| [`DEPLOYMENT.md`](./DEPLOYMENT.md) | 生产构建、前后端分离、Nginx、MySQL、对象存储、健康检查、监控、备份与回滚 |
-| [`MANUAL_FULLSTACK_PROJECTS.md`](./MANUAL_FULLSTACK_PROJECTS.md) | 无 AI 的全栈工程向导、后端技术矩阵、工程清单与安全边界 |
-| [`MANUAL_CRUD_DESIGNER.md`](./MANUAL_CRUD_DESIGNER.md) | 可视化数据模型、外键关系、分页搜索排序、五栈确定性 CRUD 与 OpenAPI |
-| [`MANUAL_AUTHORIZATION.md`](./MANUAL_AUTHORIZATION.md) | 五栈 Opaque Bearer Token、默认角色、资源级路由权限和安全边界 |
-| [`MANUAL_ROLE_DESIGNER.md`](./MANUAL_ROLE_DESIGNER.md) | 可视化自定义角色、实体动作矩阵、模型同步和管理员锁死保护 |
-| [`MANUAL_SESSION_DATA.md`](./MANUAL_SESSION_DATA.md) | 五栈持久化用户、Session 数据结构、迁移、密码哈希参数和运行时边界 |
-| [`MANUAL_SESSION_RUNTIME.md`](./MANUAL_SESSION_RUNTIME.md) | 管理员引导、密码登录、Session 创建、轮换、退出、撤销和前端认证面板 |
-| [`MANUAL_SESSION_PROTECTION.md`](./MANUAL_SESSION_PROTECTION.md) | 登录失败限流、HMAC 审计、保留策略和管理员清理端点 |
-| [`MANUAL_ERROR_HANDLING.md`](./MANUAL_ERROR_HANDLING.md) | 五栈统一校验、约束冲突、404、内部错误协议与信息泄露边界 |
-| [`MODEL_PROVIDERS.md`](./MODEL_PROVIDERS.md) | 演示模式与真实生成切换、模型厂商、实时模型目录和自定义模型 ID |
-| [`MULTI_PAGE_PROJECTS.md`](./MULTI_PAGE_PROJECTS.md) | 多页面项目协议、页面工作区、整站版本、发布和导出 |
-| [`BUILTIN_PROJECTS.md`](./BUILTIN_PROJECTS.md) | 无需模型与登录即可使用的内置成品项目 |
-| [`GENERATION_QUALITY.md`](./GENERATION_QUALITY.md) | 极速、平衡、精致三档生成策略及性能指标 |
-| [`BETA_READINESS.md`](./BETA_READINESS.md) | Beta 阶段质量、性能、安全和 CI 门槛 |
-| [`SECURITY_ABUSE.md`](./SECURITY_ABUSE.md) | SSRF、资源上传、账号隔离及后续安全边界 |
-| [`../apps/web/tests/e2e/README.md`](../apps/web/tests/e2e/README.md) | Playwright、Axe 与视觉回归说明 |
-| [`../deploy/README.md`](../deploy/README.md) | PR Preview 与部署目录入口 |
+| [`DEVELOPMENT.md`](./DEVELOPMENT.md) | 本地开发、测试和贡献 |
+| [`DEPLOYMENT.md`](./DEPLOYMENT.md) | 生产部署、存储、监控和回滚 |
+| [`MANUAL_FULLSTACK_PROJECTS.md`](./MANUAL_FULLSTACK_PROJECTS.md) | 无 AI 全栈工程向导 |
+| [`MANUAL_CRUD_DESIGNER.md`](./MANUAL_CRUD_DESIGNER.md) | 数据模型、关系和五栈 CRUD |
+| [`MANUAL_AUTHORIZATION.md`](./MANUAL_AUTHORIZATION.md) | Bearer Token 与资源权限 |
+| [`MANUAL_ROLE_DESIGNER.md`](./MANUAL_ROLE_DESIGNER.md) | 可视化角色矩阵 |
+| [`MANUAL_FINE_AUTHORIZATION.md`](./MANUAL_FINE_AUTHORIZATION.md) | 字段和记录级授权 |
+| [`MANUAL_SESSION_DATA.md`](./MANUAL_SESSION_DATA.md) | 用户与 Session 数据层 |
+| [`MANUAL_SESSION_RUNTIME.md`](./MANUAL_SESSION_RUNTIME.md) | 登录、轮换、退出和撤销 |
+| [`MANUAL_SESSION_PROTECTION.md`](./MANUAL_SESSION_PROTECTION.md) | 登录保护和审计 |
+| [`MANUAL_DISTRIBUTED_LOGIN_LIMITS.md`](./MANUAL_DISTRIBUTED_LOGIN_LIMITS.md) | 多实例共享登录锁定 |
+| [`MANUAL_SESSION_DEVICES.md`](./MANUAL_SESSION_DEVICES.md) | Session 设备管理 |
+| [`MANUAL_IDENTITY_LIFECYCLE.md`](./MANUAL_IDENTITY_LIFECYCLE.md) | 密码与邮箱生命周期 |
+| [`MANUAL_ADVANCED_RELATIONS.md`](./MANUAL_ADVANCED_RELATIONS.md) | 高级关系与远程搜索 |
+| [`MANUAL_ENGINEERING_SCHEMA.md`](./MANUAL_ENGINEERING_SCHEMA.md) | 高级字段、索引和并发 |
+| [`MANUAL_ERROR_HANDLING.md`](./MANUAL_ERROR_HANDLING.md) | 结构化 API 错误 |
+| [`ENGINEERING_FILE_STORAGE.md`](./ENGINEERING_FILE_STORAGE.md) | 工程文件、版本、树和 Diff |
+| [`ISOLATED_RUNNER.md`](./ISOLATED_RUNNER.md) | 隔离 Runner 与五栈矩阵 |
+| [`DELIVERY_PIPELINE.md`](./DELIVERY_PIPELINE.md) | 在线预览、发布门禁和部署 |
+| [`MODEL_PROVIDERS.md`](./MODEL_PROVIDERS.md) | 模型模式和目录 |
+| [`MULTI_PAGE_PROJECTS.md`](./MULTI_PAGE_PROJECTS.md) | 多页面站点和版本 |
+| [`BUILTIN_PROJECTS.md`](./BUILTIN_PROJECTS.md) | 零配置内置项目 |
+| [`GENERATION_QUALITY.md`](./GENERATION_QUALITY.md) | 生成质量和性能 |
+| [`BETA_READINESS.md`](./BETA_READINESS.md) | Beta 门禁 |
+| [`SECURITY_ABUSE.md`](./SECURITY_ABUSE.md) | 安全边界 |
 
-### 文档维护规则
-
-- 新增或修改开发者文档时，中文和英文必须在同一个 PR 中同步更新。
-- 命令、路径、环境变量和配置键保持原样，不翻译标识符。
-- 两种语言应表达相同的约束和验收标准，不能只给另一种语言提供摘要。
-- 发生行为变化时优先更新 `DEVELOPMENT.md` 或 `DEPLOYMENT.md`，再从 README 链接过去，避免多个位置出现互相冲突的步骤。
-- 文档中的示例密钥、域名和密码只能使用占位值，不能提交真实凭据。
-
----
+行为变化与对应中英双语文档应在同一 PR 提交；示例只能使用占位 Secret。
 
 ## English
 
-This directory is the canonical home for SiteForge development, deployment, quality, security, and product-constraint documentation. Every Markdown document intended for contributors or operators must include both Chinese and English content.
-
-### Quick navigation
-
 | Document | Scope |
 | --- | --- |
-| [`DEVELOPMENT.md`](./DEVELOPMENT.md) | Local setup, repository structure, environment variables, databases, debugging, testing, and contribution workflow |
-| [`DEPLOYMENT.md`](./DEPLOYMENT.md) | Production builds, split frontend/backend deployment, Nginx, MySQL, object storage, health checks, monitoring, backups, and rollback |
-| [`MANUAL_FULLSTACK_PROJECTS.md`](./MANUAL_FULLSTACK_PROJECTS.md) | AI-free full-stack wizard, backend matrix, engineering manifest, and safety boundary |
-| [`MANUAL_CRUD_DESIGNER.md`](./MANUAL_CRUD_DESIGNER.md) | Visual data models, foreign-key relations, pagination/search/sorting, deterministic CRUD for five stacks, and OpenAPI |
-| [`MANUAL_AUTHORIZATION.md`](./MANUAL_AUTHORIZATION.md) | Opaque bearer tokens, default roles, resource-level route permissions, and security boundaries across five stacks |
-| [`MANUAL_ROLE_DESIGNER.md`](./MANUAL_ROLE_DESIGNER.md) | Visual custom roles, per-entity action matrices, model synchronization, and administrator lockout protection |
-| [`MANUAL_SESSION_DATA.md`](./MANUAL_SESSION_DATA.md) | Persistent users, session data structures, migrations, password-hashing parameters, and runtime boundaries across five stacks |
-| [`MANUAL_SESSION_RUNTIME.md`](./MANUAL_SESSION_RUNTIME.md) | Administrator bootstrap, password login, session creation, rotation, logout, revocation, and the generated authentication panel |
-| [`MANUAL_SESSION_PROTECTION.md`](./MANUAL_SESSION_PROTECTION.md) | Failed-login throttling, HMAC audit events, retention policy, and administrator cleanup |
-| [`MANUAL_ERROR_HANDLING.md`](./MANUAL_ERROR_HANDLING.md) | Shared validation, constraint-conflict, 404, internal-error, and disclosure boundaries across five stacks |
-| [`MODEL_PROVIDERS.md`](./MODEL_PROVIDERS.md) | Demo versus real generation, providers, live model catalogs, and custom model IDs |
-| [`MULTI_PAGE_PROJECTS.md`](./MULTI_PAGE_PROJECTS.md) | Multi-page project protocol, pages workspace, whole-site versions, publishing, and export |
-| [`BUILTIN_PROJECTS.md`](./BUILTIN_PROJECTS.md) | Ready-to-use projects that require neither a model nor authentication |
-| [`GENERATION_QUALITY.md`](./GENERATION_QUALITY.md) | Fast, balanced, and quality generation modes plus performance signals |
-| [`BETA_READINESS.md`](./BETA_READINESS.md) | Beta quality, performance, security, and CI gates |
-| [`SECURITY_ABUSE.md`](./SECURITY_ABUSE.md) | SSRF, uploaded assets, tenant isolation, and remaining security boundaries |
-| [`../apps/web/tests/e2e/README.md`](../apps/web/tests/e2e/README.md) | Playwright, Axe, and visual-regression guidance |
-| [`../deploy/README.md`](../deploy/README.md) | PR Preview and deployment-directory entry point |
+| [`DEVELOPMENT.md`](./DEVELOPMENT.md) | Local development, tests, and contribution |
+| [`DEPLOYMENT.md`](./DEPLOYMENT.md) | Production deployment, storage, monitoring, and rollback |
+| [`MANUAL_FULLSTACK_PROJECTS.md`](./MANUAL_FULLSTACK_PROJECTS.md) | AI-free full-stack wizard |
+| [`MANUAL_CRUD_DESIGNER.md`](./MANUAL_CRUD_DESIGNER.md) | Data models, relations, and five-stack CRUD |
+| [`MANUAL_AUTHORIZATION.md`](./MANUAL_AUTHORIZATION.md) | Bearer tokens and resource permissions |
+| [`MANUAL_ROLE_DESIGNER.md`](./MANUAL_ROLE_DESIGNER.md) | Visual role matrix |
+| [`MANUAL_FINE_AUTHORIZATION.md`](./MANUAL_FINE_AUTHORIZATION.md) | Field and record authorization |
+| [`MANUAL_SESSION_DATA.md`](./MANUAL_SESSION_DATA.md) | User and session data layer |
+| [`MANUAL_SESSION_RUNTIME.md`](./MANUAL_SESSION_RUNTIME.md) | Login, rotation, logout, and revocation |
+| [`MANUAL_SESSION_PROTECTION.md`](./MANUAL_SESSION_PROTECTION.md) | Login protection and audit |
+| [`MANUAL_DISTRIBUTED_LOGIN_LIMITS.md`](./MANUAL_DISTRIBUTED_LOGIN_LIMITS.md) | Multi-instance shared lockouts |
+| [`MANUAL_SESSION_DEVICES.md`](./MANUAL_SESSION_DEVICES.md) | Session device management |
+| [`MANUAL_IDENTITY_LIFECYCLE.md`](./MANUAL_IDENTITY_LIFECYCLE.md) | Password and email lifecycle |
+| [`MANUAL_ADVANCED_RELATIONS.md`](./MANUAL_ADVANCED_RELATIONS.md) | Advanced relations and remote search |
+| [`MANUAL_ENGINEERING_SCHEMA.md`](./MANUAL_ENGINEERING_SCHEMA.md) | Advanced fields, indexes, and concurrency |
+| [`MANUAL_ERROR_HANDLING.md`](./MANUAL_ERROR_HANDLING.md) | Structured API errors |
+| [`ENGINEERING_FILE_STORAGE.md`](./ENGINEERING_FILE_STORAGE.md) | Engineering files, versions, trees, and diffs |
+| [`ISOLATED_RUNNER.md`](./ISOLATED_RUNNER.md) | Isolated runner and five-stack matrix |
+| [`DELIVERY_PIPELINE.md`](./DELIVERY_PIPELINE.md) | Online previews, release gates, and deployment |
+| [`MODEL_PROVIDERS.md`](./MODEL_PROVIDERS.md) | Model modes and catalogs |
+| [`MULTI_PAGE_PROJECTS.md`](./MULTI_PAGE_PROJECTS.md) | Multi-page sites and versions |
+| [`BUILTIN_PROJECTS.md`](./BUILTIN_PROJECTS.md) | Zero-configuration starters |
+| [`GENERATION_QUALITY.md`](./GENERATION_QUALITY.md) | Generation quality and performance |
+| [`BETA_READINESS.md`](./BETA_READINESS.md) | Beta gates |
+| [`SECURITY_ABUSE.md`](./SECURITY_ABUSE.md) | Security boundaries |
 
-### Documentation maintenance rules
-
-- Update the Chinese and English sections in the same pull request whenever contributor-facing documentation changes.
-- Keep commands, paths, environment variables, and configuration keys unchanged; identifiers are not translated.
-- Both languages must describe the same constraints and acceptance criteria. One language must not be reduced to a summary.
-- When runtime behavior changes, update `DEVELOPMENT.md` or `DEPLOYMENT.md` first and link from the root README to avoid conflicting procedures.
-- Examples must use placeholder secrets, domains, and passwords. Never commit real credentials.
+Ship behavior changes with equivalent Chinese and English documentation; examples use placeholder secrets only.

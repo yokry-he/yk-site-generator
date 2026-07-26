@@ -1,0 +1,20 @@
+import { timingSafeEqual } from 'node:crypto'
+import { Hono } from 'hono'
+import { z } from 'zod'
+import { authMiddleware,type AuthEnv } from '../lib/auth'
+import { readData } from '../lib/data-store'
+import { cancelDeployment,createDeployment,createPreview,deployment,deployments,gateSummary,listPreviews,RELEASE_GATES,removePreview,reportGate } from '../lib/delivery-store'
+import { errorBody } from '../types'
+const routes=new Hono<AuthEnv>();routes.use('*',authMiddleware)
+async function owns(userId:string,projectId:string){return(await readData()).projects.some((item)=>item.id===projectId&&item.userId===userId)}
+function trustedEvidence(header:string|undefined){const expected=process.env.RELEASE_GATE_TOKEN||'';if(!expected||!header)return false;const left=Buffer.from(header);const right=Buffer.from(expected);return left.length===right.length&&timingSafeEqual(left,right)}
+routes.post('/previews',async(c)=>{const input=z.object({projectId:z.string().uuid(),versionId:z.string().uuid()}).parse(await c.req.json());const userId=c.get('auth').sub;if(!await owns(userId,input.projectId))return c.json(errorBody('PROJECT_NOT_FOUND','项目不存在'),404);try{return c.json({preview:await createPreview(userId,input.projectId,input.versionId)},201)}catch(error){return c.json(errorBody((error as Error).message,'预览创建失败'),400)}})
+routes.get('/previews',async(c)=>{const projectId=z.string().uuid().parse(c.req.query('projectId'));const userId=c.get('auth').sub;if(!await owns(userId,projectId))return c.json(errorBody('PROJECT_NOT_FOUND','项目不存在'),404);return c.json({previews:await listPreviews(userId,projectId)})})
+routes.delete('/previews/:id',async(c)=>(await removePreview(c.get('auth').sub,c.req.param('id')))?c.json({deleted:true}):c.json(errorBody('PREVIEW_NOT_FOUND','预览不存在'),404))
+routes.get('/gates/:projectId/:versionId',async(c)=>{const userId=c.get('auth').sub;if(!await owns(userId,c.req.param('projectId')))return c.json(errorBody('PROJECT_NOT_FOUND','项目不存在'),404);return c.json(await gateSummary(userId,c.req.param('projectId'),c.req.param('versionId')))})
+routes.put('/gates/:projectId/:versionId/:gate',async(c)=>{const gate=z.enum(RELEASE_GATES).parse(c.req.param('gate'));const input=z.object({status:z.enum(['pending','passed','failed']),source:z.enum(['manual','runner','github-actions','admin']).default('manual'),details:z.string().max(1000).optional()}).parse(await c.req.json());const userId=c.get('auth').sub;if(!await owns(userId,c.req.param('projectId')))return c.json(errorBody('PROJECT_NOT_FOUND','项目不存在'),404);const trusted=trustedEvidence(c.req.header('x-release-gate-token'))&&input.source!=='manual';return c.json({evidence:await reportGate(userId,c.req.param('projectId'),c.req.param('versionId'),{gate,...input,trusted})})})
+routes.post('/deployments',async(c)=>{const input=z.object({projectId:z.string().uuid(),versionId:z.string().uuid(),environment:z.enum(['staging','production'])}).parse(await c.req.json());const userId=c.get('auth').sub;if(!await owns(userId,input.projectId))return c.json(errorBody('PROJECT_NOT_FOUND','项目不存在'),404);try{return c.json({deployment:await createDeployment(userId,input.projectId,input.versionId,input.environment)},202)}catch(error){return c.json(errorBody((error as Error).message,'部署未启动'),(error as Error).message==='RELEASE_GATES_INCOMPLETE'?409:503)}})
+routes.get('/deployments',async(c)=>{const projectId=z.string().uuid().parse(c.req.query('projectId'));return c.json({deployments:await deployments(c.get('auth').sub,projectId)})})
+routes.get('/deployments/:id',async(c)=>{const row=await deployment(c.get('auth').sub,c.req.param('id'));return row?c.json({deployment:row}):c.json(errorBody('DEPLOYMENT_NOT_FOUND','部署不存在'),404)})
+routes.delete('/deployments/:id',async(c)=>(await cancelDeployment(c.get('auth').sub,c.req.param('id')))?c.json({cancelled:true}):c.json(errorBody('DEPLOYMENT_NOT_CANCELLABLE','部署不存在或不可取消'),409))
+export default routes
