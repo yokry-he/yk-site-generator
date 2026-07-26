@@ -141,7 +141,7 @@ function removeRole() {
         <span class="grid h-10 w-10 place-items-center rounded-xl bg-violet-500/10 text-violet-500"><ShieldCheck class="h-5 w-5" /></span>
         <div>
           <h2 class="text-base font-semibold text-ink">5. 认证与角色权限</h2>
-          <p class="mt-1 text-xs leading-5 text-mut">配置角色对每个实体的权限，并可选择生成持久化用户与 Session 数据模型。</p>
+          <p class="mt-1 text-xs leading-5 text-mut">配置角色对每个实体的权限，并可选择生成持久化用户、密码登录与 Session 运行时。</p>
         </div>
       </div>
       <button :disabled="modelValue.roles.length >= MAX_MANUAL_ROLES" class="flex items-center gap-1.5 rounded-xl border border-line/10 px-3 py-2 text-xs font-semibold text-sub hover:border-brand1/25 hover:text-ink disabled:opacity-40" @click="addRole"><Plus class="h-3.5 w-3.5" />新增角色</button>
@@ -154,8 +154,8 @@ function removeRole() {
 
     <section class="mt-3 rounded-2xl border border-line/10 bg-app/45 p-4">
       <label class="flex items-center justify-between gap-4">
-        <span class="flex min-w-0 gap-3"><Database class="mt-0.5 h-4 w-4 shrink-0 text-brand1" /><span><strong class="block text-xs text-ink">生成持久化用户与 Session 数据层</strong><small class="mt-1 block text-[10px] leading-5 text-mut">为五套后端增加用户表、Session 表、迁移和安全协议。当前 Bearer 路由保护仍保持不变。</small></span></span>
-        <input :checked="Boolean(modelValue.persistentSessions)" type="checkbox" class="h-5 w-5 accent-violet-600" aria-label="生成持久化用户与 Session 数据层" @change="updateAccess((next) => { next.persistentSessions = ($event.target as HTMLInputElement).checked })" />
+        <span class="flex min-w-0 gap-3"><Database class="mt-0.5 h-4 w-4 shrink-0 text-brand1" /><span><strong class="block text-xs text-ink">生成持久化用户与 Session 运行时</strong><small class="mt-1 block text-[10px] leading-5 text-mut">启用认证代码时生成数据表、管理员引导、密码登录、轮换、退出与撤销；关闭认证代码时只保留数据层。</small></span></span>
+        <input :checked="Boolean(modelValue.persistentSessions)" type="checkbox" class="h-5 w-5 accent-violet-600" aria-label="生成持久化用户与 Session 运行时" @change="updateAccess((next) => { next.persistentSessions = ($event.target as HTMLInputElement).checked })" />
       </label>
       <div v-if="modelValue.persistentSessions" class="mt-4 grid gap-3 border-t border-line/10 pt-4 sm:grid-cols-2">
         <label class="text-[10px] font-semibold text-sub"><span class="flex items-center gap-1.5"><Clock3 class="h-3.5 w-3.5" />Session 有效期（秒）</span><input :value="session.ttlSeconds" type="number" :min="MIN_MANUAL_SESSION_TTL_SECONDS" :max="MAX_MANUAL_SESSION_TTL_SECONDS" step="900" class="mt-1.5 w-full rounded-lg border border-line/10 bg-app/70 px-3 py-2 text-xs text-ink outline-none focus:border-brand1/35" @input="updateSession({ ttlSeconds: Number(($event.target as HTMLInputElement).value) })" /></label>
@@ -201,6 +201,6 @@ function removeRole() {
     </section>
 
     <p v-if="validationMessage" class="mt-4 rounded-xl border border-red-500/25 bg-red-500/[0.06] px-3 py-2.5 text-[10px] leading-5 text-red-500" role="alert">{{ validationMessage }}</p>
-    <p v-else class="mt-4 text-[10px] text-emerald-600">权限配置有效：{{ modelValue.roles.length }} 个角色 · {{ permissionCount }} 项资源动作<span v-if="modelValue.persistentSessions"> · 持久化 Session 数据层</span>。</p>
+    <p v-else class="mt-4 text-[10px] text-emerald-600">权限配置有效：{{ modelValue.roles.length }} 个角色 · {{ permissionCount }} 项资源动作<span v-if="modelValue.persistentSessions"> · {{ modelValue.enabled ? '持久化 Session 运行时' : '持久化 Session 数据层' }}</span>。</p>
   </article>
 </template>
