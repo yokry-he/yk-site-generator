@@ -29,7 +29,7 @@
 - 缺少核心 `siteforge.*.json` 或 OpenAPI 协议
 - 生成 JSON 无法解析
 - 同一技术栈出现重复迁移版本
-- 同一文件出现完全重复的 Import 或路由声明
+- 同一文件出现完全重复的 Import
 - OpenAPI 重复路径或重复 HTTP 操作
 - 核心生成文档缺少中文或英文完整章节
 
@@ -64,7 +64,7 @@ The command exits non-zero when it finds any of the following:
 - missing core `siteforge.*.json` or OpenAPI contracts
 - invalid generated JSON
 - duplicate migration versions in one generated stack
-- exact duplicate imports or route declarations within a generated file
+- exact duplicate imports within a generated file
 - duplicate OpenAPI paths or HTTP operations
 - missing full Chinese or English sections in core generated documentation
 
