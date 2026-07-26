@@ -1,4 +1,4 @@
-# 持久化用户与 Session 数据层 / Persistent User and Session Data Layer
+# 持久化用户与 Session 数据 / Persistent User and Session Data
 
 [中文](#中文) · [English](#english)
 
@@ -8,103 +8,80 @@
 
 ### 定位
 
-`/projects/new` 的角色权限步骤可以选择生成持久化用户与 Session 数据层。该开关不会调用 AI，也不会改变当前已经可用的环境变量 Bearer Token 路由保护。
+当 `/projects/new` 启用“持久化用户与 Session 数据层”时，SiteForge 会为五套后端生成相同的身份数据协议：
 
-本阶段的目标是先让五套后端拥有一致、可迁移的数据结构和安全参数，再在后续阶段接入密码登录、退出、轮换和撤销运行时。生成项目会明确标记 `runtime: not-wired`，不会宣称尚未实现的认证端点已经可用。
+```text
+auth_users
+auth_sessions
+```
 
-### 可视化配置
+该数据层现在已经由 [`MANUAL_SESSION_RUNTIME.md`](./MANUAL_SESSION_RUNTIME.md) 中的登录、轮换、退出和撤销运行时使用。关闭“生成认证与路由权限代码”时仍可以只生成 Schema 和 Migration；此时 `siteforge.session.json` 会保持 `schema-ready / not-wired`。
 
-启用“生成持久化用户与 Session 数据层”后，可以配置：
+### `auth_users`
 
-- Session 有效期：900 到 2,592,000 秒
-- 单用户活动 Session 上限：1 到 20
-- 默认值分别为 28,800 秒和 5 个活动 Session
+| 字段 | 含义 |
+| --- | --- |
+| `id` | 数据库原生自增主键 |
+| `email` | 规范化后的登录邮箱，唯一 |
+| `password_hash` | 不可逆密码派生结果 |
+| `role` | 角色设计器中的角色标识 |
+| `disabled` | 禁止登录和 Session 使用 |
+| `created_at` | 创建时间 |
+| `updated_at` | 修改时间 |
 
-配置会写入 `siteforge.session.json`、`.env.example` 和生成工程内的 `SESSION_SECURITY.md`。
+### `auth_sessions`
 
-### 统一数据模型
+| 字段 | 含义 |
+| --- | --- |
+| `id` | 数据库原生自增主键 |
+| `token_hash` | 原始 Token 的 SHA-256 摘要，唯一 |
+| `user_id` | 指向 `auth_users.id` |
+| `expires_at` | 强制到期时间 |
+| `revoked_at` | 主动撤销时间，空值表示未撤销 |
+| `last_used_at` | 最近一次认证使用时间 |
+| `created_at` | 创建时间 |
 
-五套后端统一生成两张表：
+共同约束：
 
-#### `auth_users`
+- 删除用户时级联删除 Session。
+- `user_id` 与 `expires_at` 有索引。
+- 邮箱和 Token 摘要有唯一约束。
+- PostgreSQL 使用 `BIGSERIAL / BIGINT`；SQLite 使用匹配的 `INTEGER`。
 
-- `id`
-- `email`，唯一
-- `password_hash`
-- `role`
-- `disabled`
-- `created_at`
-- `updated_at`
+### 五套输出
 
-#### `auth_sessions`
+- Hono + Drizzle：`schema.ts` 和 `drizzle/0002_auth_identity_sessions.sql`
+- NestJS + Prisma：`AuthUser`、`AuthSession` Model
+- FastAPI + SQLAlchemy：ORM Model 和 Alembic `0002`
+- Spring Boot + JPA：Flyway `V2`
+- Gin + GORM：Model、AutoMigrate 和 Goose `00002`
 
-- `id`
-- `token_hash`，唯一
-- `user_id`，引用 `auth_users.id`
-- `expires_at`
-- `revoked_at`
-- `last_used_at`
-- `created_at`
+### 密码和 Session 参数
 
-删除用户时会级联删除其 Session。`user_id` 与 `expires_at` 建立索引，支持用户 Session 列表、过期清理和并发上限处理。
-
-### 五套后端输出
-
-- Hono + Drizzle：Schema 表定义和数据库对应的 SQL Migration
-- NestJS + Prisma：`AuthUser`、`AuthSession` Model、唯一约束与索引
-- FastAPI + SQLAlchemy：ORM Model 和 Alembic `0002` Migration
-- Spring Boot + JPA：Flyway `V2` Migration
-- Gin + GORM：GORM Model、AutoMigrate 注册和 Goose `00002` Migration
-
-SQLite 使用整数自增主键和 ISO 时间文本；PostgreSQL 使用 `BIGSERIAL` 与 `TIMESTAMPTZ`。外键类型与主键类型保持一致。
-
-### 密码安全协议
-
-`siteforge.session.json` 记录下一阶段运行时必须遵循的密码格式：
+生成协议固定采用：
 
 ```text
 PBKDF2-HMAC-SHA256
 600,000 iterations
 16-byte random salt
 32-byte derived key
+32-byte random session token
+SHA-256 token digest storage
 ```
 
-存储格式会包含算法、迭代次数、盐和派生结果，便于未来逐步升级工作因子。密码不得以明文、可逆密文或快速 SHA-256 摘要保存。
+每条密码记录保存自己的迭代次数和随机盐，以便未来升级工作因子。原始 Session Token 不写入数据库。
 
-### Session 安全协议
+### 生成文件
 
-- 每个客户端 Token 使用 32 字节密码学随机数
-- 数据库只保存 Token 的 SHA-256 摘要
-- 原始 Token 只在创建或轮换响应中出现一次
-- 撤销通过 `revoked_at` 表示
-- 轮换应在同一事务中创建新 Session 并撤销旧 Session
-- 过期、撤销、用户禁用和活动 Session 上限必须由服务端执行
+- `siteforge.session.json`：机器可读状态、参数、端点和兼容策略
+- `SESSION_SECURITY.md`：生成工程内的中英双语运行说明
+- `.env.example` 中的引导和 Session 配置变量
 
-### 环境变量
+### 安全边界
 
-生成工程新增：
+真实引导密码只能通过 Secret 管理注入。数据库备份包含密码哈希和 Token 摘要，仍应加密、限制访问并纳入保留与删除策略。
 
-```text
-AUTH_BOOTSTRAP_EMAIL
-AUTH_BOOTSTRAP_PASSWORD
-AUTH_SESSION_TTL_SECONDS
-AUTH_MAX_ACTIVE_SESSIONS
-```
-
-`AUTH_BOOTSTRAP_PASSWORD` 只能通过 Secret 管理注入。示例值不是生产密码，不能原样部署。
-
-### 当前边界
-
-本阶段只完成数据结构、迁移、配置和安全协议。实际运行时仍由 `AUTH_IDENTITIES_JSON` Bearer Token 保护，不包含：
-
-- 密码登录和退出端点
-- Session Token 创建、轮换和撤销端点
-- 管理员引导写入逻辑
-- 注册、密码找回和邮箱验证
-- MFA、OAuth 或 OIDC
-- Session 清理任务和登录限流
-
-这些能力会在下一阶段基于当前数据模型接线。
+本数据层不等同于公开注册、密码找回、邮箱验证、MFA、OAuth/OIDC、设备管理或登录风险控制；这些仍属于后续能力。
 
 ---
 
@@ -112,100 +89,77 @@ AUTH_MAX_ACTIVE_SESSIONS
 
 ### Purpose
 
-The role-permission step at `/projects/new` can optionally generate a persistent user and session data layer. This option does not call AI and does not replace the currently working environment-backed bearer-token route protection.
+When `/projects/new` enables the persistent user and session data layer, SiteForge emits the same identity-data contract for all five backend profiles:
 
-This phase first establishes a consistent, migratable data structure and security protocol across all five backend profiles. Password login, logout, rotation, and revocation runtime behavior is wired in the next phase. Generated projects explicitly mark the session runtime as `not-wired` and do not claim that unavailable authentication endpoints already exist.
+```text
+auth_users
+auth_sessions
+```
 
-### Visual configuration
+The login, rotation, logout, and revocation runtime documented in [`MANUAL_SESSION_RUNTIME.md`](./MANUAL_SESSION_RUNTIME.md) now consumes this data layer. If route-authentication code is disabled, the generator can still emit schema and migrations only; `siteforge.session.json` then remains `schema-ready / not-wired`.
 
-After enabling “Generate persistent user and session data,” the user can configure:
+### `auth_users`
 
-- a session lifetime from 900 to 2,592,000 seconds
-- an active-session limit from 1 to 20 per user
-- defaults of 28,800 seconds and 5 active sessions
+| Field | Meaning |
+| --- | --- |
+| `id` | Native auto-incrementing database primary key |
+| `email` | Normalized unique login email |
+| `password_hash` | Non-reversible password-derived value |
+| `role` | Role key from the visual role designer |
+| `disabled` | Blocks login and session use |
+| `created_at` | Creation time |
+| `updated_at` | Last modification time |
 
-The values are written to `siteforge.session.json`, `.env.example`, and the generated `SESSION_SECURITY.md`.
+### `auth_sessions`
 
-### Shared data model
+| Field | Meaning |
+| --- | --- |
+| `id` | Native auto-incrementing database primary key |
+| `token_hash` | Unique SHA-256 digest of the raw token |
+| `user_id` | Reference to `auth_users.id` |
+| `expires_at` | Mandatory expiry time |
+| `revoked_at` | Explicit revocation time; null means not revoked |
+| `last_used_at` | Most recent authentication use |
+| `created_at` | Creation time |
 
-Every backend generates two tables.
+Shared constraints:
 
-#### `auth_users`
+- Deleting a user cascades to the user's sessions.
+- `user_id` and `expires_at` are indexed.
+- Email and token digests are unique.
+- PostgreSQL uses matching `BIGSERIAL / BIGINT` types; SQLite uses matching `INTEGER` types.
 
-- `id`
-- unique `email`
-- `password_hash`
-- `role`
-- `disabled`
-- `created_at`
-- `updated_at`
+### Five outputs
 
-#### `auth_sessions`
+- Hono + Drizzle: `schema.ts` and `drizzle/0002_auth_identity_sessions.sql`
+- NestJS + Prisma: `AuthUser` and `AuthSession` models
+- FastAPI + SQLAlchemy: ORM models and Alembic revision `0002`
+- Spring Boot + JPA: Flyway migration `V2`
+- Gin + GORM: models, AutoMigrate registration, and Goose migration `00002`
 
-- `id`
-- unique `token_hash`
-- `user_id` referencing `auth_users.id`
-- `expires_at`
-- `revoked_at`
-- `last_used_at`
-- `created_at`
+### Password and session parameters
 
-Deleting a user cascades to that user's sessions. Indexes on `user_id` and `expires_at` support session listing, expiry cleanup, and active-session-limit enforcement.
-
-### Five backend outputs
-
-- Hono + Drizzle: schema tables and database-specific SQL migration
-- NestJS + Prisma: `AuthUser` and `AuthSession` models, unique constraints, and indexes
-- FastAPI + SQLAlchemy: ORM models and Alembic `0002` migration
-- Spring Boot + JPA: Flyway `V2` migration
-- Gin + GORM: GORM models, AutoMigrate registration, and Goose `00002` migration
-
-SQLite uses auto-incrementing integer keys and ISO time text. PostgreSQL uses `BIGSERIAL` and `TIMESTAMPTZ`. Foreign-key types match their primary-key types.
-
-### Password security protocol
-
-`siteforge.session.json` records the password format required by the next runtime phase:
+The generated contract uses:
 
 ```text
 PBKDF2-HMAC-SHA256
 600,000 iterations
 16-byte random salt
 32-byte derived key
+32-byte random session token
+SHA-256 token digest storage
 ```
 
-The stored format contains the algorithm, iteration count, salt, and derived result so the work factor can be upgraded over time. Passwords must not be stored as plaintext, reversible ciphertext, or a fast SHA-256 digest.
+Each password record stores its own iteration count and random salt so the work factor can be upgraded later. Raw session tokens are never stored in the database.
 
-### Session security protocol
+### Generated files
 
-- each client token contains 32 bytes of cryptographic randomness
-- the database stores only the SHA-256 token digest
-- the raw token appears only once in a creation or rotation response
-- revocation uses `revoked_at`
-- rotation should create the new session and revoke the old session in one transaction
-- expiry, revocation, user disabling, and active-session limits must be enforced server-side
+- `siteforge.session.json`: machine-readable state, parameters, endpoints, and compatibility behavior
+- `SESSION_SECURITY.md`: bilingual runtime guidance inside the generated project
+- bootstrap and session configuration variables in `.env.example`
 
-### Environment variables
+### Security boundary
 
-Generated projects add:
+Real bootstrap passwords must be injected through secret management. Database backups contain password hashes and token digests and must still be encrypted, access-controlled, and covered by retention and deletion policies.
 
-```text
-AUTH_BOOTSTRAP_EMAIL
-AUTH_BOOTSTRAP_PASSWORD
-AUTH_SESSION_TTL_SECONDS
-AUTH_MAX_ACTIVE_SESSIONS
-```
-
-`AUTH_BOOTSTRAP_PASSWORD` must be injected through secret management. The example value is not a production password and must not be deployed unchanged.
-
-### Current boundary
-
-This phase completes the data structures, migrations, configuration, and security protocol only. Runtime protection still uses `AUTH_IDENTITIES_JSON` bearer tokens and does not yet include:
-
-- password login or logout endpoints
-- session-token creation, rotation, or revocation endpoints
-- administrator bootstrap persistence
-- registration, password recovery, or email verification
-- MFA, OAuth, or OIDC
-- session cleanup jobs or login rate limiting
-
-Those capabilities are wired in the next phase on top of this data model.
+This data layer is not public registration, password recovery, email verification, MFA, OAuth/OIDC, device management, or login-risk controls. Those remain future capabilities.
