@@ -17,15 +17,29 @@ import {
   BACKEND_STACK_PROFILES,
   DEFAULT_MANUAL_ENTITIES,
   backendDatabaseLabel,
+  createDefaultManualAccess,
   getBackendStackProfile,
+  normalizeManualAccess,
   normalizeManualEntities,
+  reconcileManualAccessEntities,
   type BackendDatabaseId,
   type BackendStackId,
+  type ManualAccessDefinition,
   type ManualEntityDefinition,
 } from 'shared'
+import ManualAccessDesigner from '../components/ManualAccessDesigner.vue'
 import ManualDataModelDesigner from '../components/ManualDataModelDesigner.vue'
 import { useToast } from '../composables/useToast'
-import { buildManualProjectZip, createManualProjectScaffold } from '../lib/manualProjectScaffold'
+import { buildManualAccessProjectZip, createManualAccessProjectScaffold } from '../lib/manualAccessProjectScaffold'
+
+function initialEntities(): ManualEntityDefinition[] {
+  return DEFAULT_MANUAL_ENTITIES.map((entity) => ({
+    ...entity,
+    fields: entity.fields.map((field) => ({ ...field, enumValues: field.enumValues ? [...field.enumValues] : undefined })),
+    relations: entity.relations?.map((relation) => ({ ...relation })) ?? [],
+    list: entity.list ? { ...entity.list } : undefined,
+  }))
+}
 
 const toast = useToast()
 const name = ref('现代任务管理系统')
@@ -35,12 +49,8 @@ const database = ref<BackendDatabaseId>('sqlite')
 const includeDocker = ref(true)
 const includeGithubActions = ref(true)
 const generating = ref(false)
-const entities = ref<ManualEntityDefinition[]>(DEFAULT_MANUAL_ENTITIES.map((entity) => ({
-  ...entity,
-  fields: entity.fields.map((field) => ({ ...field, enumValues: field.enumValues ? [...field.enumValues] : undefined })),
-  relations: entity.relations?.map((relation) => ({ ...relation })) ?? [],
-  list: entity.list ? { ...entity.list } : undefined,
-})))
+const entities = ref<ManualEntityDefinition[]>(initialEntities())
+const access = ref<ManualAccessDefinition>(createDefaultManualAccess(entities.value))
 
 const profile = computed(() => getBackendStackProfile(backendStack.value) ?? BACKEND_STACK_PROFILES[0])
 const availableDatabases = computed(() => profile.value.databases)
@@ -49,9 +59,18 @@ const modelError = computed(() => {
   try { normalizeManualEntities(entities.value); return '' }
   catch (error) { return error instanceof Error ? error.message : '数据模型配置不合法' }
 })
+const accessError = computed(() => {
+  try {
+    normalizeManualAccess(access.value, normalizeManualEntities(entities.value))
+    return ''
+  } catch (error) {
+    return error instanceof Error ? error.message : '角色权限配置不合法'
+  }
+})
+const configurationError = computed(() => modelError.value || accessError.value)
 const scaffold = computed(() => {
   try {
-    return createManualProjectScaffold({
+    return createManualAccessProjectScaffold({
       name: name.value || 'SiteForge App',
       description: description.value,
       backendStack: backendStack.value,
@@ -59,6 +78,7 @@ const scaffold = computed(() => {
       includeDocker: includeDocker.value,
       includeGithubActions: includeGithubActions.value,
       entities: entities.value,
+      access: access.value,
     })
   } catch {
     return null
@@ -67,6 +87,10 @@ const scaffold = computed(() => {
 
 watch(profile, (next) => {
   if (!next.databases.includes(database.value)) database.value = next.recommendedDatabase
+})
+
+watch(entities, (next, previous) => {
+  access.value = reconcileManualAccessEntities(access.value, previous ?? [], next)
 })
 
 async function downloadProject() {
@@ -78,9 +102,13 @@ async function downloadProject() {
     toast.error('数据模型不合法', modelError.value)
     return
   }
+  if (accessError.value) {
+    toast.error('角色权限不合法', accessError.value)
+    return
+  }
   generating.value = true
   try {
-    const blob = await buildManualProjectZip({
+    const blob = await buildManualAccessProjectZip({
       name: name.value,
       description: description.value,
       backendStack: backendStack.value,
@@ -88,6 +116,7 @@ async function downloadProject() {
       includeDocker: includeDocker.value,
       includeGithubActions: includeGithubActions.value,
       entities: entities.value,
+      access: access.value,
     })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
@@ -95,7 +124,7 @@ async function downloadProject() {
     anchor.download = `${scaffold.value?.slug ?? 'siteforge-app'}.zip`
     anchor.click()
     window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
-    toast.success('工程 ZIP 已生成', `${profile.value.name} · ${entities.value.length} 个 CRUD 模块 · ${relationCount.value} 个外键`)
+    toast.success('工程 ZIP 已生成', `${profile.value.name} · ${entities.value.length} 个 CRUD 模块 · ${access.value.roles.length} 个角色`)
   } catch (error) {
     toast.error('生成失败', error instanceof Error ? error.message : '请稍后重试')
   } finally {
@@ -112,7 +141,7 @@ async function downloadProject() {
         <div class="min-w-0 flex-1">
           <p class="flex items-center gap-2 text-xs font-semibold text-brand1"><Sparkles class="h-3.5 w-3.5" />确定性工程生成</p>
           <h1 class="mt-1 text-2xl font-bold text-ink">手动创建全栈项目</h1>
-          <p class="mt-1 text-xs text-mut">不调用 AI，不需要 API Key；数据模型会确定性生成前端、后端、数据库、外键、分页查询和 CRUD。</p>
+          <p class="mt-1 text-xs text-mut">不调用 AI，不需要 API Key；数据模型与角色矩阵会确定性生成前端、五套后端、数据库、权限和 OpenAPI。</p>
         </div>
       </header>
 
@@ -150,20 +179,21 @@ async function downloadProject() {
           </article>
 
           <ManualDataModelDesigner v-model="entities" />
+          <ManualAccessDesigner v-model="access" :entities="entities" />
         </section>
 
         <aside class="h-fit space-y-4 xl:sticky xl:top-24">
           <article class="overflow-hidden rounded-3xl border border-line/10 bg-soft/70 shadow-xl shadow-black/5">
             <div class="bg-brand-gradient p-5 text-white"><p class="text-[10px] font-semibold tracking-widest uppercase opacity-75">生成摘要</p><h2 class="mt-2 text-xl font-bold">{{ profile.name }}</h2><p class="mt-2 text-xs leading-5 text-white/75">{{ profile.description }}</p></div>
             <div class="p-5">
-              <dl class="grid gap-3 text-xs"><div class="flex justify-between gap-3"><dt class="text-faint">语言 / Runtime</dt><dd class="text-right font-semibold text-ink">{{ profile.language }} · {{ profile.runtime }}</dd></div><div class="flex justify-between gap-3"><dt class="text-faint">ORM / 迁移</dt><dd class="text-right font-semibold text-ink">{{ profile.orm }} · {{ profile.migrationTool }}</dd></div><div class="flex justify-between gap-3"><dt class="text-faint">数据库</dt><dd class="font-semibold text-ink">{{ backendDatabaseLabel(database) }}</dd></div><div class="flex justify-between gap-3"><dt class="text-faint">CRUD 模块</dt><dd class="font-semibold text-ink">{{ entities.length }}</dd></div><div class="flex justify-between gap-3"><dt class="text-faint">外键关系</dt><dd class="font-semibold text-ink">{{ relationCount }}</dd></div><div class="flex justify-between gap-3"><dt class="text-faint">文件数量</dt><dd class="font-semibold text-ink">{{ scaffold?.files.length ?? 0 }}</dd></div></dl>
+              <dl class="grid gap-3 text-xs"><div class="flex justify-between gap-3"><dt class="text-faint">语言 / Runtime</dt><dd class="text-right font-semibold text-ink">{{ profile.language }} · {{ profile.runtime }}</dd></div><div class="flex justify-between gap-3"><dt class="text-faint">ORM / 迁移</dt><dd class="text-right font-semibold text-ink">{{ profile.orm }} · {{ profile.migrationTool }}</dd></div><div class="flex justify-between gap-3"><dt class="text-faint">数据库</dt><dd class="font-semibold text-ink">{{ backendDatabaseLabel(database) }}</dd></div><div class="flex justify-between gap-3"><dt class="text-faint">CRUD 模块</dt><dd class="font-semibold text-ink">{{ entities.length }}</dd></div><div class="flex justify-between gap-3"><dt class="text-faint">外键关系</dt><dd class="font-semibold text-ink">{{ relationCount }}</dd></div><div class="flex justify-between gap-3"><dt class="text-faint">访问角色</dt><dd class="font-semibold text-ink">{{ access.roles.length }}</dd></div><div class="flex justify-between gap-3"><dt class="text-faint">认证代码</dt><dd class="font-semibold text-ink">{{ access.enabled ? '生成' : '关闭' }}</dd></div><div class="flex justify-between gap-3"><dt class="text-faint">文件数量</dt><dd class="font-semibold text-ink">{{ scaffold?.files.length ?? 0 }}</dd></div></dl>
               <div class="mt-5 rounded-2xl border border-line/10 bg-app/45 p-4"><p class="flex items-center gap-2 text-xs font-semibold text-ink"><ShieldCheck class="h-4 w-4 text-emerald-500" />不会执行生成代码</p><p class="mt-2 text-[10px] leading-5 text-mut">本阶段只在浏览器中确定性拼装并下载源码 ZIP。后续隔离 Runner 完成前，SiteForge 不会运行用户工程。</p></div>
-              <button :disabled="generating || !name.trim() || Boolean(modelError)" class="bg-brand-gradient mt-5 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-brand1/20 disabled:opacity-45" @click="downloadProject"><Loader2 v-if="generating" class="h-4 w-4 animate-spin" /><Download v-else class="h-4 w-4" />{{ generating ? '正在生成…' : '生成并下载工程 ZIP' }}</button>
-              <p v-if="modelError" class="mt-2 text-[10px] leading-5 text-red-500">{{ modelError }}</p>
+              <button :disabled="generating || !name.trim() || Boolean(configurationError)" class="bg-brand-gradient mt-5 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-brand1/20 disabled:opacity-45" @click="downloadProject"><Loader2 v-if="generating" class="h-4 w-4 animate-spin" /><Download v-else class="h-4 w-4" />{{ generating ? '正在生成…' : '生成并下载工程 ZIP' }}</button>
+              <p v-if="configurationError" class="mt-2 text-[10px] leading-5 text-red-500">{{ configurationError }}</p>
             </div>
           </article>
 
-          <article class="rounded-3xl border border-line/10 bg-soft/60 p-5"><h3 class="flex items-center gap-2 text-sm font-semibold text-ink"><Container class="h-4 w-4 text-brand1" />工程中包含</h3><ul class="mt-4 grid gap-2 text-[11px] text-mut"><li v-for="item in ['Vue 3 分页 CRUD 管理界面','搜索 / 排序 / 分页 API','外键与删除策略','ORM Schema 与数据库迁移','OpenAPI 与 siteforge.json','.env.example、Docker 与双语 README']" :key="item" class="flex items-center gap-2"><ChevronRight class="h-3 w-3 text-brand1" />{{ item }}</li></ul></article>
+          <article class="rounded-3xl border border-line/10 bg-soft/60 p-5"><h3 class="flex items-center gap-2 text-sm font-semibold text-ink"><Container class="h-4 w-4 text-brand1" />工程中包含</h3><ul class="mt-4 grid gap-2 text-[11px] text-mut"><li v-for="item in ['Vue 3 分页 CRUD 管理界面','搜索 / 排序 / 分页 API','外键与删除策略','自定义角色与 Bearer Token 权限','统一结构化 API 错误','OpenAPI、siteforge.json 与权限协议','.env.example、Docker 与双语 README']" :key="item" class="flex items-center gap-2"><ChevronRight class="h-3 w-3 text-brand1" />{{ item }}</li></ul></article>
         </aside>
       </div>
     </div>
