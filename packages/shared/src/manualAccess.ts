@@ -43,7 +43,6 @@ function cleanText(value: unknown, fallback = ''): string {
 
 function normalizeBoundedInteger(
   value: unknown,
-  fallback: number,
   minimum: number,
   maximum: number,
   label: string,
@@ -59,14 +58,12 @@ export function normalizeManualSession(input?: Partial<ManualSessionDefinition>)
   return {
     ttlSeconds: normalizeBoundedInteger(
       input?.ttlSeconds ?? DEFAULT_MANUAL_SESSION_TTL_SECONDS,
-      DEFAULT_MANUAL_SESSION_TTL_SECONDS,
       MIN_MANUAL_SESSION_TTL_SECONDS,
       MAX_MANUAL_SESSION_TTL_SECONDS,
       'Session 有效期',
     ),
     maxActiveSessions: normalizeBoundedInteger(
       input?.maxActiveSessions ?? DEFAULT_MANUAL_ACTIVE_SESSIONS,
-      DEFAULT_MANUAL_ACTIVE_SESSIONS,
       MIN_MANUAL_ACTIVE_SESSIONS,
       MAX_MANUAL_ACTIVE_SESSIONS,
       '单用户活动 Session 数量',
@@ -78,7 +75,10 @@ export function cloneManualAccess(access: ManualAccessDefinition): ManualAccessD
   return {
     enabled: access.enabled,
     persistentSessions: Boolean(access.persistentSessions),
-    session: normalizeManualSession(access.session),
+    session: {
+      ttlSeconds: access.session?.ttlSeconds ?? DEFAULT_MANUAL_SESSION_TTL_SECONDS,
+      maxActiveSessions: access.session?.maxActiveSessions ?? DEFAULT_MANUAL_ACTIVE_SESSIONS,
+    },
     roles: access.roles.map((role) => ({
       ...role,
       permissions: role.permissions.map((permission) => ({
