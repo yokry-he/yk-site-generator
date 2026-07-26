@@ -10,6 +10,7 @@ import {
   type ManualProjectScaffold,
 } from './manualProjectScaffold'
 import { manualCrudFiles } from './manualCrudScaffold'
+import { applyManualSessionData } from './manualSessionDataScaffold'
 
 export interface ManualAccessProjectInput extends ManualProjectInput {
   access?: ManualAccessDefinition
@@ -53,9 +54,17 @@ export function createManualAccessProjectScaffold(
     filesByPath.set(file.path, file)
   }
 
+  const files = applyManualSessionData(
+    [...filesByPath.values()],
+    input.backendStack,
+    input.database,
+    entities,
+    access,
+  )
+
   return {
     ...base,
-    files: [...filesByPath.values()],
+    files,
     access,
   }
 }
