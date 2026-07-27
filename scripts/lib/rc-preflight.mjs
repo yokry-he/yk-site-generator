@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 export const WORKSPACE_REQUIREMENTS = Object.freeze({
-  'package.json': ['lint', 'docs:check', 'rc:audit', 'rc:security', 'rc:golden', 'runner:images:validate', 'typecheck', 'build', 'test'],
+  'package.json': ['lint', 'docs:check', 'rc:preflight', 'rc:deps', 'rc:audit', 'rc:security', 'rc:golden', 'runner:images:validate', 'typecheck', 'build', 'test'],
   'apps/web/package.json': ['build', 'typecheck', 'test', 'e2e:history', 'e2e:browser', 'e2e:visual', 'check:bundle-budget'],
   'apps/server/package.json': ['build', 'typecheck', 'test', 'db:mysql:ci'],
   'packages/shared/package.json': ['build', 'typecheck', 'test'],
@@ -16,6 +16,8 @@ export const REQUIRED_FILES = Object.freeze([
   '.github/workflows/ci.yml',
   '.github/workflows/rc-release.yml',
   'scripts/lib/rc-gates.ts',
+  'scripts/lib/rc-dependencies.mjs',
+  'scripts/install-rc-dependencies.mjs',
   'release/rc-manifest.json',
   'fixtures/golden-projects/manifest.json',
 ])
@@ -28,7 +30,7 @@ export function parseMajorVersion(value) {
 }
 
 export function parsePnpmLockfileVersion(value) {
-  const match = String(value ?? '').match(/^lockfileVersion:\s*['\"]?([^'\"\s]+)['\"]?/m)
+  const match = String(value ?? '').match(/^lockfileVersion:\s*['"]?([^'"\s]+)['"]?/m)
   return match?.[1]
 }
 
