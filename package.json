@@ -11,6 +11,7 @@
     "test": "pnpm -r --if-present run test",
     "docs:check": "node scripts/check-bilingual-docs.mjs",
     "rc:audit": "pnpm --filter web exec tsx ../../scripts/check-manual-scaffold-integrity.ts",
+    "rc:security": "pnpm --filter web exec tsx ../../scripts/security-audit.ts",
     "rc:golden": "pnpm --filter web exec tsx ../../scripts/generate-golden-projects.ts --check",
     "rc:golden:update": "pnpm --filter web exec tsx ../../scripts/generate-golden-projects.ts --write",
     "rc:matrix:plan": "pnpm --filter web exec tsx ../../scripts/run-golden-matrix.ts --plan",
