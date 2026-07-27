@@ -1,0 +1,71 @@
+name: RC Node bootstrap
+description: Set up pinned Node/pnpm, run RC preflight, install from the pnpm Store, and upload diagnostics.
+
+inputs:
+  preflight-profile:
+    description: RC preflight profile (core, full, release, or none).
+    required: false
+    default: core
+  dependency-mode:
+    description: Dependency bootstrap mode (all, fetch, install, or none).
+    required: false
+    default: all
+  dependency-attempts:
+    description: Maximum fetch attempts for retryable registry failures.
+    required: false
+    default: '2'
+  run-self-tests:
+    description: Run zero-dependency preflight and dependency-bootstrap unit tests.
+    required: false
+    default: 'true'
+  artifact-name:
+    description: Unique artifact name for preflight and dependency diagnostics.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up pnpm 11
+      uses: pnpm/action-setup@v4
+      with:
+        version: 11
+
+    - name: Set up Node.js 24
+      uses: actions/setup-node@v4
+      with:
+        node-version: 24
+        cache: pnpm
+        cache-dependency-path: pnpm-lock.yaml
+
+    - name: Run RC environment preflight
+      if: ${{ inputs.preflight-profile != 'none' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ "${{ inputs.run-self-tests }}" == "true" ]]; then
+          node --test scripts/rc-preflight.test.mjs
+        fi
+        node scripts/rc-preflight.mjs --profile="${{ inputs.preflight-profile }}"
+
+    - name: Fetch and offline-install dependencies
+      if: ${{ inputs.dependency-mode != 'none' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ "${{ inputs.run-self-tests }}" == "true" ]]; then
+          node --test scripts/rc-dependencies.test.mjs
+        fi
+        node scripts/install-rc-dependencies.mjs \
+          --mode="${{ inputs.dependency-mode }}" \
+          --attempts="${{ inputs.dependency-attempts }}"
+
+    - name: Upload RC bootstrap diagnostics
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: |
+          artifacts/rc-preflight
+          artifacts/rc-dependencies
+        if-no-files-found: warn
+        retention-days: 14
