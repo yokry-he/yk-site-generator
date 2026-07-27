@@ -10,10 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: pnpm }
       - uses: pnpm/action-setup@v4
         with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       - name: RC 环境预检 / RC environment preflight
         run: node scripts/rc-preflight.mjs --profile=core
       - name: 上传 RC 环境预检
@@ -24,8 +27,16 @@ jobs:
           path: artifacts/rc-preflight
           if-no-files-found: warn
           retention-days: 14
-      - name: 安装依赖
-        run: pnpm install --frozen-lockfile
+      - name: 获取并离线安装依赖 / Fetch and offline install
+        run: node --test scripts/rc-dependencies.test.mjs && node scripts/install-rc-dependencies.mjs --mode=all
+      - name: 上传依赖诊断
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc-dependency-diagnostics
+          path: artifacts/rc-dependencies
+          if-no-files-found: warn
+          retention-days: 14
       - name: RC 核心门禁 / RC core gates
         run: pnpm rc:gates:core
       - name: 上传 RC 门禁诊断
@@ -68,11 +79,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: pnpm }
       - uses: pnpm/action-setup@v4
         with: { version: 11 }
-      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: 获取并离线安装依赖
+        run: node scripts/install-rc-dependencies.mjs --mode=all
+      - name: 上传浏览器 Job 依赖诊断
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc-dependency-diagnostics-browser
+          path: artifacts/rc-dependencies
+          if-no-files-found: warn
+          retention-days: 14
       - run: pnpm --filter web exec playwright install --with-deps chromium
       - name: 浏览器交互与无障碍 E2E
         run: pnpm --filter web e2e:browser
@@ -105,11 +128,23 @@ jobs:
           --health-interval=5s --health-timeout=5s --health-retries=20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: pnpm }
       - uses: pnpm/action-setup@v4
         with: { version: 11 }
-      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: 获取并离线安装依赖
+        run: node scripts/install-rc-dependencies.mjs --mode=all
+      - name: 上传 MySQL Job 依赖诊断
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc-dependency-diagnostics-mysql
+          path: artifacts/rc-dependencies
+          if-no-files-found: warn
+          retention-days: 14
       - name: MySQL migration + 事务并发 + 回滚
         working-directory: apps/server
         env:
