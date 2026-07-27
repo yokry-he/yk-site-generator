@@ -21,8 +21,20 @@ jobs:
       - uses: pnpm/action-setup@v4
         with: { version: 11 }
       - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Fetch and install repository dependencies
+        run: node scripts/install-rc-dependencies.mjs --mode=all
+      - name: Upload dependency diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc-redis-dependencies
+          path: artifacts/rc-dependencies
+          if-no-files-found: warn
+          retention-days: 14
       - run: pnpm --filter server build
       - name: Start two API instances sharing Redis
         env:
@@ -36,7 +48,7 @@ jobs:
         run: |
           PORT=8787 DATA_STORAGE_FILE=.data/redis-a.json node apps/server/dist/index.js > redis-a.log 2>&1 &
           PORT=8788 DATA_STORAGE_FILE=.data/redis-b.json node apps/server/dist/index.js > redis-b.log 2>&1 &
-          for port in 8787 8788; do for attempt in {1..30}; do curl -fsS "http://127.0.0.1:$port/api/health" && break || sleep 1; done; done
+          for port in 8787 8788; do for attempt in {1..30}; do curl -fsS "http://127.0.0.1:$port/api/health/live" && break || sleep 1; done; done
           pnpm --filter web exec tsx ../../scripts/redis-multi-instance-smoke.ts
       - uses: actions/upload-artifact@v4
         if: always()
