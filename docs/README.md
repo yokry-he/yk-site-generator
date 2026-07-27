@@ -17,6 +17,7 @@
 - [`RC_RELEASE_PROCESS.md`](./RC_RELEASE_PROCESS.md)：签名门禁与 RC Bundle
 - [`RC_GATE_RUNNER.md`](./RC_GATE_RUNNER.md)：全仓门禁执行与统一诊断
 - [`RC_ENVIRONMENT_PREFLIGHT.md`](./RC_ENVIRONMENT_PREFLIGHT.md)：安装前环境与仓库配置预检
+- [`RC_DEPENDENCY_BOOTSTRAP.md`](./RC_DEPENDENCY_BOOTSTRAP.md)：依赖获取、离线安装与失败分类
 
 行为变化必须同时更新完整中文和英文内容；示例只使用占位 Secret。
 
@@ -35,5 +36,6 @@ Existing product documentation remains available. v0.1.0 RC stabilization guides
 - [`RC_RELEASE_PROCESS.md`](./RC_RELEASE_PROCESS.md): signed gates and RC bundles
 - [`RC_GATE_RUNNER.md`](./RC_GATE_RUNNER.md): repository-wide gate execution and unified diagnostics
 - [`RC_ENVIRONMENT_PREFLIGHT.md`](./RC_ENVIRONMENT_PREFLIGHT.md): pre-install environment and repository configuration checks
+- [`RC_DEPENDENCY_BOOTSTRAP.md`](./RC_DEPENDENCY_BOOTSTRAP.md): dependency fetching, offline installation, and failure classification
 
 Ship behavior changes with complete Chinese and English documentation; examples use placeholder secrets only.
