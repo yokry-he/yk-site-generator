@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 export const WORKSPACE_REQUIREMENTS = Object.freeze({
-  'package.json': ['lint', 'docs:check', 'rc:preflight', 'rc:deps', 'rc:audit', 'rc:security', 'rc:golden', 'runner:images:validate', 'typecheck', 'build', 'test'],
+  'package.json': ['lint', 'docs:check', 'rc:preflight', 'rc:deps', 'rc:workflow-bootstrap', 'rc:audit', 'rc:security', 'rc:golden', 'runner:images:validate', 'typecheck', 'build', 'test'],
   'apps/web/package.json': ['build', 'typecheck', 'test', 'e2e:history', 'e2e:browser', 'e2e:visual', 'check:bundle-budget'],
   'apps/server/package.json': ['build', 'typecheck', 'test', 'db:mysql:ci'],
   'packages/shared/package.json': ['build', 'typecheck', 'test'],
@@ -13,11 +13,14 @@ export const WORKSPACE_REQUIREMENTS = Object.freeze({
 export const REQUIRED_FILES = Object.freeze([
   'pnpm-lock.yaml',
   'pnpm-workspace.yaml',
+  '.github/actions/rc-node-bootstrap/action.yml',
   '.github/workflows/ci.yml',
   '.github/workflows/rc-release.yml',
   'scripts/lib/rc-gates.ts',
   'scripts/lib/rc-dependencies.mjs',
   'scripts/install-rc-dependencies.mjs',
+  'scripts/lib/rc-workflow-bootstrap.mjs',
+  'scripts/check-rc-workflow-bootstrap.mjs',
   'release/rc-manifest.json',
   'fixtures/golden-projects/manifest.json',
 ])
