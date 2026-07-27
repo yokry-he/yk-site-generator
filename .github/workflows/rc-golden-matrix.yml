@@ -32,6 +32,11 @@ jobs:
           --health-interval=5s --health-timeout=5s --health-retries=20
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/rc-node-bootstrap
+        with:
+          preflight-profile: release
+          dependency-mode: all
+          artifact-name: rc-bootstrap-golden-${{ matrix.project }}
       - uses: actions/setup-python@v5
         with: { python-version: '3.14' }
       - uses: actions/setup-java@v4
@@ -40,11 +45,6 @@ jobs:
         with: { go-version: '1.25.x', cache: false }
       - name: Install host tools
         run: sudo apt-get update && sudo apt-get install -y postgresql-client && python -m pip install uv
-      - uses: ./.github/actions/rc-node-bootstrap
-        with:
-          preflight-profile: release
-          dependency-mode: all
-          artifact-name: "rc-bootstrap-golden-${{ matrix.project }}"
       - name: Materialize Golden Projects
         run: pnpm rc:golden
       - name: Execute selected runtime matrix
@@ -57,3 +57,10 @@ jobs:
           path: artifacts/rc-matrix
           if-no-files-found: warn
           retention-days: 14
+      - name: Aggregate matrix diagnostics
+        if: always()
+        uses: ./.github/actions/rc-diagnostic-triage
+        with:
+          scope: golden-${{ matrix.project }}
+          artifact-name: rc-triage-golden-${{ matrix.project }}
+          external-status: ${{ job.status }}
