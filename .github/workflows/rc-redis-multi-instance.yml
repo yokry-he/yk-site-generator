@@ -20,9 +20,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rc-node-bootstrap
         with:
-          preflight-profile: core
+          preflight-profile: release
           dependency-mode: all
-          artifact-name: rc-bootstrap-redis
+          artifact-name: rc-bootstrap-redis-matrix
       - run: pnpm --filter server build
       - name: Start two API instances sharing Redis
         env:
@@ -44,3 +44,10 @@ jobs:
           name: rc-redis-logs
           path: redis-*.log
           retention-days: 14
+      - name: Aggregate Redis diagnostics
+        if: always()
+        uses: ./.github/actions/rc-diagnostic-triage
+        with:
+          scope: redis-multi-instance
+          artifact-name: rc-triage-redis-multi-instance
+          external-status: ${{ job.status }}
