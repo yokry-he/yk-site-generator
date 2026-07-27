@@ -12,10 +12,9 @@
     "docs:check": "node scripts/check-bilingual-docs.mjs",
     "rc:audit": "pnpm --filter web exec tsx ../../scripts/check-manual-scaffold-integrity.ts",
     "rc:golden": "pnpm --filter web exec tsx ../../scripts/generate-golden-projects.ts --check",
-    "rc:golden:update": "pnpm --filter web exec tsx ../../scripts/generate-golden-projects.ts --write"
+    "rc:golden:update": "pnpm --filter web exec tsx ../../scripts/generate-golden-projects.ts --write",
+    "rc:matrix:plan": "pnpm --filter web exec tsx ../../scripts/run-golden-matrix.ts --plan",
+    "rc:matrix": "pnpm --filter web exec tsx ../../scripts/run-golden-matrix.ts --execute"
   },
-  "engines": {
-    "node": ">=20",
-    "pnpm": ">=9"
-  }
+  "engines": { "node": ">=20", "pnpm": ">=9" }
 }

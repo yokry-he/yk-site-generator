@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "flow": ["generate", "install", "migrate", "build", "test", "start", "health", "bootstrap", "login", "me"],
+  "postgres": { "host": "127.0.0.1", "port": 5432, "user": "siteforge", "databasePrefix": "sf_" },
+  "projects": ["hono-drizzle-sqlite", "nestjs-prisma-postgresql", "fastapi-sqlalchemy-postgresql", "spring-boot-jpa-postgresql", "gin-gorm-postgresql"]
+}
