@@ -53,6 +53,13 @@ jobs:
             artifacts/rc-evidence
             artifacts/security-audit.json
           retention-days: 14
+      - name: Aggregate core diagnostics
+        if: always()
+        uses: ./.github/actions/rc-diagnostic-triage
+        with:
+          scope: release-core
+          artifact-name: rc-triage-release-core
+          external-status: ${{ job.status }}
 
   mysql:
     runs-on: ubuntu-latest
@@ -88,6 +95,13 @@ jobs:
       - run: pnpm rc:evidence --gate mysql
       - uses: actions/upload-artifact@v4
         with: { name: rc-evidence-mysql, path: artifacts/rc-evidence, retention-days: 14 }
+      - name: Aggregate MySQL diagnostics
+        if: always()
+        uses: ./.github/actions/rc-diagnostic-triage
+        with:
+          scope: release-mysql
+          artifact-name: rc-triage-release-mysql
+          external-status: ${{ job.status }}
 
   browser:
     runs-on: ubuntu-latest
@@ -115,6 +129,13 @@ jobs:
             apps/web/test-results
           if-no-files-found: warn
           retention-days: 14
+      - name: Aggregate browser diagnostics
+        if: always()
+        uses: ./.github/actions/rc-diagnostic-triage
+        with:
+          scope: release-browser
+          artifact-name: rc-triage-release-browser
+          external-status: ${{ job.status }}
 
   redis:
     runs-on: ubuntu-latest
@@ -156,6 +177,13 @@ jobs:
             artifacts/rc-evidence
             redis-*.log
           retention-days: 14
+      - name: Aggregate Redis diagnostics
+        if: always()
+        uses: ./.github/actions/rc-diagnostic-triage
+        with:
+          scope: release-redis
+          artifact-name: rc-triage-release-redis
+          external-status: ${{ job.status }}
 
   golden-runtime:
     runs-on: ubuntu-latest
@@ -205,6 +233,13 @@ jobs:
             artifacts/rc-evidence
             artifacts/rc-matrix
           retention-days: 14
+      - name: Aggregate Golden runtime diagnostics
+        if: always()
+        uses: ./.github/actions/rc-diagnostic-triage
+        with:
+          scope: release-golden-${{ matrix.project }}
+          artifact-name: rc-triage-release-golden-${{ matrix.project }}
+          external-status: ${{ job.status }}
 
   assemble:
     needs: [core, mysql, browser, redis, golden-runtime]
@@ -227,3 +262,10 @@ jobs:
           name: siteforge-${{ inputs.candidate_version }}-bundle
           path: artifacts/rc-release
           retention-days: 30
+      - name: Aggregate assemble diagnostics
+        if: always()
+        uses: ./.github/actions/rc-diagnostic-triage
+        with:
+          scope: release-assemble
+          artifact-name: rc-triage-release-assemble
+          external-status: ${{ job.status }}
