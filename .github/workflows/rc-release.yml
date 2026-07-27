@@ -25,11 +25,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 11 }
-      - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/rc-node-bootstrap
+        with:
+          preflight-profile: core
+          dependency-mode: all
+          artifact-name: rc-release-bootstrap-core
       - run: pnpm docs:check
       - run: pnpm rc:evidence --gate docs --details "Bilingual documentation gate"
       - run: pnpm rc:audit
@@ -71,11 +71,11 @@ jobs:
           --health-interval=5s --health-timeout=5s --health-retries=20
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 11 }
-      - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/rc-node-bootstrap
+        with:
+          preflight-profile: core
+          dependency-mode: all
+          artifact-name: rc-release-bootstrap-mysql
       - name: MySQL migration, concurrency and rollback
         working-directory: apps/server
         env:
@@ -94,11 +94,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 11 }
-      - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/rc-node-bootstrap
+        with:
+          preflight-profile: full
+          dependency-mode: all
+          artifact-name: rc-release-bootstrap-browser
       - run: pnpm --filter web exec playwright install --with-deps chromium
       - run: pnpm --filter web e2e:browser
       - run: pnpm rc:evidence --gate browser --details "Playwright interaction suite"
@@ -127,11 +127,11 @@ jobs:
           --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=5s --health-retries=20
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 11 }
-      - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/rc-node-bootstrap
+        with:
+          preflight-profile: core
+          dependency-mode: all
+          artifact-name: rc-release-bootstrap-redis
       - run: pnpm --filter server build
       - name: Two API instances sharing Redis
         env:
@@ -182,10 +182,6 @@ jobs:
           --health-interval=5s --health-timeout=5s --health-retries=20
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 11 }
-      - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: pnpm }
       - uses: actions/setup-python@v5
         with: { python-version: '3.14' }
       - uses: actions/setup-java@v4
@@ -193,7 +189,11 @@ jobs:
       - uses: actions/setup-go@v5
         with: { go-version: '1.25.x', cache: false }
       - run: sudo apt-get update && sudo apt-get install -y postgresql-client && python -m pip install uv
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/rc-node-bootstrap
+        with:
+          preflight-profile: release
+          dependency-mode: all
+          artifact-name: "rc-release-bootstrap-golden-${{ matrix.project }}"
       - run: pnpm rc:golden
       - run: pnpm rc:matrix --project ${{ matrix.project }}
       - run: pnpm rc:evidence --gate "golden-runtime:${{ matrix.project }}" --details "Real install/migrate/build/test/start/auth smoke"
@@ -211,11 +211,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 11 }
-      - uses: actions/setup-node@v4
-        with: { node-version: 24, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/rc-node-bootstrap
+        with:
+          preflight-profile: core
+          dependency-mode: all
+          artifact-name: rc-release-bootstrap-assemble
       - uses: actions/download-artifact@v4
         with:
           pattern: rc-evidence-*
