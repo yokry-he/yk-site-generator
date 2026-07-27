@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 export const WORKSPACE_REQUIREMENTS = Object.freeze({
-  'package.json': ['lint', 'docs:check', 'rc:preflight', 'rc:deps', 'rc:workflow-bootstrap', 'rc:triage:test', 'rc:triage', 'rc:audit', 'rc:security', 'rc:golden', 'runner:images:validate', 'typecheck', 'build', 'test'],
+  'package.json': ['lint', 'docs:check', 'rc:preflight', 'rc:deps', 'rc:workflow-bootstrap', 'rc:triage:test', 'rc:triage', 'rc:workstation:validate', 'rc:workstation:plan', 'rc:audit', 'rc:security', 'rc:golden', 'runner:images:validate', 'typecheck', 'build', 'test'],
   'apps/web/package.json': ['build', 'typecheck', 'test', 'e2e:history', 'e2e:browser', 'e2e:visual', 'check:bundle-budget'],
   'apps/server/package.json': ['build', 'typecheck', 'test', 'db:mysql:ci'],
   'packages/shared/package.json': ['build', 'typecheck', 'test'],
@@ -17,6 +17,9 @@ export const REQUIRED_FILES = Object.freeze([
   '.github/actions/rc-diagnostic-triage/action.yml',
   '.github/workflows/ci.yml',
   '.github/workflows/rc-release.yml',
+  'infra/rc-workstation/Dockerfile',
+  'infra/rc-workstation/compose.yml',
+  'infra/rc-workstation/images.lock.json',
   'scripts/lib/rc-gates.ts',
   'scripts/lib/rc-dependencies.mjs',
   'scripts/install-rc-dependencies.mjs',
@@ -25,7 +28,12 @@ export const REQUIRED_FILES = Object.freeze([
   'scripts/lib/rc-triage.mjs',
   'scripts/rc-triage.mjs',
   'scripts/rc-triage.test.mjs',
+  'scripts/lib/rc-workstation.mjs',
+  'scripts/validate-rc-workstation.mjs',
+  'scripts/rc-workstation.mjs',
+  'scripts/rc-workstation.test.mjs',
   'docs/RC_DIAGNOSTIC_TRIAGE.md',
+  'docs/RC_WORKSTATION.md',
   'release/rc-manifest.json',
   'fixtures/golden-projects/manifest.json',
 ])
