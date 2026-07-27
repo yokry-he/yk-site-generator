@@ -15,6 +15,7 @@
     "rc:golden:update": "pnpm --filter web exec tsx ../../scripts/generate-golden-projects.ts --write",
     "rc:matrix:plan": "pnpm --filter web exec tsx ../../scripts/run-golden-matrix.ts --plan",
     "rc:matrix": "pnpm --filter web exec tsx ../../scripts/run-golden-matrix.ts --execute",
+    "rc:redis": "pnpm --filter web exec tsx ../../scripts/redis-multi-instance-smoke.ts",
     "runner:images:validate": "pnpm --filter web exec tsx ../../scripts/validate-runner-images.ts",
     "runner:cleanup": "pnpm --filter web exec tsx ../../scripts/cleanup-runner-containers.ts"
   },

@@ -4,6 +4,7 @@ import { logger } from 'hono/logger'
 import { HTTPException } from 'hono/http-exception'
 import { env } from './env'
 import { requestTelemetryMiddleware } from './lib/observability'
+import { requestCodeRateLimit,verifyCodeRateLimit } from './lib/distributed-rate-limit'
 import { errorBody } from './types'
 import health from './routes/health'
 import generate from './routes/generate'
@@ -27,53 +28,5 @@ import feedback from './routes/feedback'
 import adminStorageHealth from './routes/admin-storage-health'
 import adminOperations from './routes/admin-operations'
 import admin from './routes/admin'
-import sitePage, { serveSiteFromHost } from './routes/site-page'
-
-export function createApp() {
-  const app = new Hono()
-  app.use('*', requestTelemetryMiddleware)
-  app.use('*', logger())
-  app.use('/api/*', cors({
-    origin: env.corsOrigins,
-    credentials: true,
-    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Share-Delete-Token', 'X-Request-ID', 'X-Anonymous-ID', 'X-Release-Gate-Token'],
-    exposeHeaders: ['Content-Length', 'X-Request-ID'],
-    maxAge: 600,
-  }))
-  app.route('/api/health', health)
-  app.route('/api/generate', generate)
-  app.route('/api/providers', providers)
-  app.route('/api/shares', shares)
-  app.route('/api/auth', auth)
-  app.route('/api/projects', projects)
-  app.route('/api/engineering-projects', engineeringProjects)
-  app.route('/api/runs', runs)
-  app.route('/api/delivery', delivery)
-  app.route('/api/quota', quota)
-  app.route('/api/publications', publications)
-  app.route('/api/brand-kits', brandKits)
-  app.route('/api/brand-assets', brandAssets)
-  app.route('/api/templates', templates)
-  app.route('/api/features', features)
-  app.route('/api/onboarding', onboarding)
-  app.route('/api/feedback', feedback)
-  app.route('/api/admin/health', adminStorageHealth)
-  app.route('/api/admin', adminOperations)
-  app.route('/api/admin', admin)
-  app.route('/preview', preview)
-  app.route('/s', sharePage)
-  app.route('/site', sitePage)
-  app.get('*', async (c, next) => {
-    const response = await serveSiteFromHost(c)
-    if (response) return response
-    await next()
-  })
-  app.notFound((c) => c.json(errorBody('NOT_FOUND', `路径不存在:${c.req.method} ${c.req.path}`), 404))
-  app.onError((err, c) => {
-    if (err instanceof HTTPException) return c.json(errorBody(`HTTP_${err.status}`, err.message), err.status)
-    console.error('[server] 未捕获异常:', err)
-    return c.json(errorBody('INTERNAL_ERROR', '服务器内部错误'), 500)
-  })
-  return app
-}
+import sitePage,{serveSiteFromHost} from './routes/site-page'
+export function createApp(){const app=new Hono();app.use('*',requestTelemetryMiddleware);app.use('*',logger());app.use('/api/*',cors({origin:env.corsOrigins,credentials:true,allowMethods:['GET','POST','PUT','PATCH','DELETE','OPTIONS'],allowHeaders:['Content-Type','Authorization','X-Share-Delete-Token','X-Request-ID','X-Anonymous-ID','X-Release-Gate-Token'],exposeHeaders:['Content-Length','X-Request-ID','Retry-After'],maxAge:600}));app.route('/api/health',health);app.route('/api/generate',generate);app.route('/api/providers',providers);app.route('/api/shares',shares);app.use('/api/auth/request-code',requestCodeRateLimit);app.use('/api/auth/verify',verifyCodeRateLimit);app.route('/api/auth',auth);app.route('/api/projects',projects);app.route('/api/engineering-projects',engineeringProjects);app.route('/api/runs',runs);app.route('/api/delivery',delivery);app.route('/api/quota',quota);app.route('/api/publications',publications);app.route('/api/brand-kits',brandKits);app.route('/api/brand-assets',brandAssets);app.route('/api/templates',templates);app.route('/api/features',features);app.route('/api/onboarding',onboarding);app.route('/api/feedback',feedback);app.route('/api/admin/health',adminStorageHealth);app.route('/api/admin',adminOperations);app.route('/api/admin',admin);app.route('/preview',preview);app.route('/s',sharePage);app.route('/site',sitePage);app.get('*',async(c,next)=>{const response=await serveSiteFromHost(c);if(response)return response;await next()});app.notFound((c)=>c.json(errorBody('NOT_FOUND',`路径不存在:${c.req.method} ${c.req.path}`),404));app.onError((err,c)=>{if(err instanceof HTTPException)return c.json(errorBody(`HTTP_${err.status}`,err.message),err.status);console.error('[server] 未捕获异常:',err);return c.json(errorBody('INTERNAL_ERROR','服务器内部错误'),500)});return app}
