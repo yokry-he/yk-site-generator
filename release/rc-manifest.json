@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "candidateVersion": "0.1.0-rc.1",
+  "maximumEvidenceAgeHours": 24,
+  "allowedSources": ["github-actions", "isolated-runner"],
+  "requiredGates": [
+    "docs",
+    "integrity",
+    "security",
+    "typecheck",
+    "build",
+    "unit",
+    "bundle",
+    "mysql",
+    "browser",
+    "accessibility",
+    "visual",
+    "redis-multi-instance",
+    "runner-images",
+    "golden-runtime:hono-drizzle-sqlite",
+    "golden-runtime:nestjs-prisma-postgresql",
+    "golden-runtime:fastapi-sqlalchemy-postgresql",
+    "golden-runtime:spring-boot-jpa-postgresql",
+    "golden-runtime:gin-gorm-postgresql"
+  ]
+}

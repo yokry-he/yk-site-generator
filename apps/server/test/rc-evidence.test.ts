@@ -1,0 +1,3 @@
+import { describe,expect,it } from 'vitest'
+import { signRcEvidence,verifyRcEvidence,type RcEvidencePayload } from '../../../scripts/lib/rc-evidence'
+describe('RC signed evidence',()=>{it('rejects body and commit changes',()=>{const key='rc-evidence-signing-key-2026-change-me';const row:RcEvidencePayload={schemaVersion:1,candidateVersion:'0.1.0-rc.1',gate:'build',status:'passed',trusted:true,source:'github-actions',commit:'a'.repeat(40),runId:'1',observedAt:new Date().toISOString()};const signed={...row,signature:signRcEvidence(row,key)};expect(verifyRcEvidence(signed,key)).toBe(true);expect(verifyRcEvidence({...signed,commit:'b'.repeat(40)},key)).toBe(false)})})
