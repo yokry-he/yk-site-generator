@@ -32,13 +32,6 @@ jobs:
           --health-interval=5s --health-timeout=5s --health-retries=20
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 11 }
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
       - uses: actions/setup-python@v5
         with: { python-version: '3.14' }
       - uses: actions/setup-java@v4
@@ -47,16 +40,11 @@ jobs:
         with: { go-version: '1.25.x', cache: false }
       - name: Install host tools
         run: sudo apt-get update && sudo apt-get install -y postgresql-client && python -m pip install uv
-      - name: Fetch and install repository dependencies
-        run: node scripts/install-rc-dependencies.mjs --mode=all
-      - name: Upload dependency diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
+      - uses: ./.github/actions/rc-node-bootstrap
         with:
-          name: rc-matrix-dependencies-${{ matrix.project }}
-          path: artifacts/rc-dependencies
-          if-no-files-found: warn
-          retention-days: 14
+          preflight-profile: release
+          dependency-mode: all
+          artifact-name: "rc-bootstrap-golden-${{ matrix.project }}"
       - name: Materialize Golden Projects
         run: pnpm rc:golden
       - name: Execute selected runtime matrix
