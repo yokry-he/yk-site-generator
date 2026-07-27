@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "RC Runner Images workflow",
+  "images": [
+    { "stack": "hono-drizzle", "reference": "ghcr.io/example/siteforge-runner-hono-drizzle@sha256:REPLACE" },
+    { "stack": "nestjs-prisma", "reference": "ghcr.io/example/siteforge-runner-nestjs-prisma@sha256:REPLACE" },
+    { "stack": "fastapi-sqlalchemy", "reference": "ghcr.io/example/siteforge-runner-fastapi-sqlalchemy@sha256:REPLACE" },
+    { "stack": "spring-boot-jpa", "reference": "ghcr.io/example/siteforge-runner-spring-boot-jpa@sha256:REPLACE" },
+    { "stack": "gin-gorm", "reference": "ghcr.io/example/siteforge-runner-gin-gorm@sha256:REPLACE" }
+  ]
+}

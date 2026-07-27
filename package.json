@@ -14,7 +14,9 @@
     "rc:golden": "pnpm --filter web exec tsx ../../scripts/generate-golden-projects.ts --check",
     "rc:golden:update": "pnpm --filter web exec tsx ../../scripts/generate-golden-projects.ts --write",
     "rc:matrix:plan": "pnpm --filter web exec tsx ../../scripts/run-golden-matrix.ts --plan",
-    "rc:matrix": "pnpm --filter web exec tsx ../../scripts/run-golden-matrix.ts --execute"
+    "rc:matrix": "pnpm --filter web exec tsx ../../scripts/run-golden-matrix.ts --execute",
+    "runner:images:validate": "pnpm --filter web exec tsx ../../scripts/validate-runner-images.ts",
+    "runner:cleanup": "pnpm --filter web exec tsx ../../scripts/cleanup-runner-containers.ts"
   },
   "engines": { "node": ">=20", "pnpm": ">=9" }
 }
