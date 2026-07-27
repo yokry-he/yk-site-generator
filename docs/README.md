@@ -20,6 +20,7 @@
 - [`RC_DEPENDENCY_BOOTSTRAP.md`](./RC_DEPENDENCY_BOOTSTRAP.md)：依赖获取、离线安装与失败分类
 - [`RC_WORKFLOW_BOOTSTRAP.md`](./RC_WORKFLOW_BOOTSTRAP.md)：共享 Node/pnpm Workflow Bootstrap 与漂移门禁
 - [`RC_DIAGNOSTIC_TRIAGE.md`](./RC_DIAGNOSTIC_TRIAGE.md)：跨 Gate 诊断聚合与修复优先级
+- [`RC_WORKSTATION.md`](./RC_WORKSTATION.md)：可复现容器工具链、数据库与本地 RC 门禁
 
 行为变化必须同时更新完整中文和英文内容；示例只使用占位 Secret。
 
@@ -41,5 +42,6 @@ Existing product documentation remains available. v0.1.0 RC stabilization guides
 - [`RC_DEPENDENCY_BOOTSTRAP.md`](./RC_DEPENDENCY_BOOTSTRAP.md): dependency fetching, offline installation, and failure classification
 - [`RC_WORKFLOW_BOOTSTRAP.md`](./RC_WORKFLOW_BOOTSTRAP.md): shared Node/pnpm Workflow Bootstrap and drift enforcement
 - [`RC_DIAGNOSTIC_TRIAGE.md`](./RC_DIAGNOSTIC_TRIAGE.md): cross-gate diagnostic aggregation and remediation priority
+- [`RC_WORKSTATION.md`](./RC_WORKSTATION.md): reproducible container toolchains, databases, and local RC gates
 
 Ship behavior changes with complete Chinese and English documentation; examples use placeholder secrets only.
