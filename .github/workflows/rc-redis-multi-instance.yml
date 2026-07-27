@@ -18,23 +18,11 @@ jobs:
           --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=5s --health-retries=20
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 11 }
-      - uses: actions/setup-node@v4
+      - uses: ./.github/actions/rc-node-bootstrap
         with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-      - name: Fetch and install repository dependencies
-        run: node scripts/install-rc-dependencies.mjs --mode=all
-      - name: Upload dependency diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: rc-redis-dependencies
-          path: artifacts/rc-dependencies
-          if-no-files-found: warn
-          retention-days: 14
+          preflight-profile: core
+          dependency-mode: all
+          artifact-name: rc-bootstrap-redis
       - run: pnpm --filter server build
       - name: Start two API instances sharing Redis
         env:
