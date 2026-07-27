@@ -14,6 +14,10 @@
     "rc:preflight": "node --test scripts/rc-preflight.test.mjs && node scripts/rc-preflight.mjs --profile=core",
     "rc:preflight:full": "node --test scripts/rc-preflight.test.mjs && node scripts/rc-preflight.mjs --profile=full",
     "rc:preflight:release": "node --test scripts/rc-preflight.test.mjs && node scripts/rc-preflight.mjs --profile=release",
+    "rc:deps": "node --test scripts/rc-dependencies.test.mjs && node scripts/install-rc-dependencies.mjs --mode=all",
+    "rc:deps:fetch": "node --test scripts/rc-dependencies.test.mjs && node scripts/install-rc-dependencies.mjs --mode=fetch",
+    "rc:deps:install": "node --test scripts/rc-dependencies.test.mjs && node scripts/install-rc-dependencies.mjs --mode=install",
+    "rc:deps:plan": "node scripts/install-rc-dependencies.mjs --mode=all --plan",
     "rc:audit": "pnpm --filter web exec tsx ../../scripts/check-manual-scaffold-integrity.ts",
     "rc:security": "pnpm --filter web exec tsx ../../scripts/security-audit.ts",
     "rc:golden": "pnpm --filter web exec tsx ../../scripts/generate-golden-projects.ts --check",
@@ -30,5 +34,8 @@
     "runner:images:validate": "pnpm --filter web exec tsx ../../scripts/validate-runner-images.ts",
     "runner:cleanup": "pnpm --filter web exec tsx ../../scripts/cleanup-runner-containers.ts"
   },
-  "engines": { "node": ">=20", "pnpm": ">=11 <12" }
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=11 <12"
+  }
 }
