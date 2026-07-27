@@ -51,6 +51,13 @@ jobs:
           pnpm --filter web e2e:iterate
       - name: 前端历史恢复 E2E
         run: pnpm --filter web e2e:history
+      - name: 聚合 Build/Test 诊断
+        if: always()
+        uses: ./.github/actions/rc-diagnostic-triage
+        with:
+          scope: ci-build-test
+          artifact-name: rc-triage-ci-build-test
+          external-status: ${{ job.status }}
 
   browser-quality:
     name: playwright-browser-quality
@@ -77,6 +84,13 @@ jobs:
             apps/web/test-results
           if-no-files-found: ignore
           retention-days: 7
+      - name: 聚合浏览器诊断
+        if: always()
+        uses: ./.github/actions/rc-diagnostic-triage
+        with:
+          scope: ci-browser-quality
+          artifact-name: rc-triage-ci-browser-quality
+          external-status: ${{ job.status }}
 
   mysql-integration:
     name: mysql-8-integration
@@ -109,3 +123,10 @@ jobs:
           MYSQL_SSL_MODE: disabled
           AUTH_JWT_SECRET: mysql-ci-auth-secret-change-before-production-2026
         run: pnpm db:mysql:ci
+      - name: 聚合 MySQL 诊断
+        if: always()
+        uses: ./.github/actions/rc-diagnostic-triage
+        with:
+          scope: ci-mysql
+          artifact-name: rc-triage-ci-mysql
+          external-status: ${{ job.status }}
