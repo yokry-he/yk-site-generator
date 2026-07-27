@@ -19,8 +19,15 @@
     "rc:redis": "pnpm --filter web exec tsx ../../scripts/redis-multi-instance-smoke.ts",
     "rc:evidence": "pnpm --filter web exec tsx ../../scripts/write-rc-evidence.ts",
     "rc:prepare": "pnpm --filter web exec tsx ../../scripts/prepare-rc-release.ts",
+    "rc:gates": "pnpm --filter web exec tsx ../../scripts/run-rc-gates.ts",
+    "rc:gates:core": "pnpm --filter web exec tsx ../../scripts/run-rc-gates.ts --profile=core",
+    "rc:gates:full": "pnpm --filter web exec tsx ../../scripts/run-rc-gates.ts --profile=full",
+    "rc:gates:plan": "pnpm --filter web exec tsx ../../scripts/run-rc-gates.ts --profile=core --plan",
     "runner:images:validate": "pnpm --filter web exec tsx ../../scripts/validate-runner-images.ts",
     "runner:cleanup": "pnpm --filter web exec tsx ../../scripts/cleanup-runner-containers.ts"
   },
-  "engines": { "node": ">=20", "pnpm": ">=9" }
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  }
 }

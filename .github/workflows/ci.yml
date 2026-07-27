@@ -16,50 +16,18 @@ jobs:
         with: { node-version: 24, cache: pnpm }
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
-      - name: Lint
-        run: pnpm lint
-      - name: 双语文档检查 / Bilingual docs
-        run: pnpm docs:check
-      - name: RC 生成链路完整性审计
-        run: pnpm rc:audit
-      - name: RC 安全审计
-        run: pnpm rc:security
-      - name: Golden Project 物化
-        run: pnpm rc:golden
-      - name: Runner 镜像策略
-        run: pnpm runner:images:validate
-      - name: Typecheck
-        shell: bash
-        run: |
-          set -o pipefail
-          pnpm typecheck 2>&1 | tee typecheck.log
-      - name: 上传类型检查诊断
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with: { name: typecheck-log, path: typecheck.log, retention-days: 7 }
-      - name: Build(web + server + shared)
-        run: pnpm build
-      - name: Web bundle 性能预算
-        run: pnpm --filter web check:bundle-budget
-      - name: Prompt 质量评测管线自检
-        run: pnpm --filter prompts eval:quality -- --dry-run --runs 1 --report ../../artifacts/prompt-eval.json
-      - name: 全仓单元测试
-        shell: bash
-        run: |
-          set -o pipefail
-          pnpm test 2>&1 | tee test.log
-      - name: 上传 RC 静态报告
+      - name: RC 核心门禁 / RC core gates
+        run: pnpm rc:gates:core
+      - name: 上传 RC 门禁诊断
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rc-static-reports
-          path: artifacts
+          name: rc-gate-diagnostics
+          path: |
+            artifacts/rc-gates
+            artifacts/prompt-eval.json
           if-no-files-found: warn
           retention-days: 14
-      - name: 上传单元测试诊断
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with: { name: test-log, path: test.log, retention-days: 7 }
       - name: 真实生成与迭代 E2E
         shell: bash
         env:
@@ -81,6 +49,14 @@ jobs:
           export E2E_ENDPOINT=http://127.0.0.1:8787/api/generate
           pnpm --filter web e2e
           pnpm --filter web e2e:iterate
+      - name: 上传真实 E2E 服务端日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-e2e-log
+          path: server-e2e.log
+          if-no-files-found: ignore
+          retention-days: 7
       - name: 前端历史恢复 E2E
         run: pnpm --filter web e2e:history
 

@@ -7,6 +7,7 @@
 核心产品文档保留现有入口。v0.1.0 RC 稳定化文档：
 
 - [`RC_INTEGRITY_AUDIT.md`](./RC_INTEGRITY_AUDIT.md)：生成链路完整性
+- [`RC_GATE_RUNNER.md`](./RC_GATE_RUNNER.md)：全仓门禁执行、脱敏日志和诊断汇总
 - [`RC_GOLDEN_PROJECTS.md`](./RC_GOLDEN_PROJECTS.md)：五套 Golden Project
 - [`RC_RUNTIME_MATRIX.md`](./RC_RUNTIME_MATRIX.md)：真实数据库与运行矩阵
 - [`RC_ENGINEERING_WORKSPACE.md`](./RC_ENGINEERING_WORKSPACE.md)：统一工程工作区
@@ -23,6 +24,7 @@
 Existing product documentation remains available. v0.1.0 RC stabilization guides:
 
 - [`RC_INTEGRITY_AUDIT.md`](./RC_INTEGRITY_AUDIT.md): generation-pipeline integrity
+- [`RC_GATE_RUNNER.md`](./RC_GATE_RUNNER.md): repository gates, redacted logs, and diagnostic summaries
 - [`RC_GOLDEN_PROJECTS.md`](./RC_GOLDEN_PROJECTS.md): five Golden Projects
 - [`RC_RUNTIME_MATRIX.md`](./RC_RUNTIME_MATRIX.md): real database and runtime matrix
 - [`RC_ENGINEERING_WORKSPACE.md`](./RC_ENGINEERING_WORKSPACE.md): unified engineering workspace
