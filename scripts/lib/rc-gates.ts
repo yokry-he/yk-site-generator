@@ -10,6 +10,7 @@ export interface RcGateDefinition {
 }
 
 export const RC_GATE_DEFINITIONS: readonly RcGateDefinition[] = [
+  { id: 'preflight', label: 'RC environment preflight', command: 'pnpm', args: ['rc:preflight'], profiles: ['core', 'full'] },
   { id: 'lint', label: 'Lint', command: 'pnpm', args: ['lint'], profiles: ['core', 'full'] },
   { id: 'docs', label: 'Bilingual docs', command: 'pnpm', args: ['docs:check'], profiles: ['core', 'full'] },
   { id: 'integrity', label: 'RC scaffold integrity', command: 'pnpm', args: ['rc:audit'], profiles: ['core', 'full'] },

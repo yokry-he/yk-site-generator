@@ -10,10 +10,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 11 }
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
+      - uses: pnpm/action-setup@v4
+        with: { version: 11 }
+      - name: RC 环境预检 / RC environment preflight
+        run: node scripts/rc-preflight.mjs --profile=core
+      - name: 上传 RC 环境预检
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc-environment-preflight
+          path: artifacts/rc-preflight
+          if-no-files-found: warn
+          retention-days: 14
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
       - name: RC 核心门禁 / RC core gates
@@ -49,14 +59,6 @@ jobs:
           export E2E_ENDPOINT=http://127.0.0.1:8787/api/generate
           pnpm --filter web e2e
           pnpm --filter web e2e:iterate
-      - name: 上传真实 E2E 服务端日志
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: server-e2e-log
-          path: server-e2e.log
-          if-no-files-found: ignore
-          retention-days: 7
       - name: 前端历史恢复 E2E
         run: pnpm --filter web e2e:history
 
@@ -66,10 +68,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 11 }
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
+      - uses: pnpm/action-setup@v4
+        with: { version: 11 }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter web exec playwright install --with-deps chromium
       - name: 浏览器交互与无障碍 E2E
@@ -103,10 +105,10 @@ jobs:
           --health-interval=5s --health-timeout=5s --health-retries=20
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 11 }
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
+      - uses: pnpm/action-setup@v4
+        with: { version: 11 }
       - run: pnpm install --frozen-lockfile
       - name: MySQL migration + 事务并发 + 回滚
         working-directory: apps/server
