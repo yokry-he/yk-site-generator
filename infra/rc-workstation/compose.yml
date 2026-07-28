@@ -18,6 +18,12 @@ services:
       DATABASE_URL: postgresql://siteforge:siteforge-local@postgres:5432/siteforge
       MYSQL_URL: mysql://siteforge:siteforge-local@mysql:3306/siteforge
       REDIS_URL: redis://redis:6379/0
+      RC_POSTGRES_HOST: postgres
+      RC_POSTGRES_PORT: "5432"
+      RC_POSTGRES_USER: siteforge
+      RC_POSTGRES_PASSWORD: siteforge-local
+      RC_POSTGRES_ADMIN_DATABASE: postgres
+      RC_POSTGRES_DATABASE_PREFIX: sf_
     volumes:
       - ../..:/workspace
       - pnpm-store:/home/siteforge/.local/share/pnpm/store
