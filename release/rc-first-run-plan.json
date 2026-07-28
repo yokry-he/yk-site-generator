@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "candidateVersion": "0.1.0-rc.1",
+  "requiredBranch": "Feature-dev-v0.1.0",
+  "maximumRunAgeHours": 48,
+  "alwaysRun": [
+    "triage",
+    "services-down"
+  ],
+  "profiles": {
+    "core": [
+      "contract",
+      "workstation-build",
+      "workstation-fingerprint",
+      "services-up",
+      "dependencies",
+      "core-gates",
+      "triage",
+      "services-down"
+    ],
+    "full": [
+      "contract",
+      "workstation-build",
+      "workstation-fingerprint",
+      "services-up",
+      "dependencies",
+      "core-gates",
+      "full-gates",
+      "triage",
+      "services-down"
+    ],
+    "release": [
+      "contract",
+      "workstation-build",
+      "workstation-fingerprint",
+      "services-up",
+      "dependencies",
+      "core-gates",
+      "mysql",
+      "redis",
+      "golden:hono-drizzle-sqlite",
+      "golden:nestjs-prisma-postgresql",
+      "golden:fastapi-sqlalchemy-postgresql",
+      "golden:spring-boot-jpa-postgresql",
+      "golden:gin-gorm-postgresql",
+      "full-gates",
+      "triage",
+      "services-down"
+    ]
+  }
+}
