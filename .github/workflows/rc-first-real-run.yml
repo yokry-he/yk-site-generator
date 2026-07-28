@@ -53,6 +53,7 @@ jobs:
         if: always()
         with:
           source-root: artifacts
+          exclude: rc-first-run
           scope: rc-first-real-run
           external-status: "rc-first-real-run:${{ job.status }}"
           artifact-name: rc-first-real-run-triage
