@@ -1,5 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { rcTriageShouldFail, renderRcTriageMarkdown, triageRcDiagnostics } from './lib/rc-triage.mjs'
 
 const dependencyReport = {
@@ -58,11 +62,7 @@ test('workflow bootstrap drift is P0 and duplicate reports are deduplicated', ()
 })
 
 test('external failed jobs become blocking P1 findings', () => {
-  const report = triageRcDiagnostics({
-    reports: [],
-    allowMissing: true,
-    externalStatuses: [{ scope: 'mysql-integration', status: 'failure' }],
-  })
+  const report = triageRcDiagnostics({ reports: [], allowMissing: true, externalStatuses: [{ scope: 'mysql-integration', status: 'failure' }] })
   assert.equal(report.findings.some((item) => item.code === 'WORKFLOW_JOB_FAILURE' && item.priority === 'P1'), true)
   assert.equal(report.findings.some((item) => item.code === 'RC_DIAGNOSTICS_NOT_FOUND' && item.priority === 'P3'), true)
   assert.equal(report.status, 'blocked')
@@ -86,4 +86,34 @@ test('failure thresholds and markdown are stable', () => {
   assert.match(markdown, /RC Diagnostic Triage/)
   assert.match(markdown, /abc123/)
   assert.match(markdown, /RC_GATE_SECURITY_FAILED/)
+})
+
+test('CLI excludes first-run state from diagnostic discovery', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'siteforge-triage-'))
+  try {
+    const artifacts = join(directory, 'artifacts')
+    const firstRun = join(artifacts, 'rc-first-run')
+    const gates = join(artifacts, 'rc-gates')
+    const report = join(directory, 'report')
+    mkdirSync(firstRun, { recursive: true })
+    mkdirSync(gates, { recursive: true })
+    writeFileSync(join(firstRun, 'latest.json'), JSON.stringify({ status: 'failed', message: 'stale run state' }))
+    writeFileSync(join(gates, 'latest.json'), JSON.stringify(gateReport.data))
+    const result = spawnSync(process.execPath, [
+      'scripts/rc-triage.mjs',
+      `--source-root=${artifacts}`,
+      `--report-dir=${report}`,
+      '--scope=test',
+      '--allow-missing',
+      '--fail-on=never',
+      '--exclude=rc-first-run',
+    ], { encoding: 'utf8' })
+    assert.equal(result.status, 0, result.stderr || result.stdout)
+    const output = JSON.parse(readFileSync(join(report, 'latest.json'), 'utf8'))
+    assert.equal(output.reportCount, 1)
+    assert.deepEqual(output.excludedRoots, [firstRun.replace(/\\/g, '/')])
+    assert.equal(output.findings.some((item) => item.message?.includes('stale run state')), false)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
 })
