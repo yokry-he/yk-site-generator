@@ -173,7 +173,8 @@ export function firstRunStageCommand(id, { runId = 'plan', profile = 'release', 
     }
   }
   if (id === 'redis') {
-    const script = `${common}; pnpm --filter server build; PORT=8787 DATA_STORAGE_FILE=.data/first-run-redis-a.json node apps/server/dist/index.js > "${runtimeDirectory}/redis-a.log" 2>&1 & a=$!; PORT=8788 DATA_STORAGE_FILE=.data/first-run-redis-b.json node apps/server/dist/index.js > "${runtimeDirectory}/redis-b.log" 2>&1 & b=$!; cleanup(){ kill "$a" "$b" 2>/dev/null || true; }; trap cleanup EXIT; for port in 8787 8788; do for attempt in $(seq 1 45); do curl -fsS "http://127.0.0.1:${port}/api/health/live" >/dev/null && break; kill -0 "$a" 2>/dev/null && kill -0 "$b" 2>/dev/null || exit 1; test "$attempt" -lt 45 || exit 1; sleep 1; done; done; pnpm rc:redis`
+    const authEnvironment = 'NODE_ENV=development AUTH_DISTRIBUTED_LIMIT_DRIVER=redis AUTH_RATE_LIMIT_FAIL_MODE=closed AUTH_MAX_VERIFY_FAILURES=3 AUTH_JWT_SECRET=first-run-redis-jwt-secret-2026 AUTH_RATE_LIMIT_HASH_KEY=first-run-redis-hash-secret-2026'
+    const script = `${common}; pnpm --filter server build; ${authEnvironment} PORT=8787 DATA_STORAGE_FILE=.data/first-run-redis-a.json node apps/server/dist/index.js > "${runtimeDirectory}/redis-a.log" 2>&1 & a=$!; ${authEnvironment} PORT=8788 DATA_STORAGE_FILE=.data/first-run-redis-b.json node apps/server/dist/index.js > "${runtimeDirectory}/redis-b.log" 2>&1 & b=$!; cleanup(){ kill "$a" "$b" 2>/dev/null || true; }; trap cleanup EXIT; for port in 8787 8788; do for attempt in $(seq 1 45); do curl -fsS "http://127.0.0.1:${port}/api/health/live" >/dev/null && break; kill -0 "$a" 2>/dev/null && kill -0 "$b" 2>/dev/null || exit 1; test "$attempt" -lt 45 || exit 1; sleep 1; done; done; pnpm rc:redis`
     return { ...workstationShell(script, runId), timeoutMinutes: 30 }
   }
   if (id.startsWith('golden:')) {
