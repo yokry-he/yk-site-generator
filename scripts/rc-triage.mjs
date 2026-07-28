@@ -10,8 +10,7 @@ const valuesOf = (name) => args.filter((item) => item.startsWith(`--${name}=`)).
 const valueOf = (name, fallback = '') => valuesOf(name).at(-1) ?? fallback
 const booleanOf = (name, fallback = false) => {
   if (args.includes(`--${name}`)) return true
-  const value = valueOf(name, String(fallback)).toLowerCase()
-  return ['1', 'true', 'yes', 'on'].includes(value)
+  return ['1', 'true', 'yes', 'on'].includes(valueOf(name, String(fallback)).toLowerCase())
 }
 
 const sourceRoot = resolve(root, valueOf('source-root', 'artifacts'))
@@ -20,6 +19,7 @@ const allowMissing = booleanOf('allow-missing', false)
 const failOn = valueOf('fail-on', 'blocking')
 const scope = valueOf('scope', 'repository')
 const planOnly = args.includes('--plan')
+const excludedRoots = valuesOf('exclude').map((item) => resolve(sourceRoot, item.replace(/^\/+/, '')))
 const externalStatuses = valuesOf('external-status').map((entry) => {
   const separator = entry.lastIndexOf(':')
   return separator === -1 ? { scope: entry, status: 'unknown' } : { scope: entry.slice(0, separator), status: entry.slice(separator + 1) }
@@ -28,23 +28,22 @@ const externalStatuses = valuesOf('external-status').map((entry) => {
 function relativePath(path) {
   return relative(root, path).replace(/\\/g, '/')
 }
-
+function excluded(path) {
+  return excludedRoots.some((item) => path === item || path.startsWith(`${item}/`))
+}
 async function walk(directory, output = []) {
-  if (!existsSync(directory)) return output
+  if (!existsSync(directory) || excluded(directory)) return output
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const target = resolve(directory, entry.name)
-    if (target === reportRoot || target.startsWith(`${reportRoot}/`)) continue
+    if (target === reportRoot || target.startsWith(`${reportRoot}/`) || excluded(target)) continue
     if (entry.isDirectory()) await walk(target, output)
     else if (entry.isFile() && entry.name.endsWith('.json')) output.push(target)
   }
   return output
 }
-
 function diagnosticCandidate(path) {
-  const name = path.toLowerCase()
-  return /(?:latest|summary|report|result|security-audit)\.json$/.test(name)
+  return /(?:latest|summary|report|result|security-audit)\.json$/.test(path.toLowerCase())
 }
-
 async function discoverReports() {
   const paths = (await walk(sourceRoot)).filter(diagnosticCandidate).sort()
   const reports = []
@@ -52,15 +51,11 @@ async function discoverReports() {
     try {
       reports.push({ path: relativePath(path), data: JSON.parse(await readFile(path, 'utf8')) })
     } catch (error) {
-      reports.push({
-        path: relativePath(path),
-        data: { ok: false, status: 'failed', message: error instanceof Error ? error.message : String(error) },
-      })
+      reports.push({ path: relativePath(path), data: { ok: false, status: 'failed', message: error instanceof Error ? error.message : String(error) } })
     }
   }
   return reports
 }
-
 async function writeReport(report, reports, startedAt) {
   const finishedAt = new Date().toISOString()
   const metadata = {
@@ -72,6 +67,7 @@ async function writeReport(report, reports, startedAt) {
     finishedAt,
     durationMs: Date.parse(finishedAt) - Date.parse(startedAt),
     sourceRoot: relativePath(sourceRoot),
+    excludedRoots: excludedRoots.map(relativePath),
     reportCount: reports.length,
     externalStatuses,
   }
@@ -87,7 +83,6 @@ async function writeReport(report, reports, startedAt) {
     writeFile(resolve(reportRoot, 'latest.md'), markdown, { mode: 0o600 }),
   ])
   if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, `${markdown}\n`, 'utf8')
-  return { output, markdown }
 }
 
 console.log(`RC diagnostic triage · scope=${scope}`)
@@ -95,6 +90,7 @@ console.log(`- source: ${relativePath(sourceRoot)}`)
 console.log(`- report: ${relativePath(reportRoot)}`)
 console.log(`- allow missing: ${allowMissing}`)
 console.log(`- fail on: ${failOn}`)
+for (const item of excludedRoots) console.log(`- exclude: ${relativePath(item)}`)
 for (const item of externalStatuses) console.log(`- external: ${item.scope}=${item.status}`)
 if (planOnly) process.exit(0)
 
