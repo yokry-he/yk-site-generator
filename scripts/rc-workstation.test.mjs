@@ -21,6 +21,13 @@ test('workstation policy rejects host exposure and privileged mode', () => {
   assert.ok(issues.some((issue) => issue.code === 'WORKSTATION_PUBLISHED_PORT'))
 })
 
+test('workstation policy rejects dangerous or incomplete capability additions', () => {
+  const dangerous = validateWorkstationText({ ...fixture, compose: `${fixture.compose}\n    cap_add: [SYS_ADMIN]\n` })
+  assert.ok(dangerous.some((issue) => issue.code === 'WORKSTATION_DANGEROUS_CAPABILITY'))
+  const incomplete = validateWorkstationText({ ...fixture, compose: fixture.compose.replace('cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]', 'cap_add: [CHOWN]') })
+  assert.ok(incomplete.some((issue) => issue.code === 'WORKSTATION_DATABASE_CAPABILITIES_INVALID'))
+})
+
 test('workstation policy rejects image-lock drift', () => {
   const lock = JSON.stringify({ schemaVersion: 1, images: { runtime: 'example.invalid/runtime:1' } })
   assert.ok(validateWorkstationText({ ...fixture, lock }).some((issue) => issue.code === 'WORKSTATION_IMAGE_LOCK_DRIFT'))
