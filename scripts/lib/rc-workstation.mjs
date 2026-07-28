@@ -66,7 +66,18 @@ export function validateWorkstationText({ dockerfile, compose, lock }) {
   for (const volume of REQUIRED_VOLUMES) {
     if (!new RegExp(`^  ${volume}:`, 'm').test(String(compose))) issues.push(finding('WORKSTATION_VOLUME_MISSING', WORKSTATION_PATHS.compose, `Named volume ${volume} is missing`))
   }
-  for (const token of ['../..:/workspace', 'rc-internal', 'rc-egress', 'condition: service_healthy', 'PLAYWRIGHT_BROWSERS_PATH: /ms-playwright']) {
+  for (const token of [
+    '../..:/workspace',
+    'rc-internal',
+    'rc-egress',
+    'condition: service_healthy',
+    'PLAYWRIGHT_BROWSERS_PATH: /ms-playwright',
+    'RC_POSTGRES_HOST: postgres',
+    'RC_POSTGRES_PORT: "5432"',
+    'RC_POSTGRES_USER: siteforge',
+    'RC_POSTGRES_PASSWORD: siteforge-local',
+    'RC_POSTGRES_ADMIN_DATABASE: postgres',
+  ]) {
     if (!String(compose).includes(token)) issues.push(finding('WORKSTATION_COMPOSE_POLICY', WORKSTATION_PATHS.compose, `Compose is missing ${token}`))
   }
   return issues
