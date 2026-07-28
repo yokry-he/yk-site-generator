@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 export const WORKSPACE_REQUIREMENTS = Object.freeze({
-  'package.json': ['lint', 'docs:check', 'rc:preflight', 'rc:deps', 'rc:workflow-bootstrap', 'rc:triage:test', 'rc:triage', 'rc:workstation:validate', 'rc:first-run:test', 'rc:first-run:release', 'rc:audit', 'rc:security', 'rc:golden', 'runner:images:validate', 'typecheck', 'build', 'test'],
+  'package.json': ['lint', 'docs:check', 'rc:preflight', 'rc:deps', 'rc:workflow-bootstrap', 'rc:triage:test', 'rc:triage', 'rc:workstation:validate', 'rc:first-run:test', 'rc:first-run:verify', 'rc:first-run:release', 'rc:audit', 'rc:security', 'rc:golden', 'runner:images:validate', 'typecheck', 'build', 'test'],
   'apps/web/package.json': ['build', 'typecheck', 'test', 'e2e:history', 'e2e:browser', 'e2e:visual', 'check:bundle-budget'],
   'apps/server/package.json': ['build', 'typecheck', 'test', 'db:mysql:ci'],
   'packages/shared/package.json': ['build', 'typecheck', 'test'],
@@ -30,8 +30,11 @@ export const REQUIRED_FILES = Object.freeze([
   'scripts/rc-workstation.mjs',
   'scripts/rc-workstation.test.mjs',
   'scripts/lib/rc-first-run.mjs',
+  'scripts/lib/rc-first-run-evidence.mjs',
   'scripts/rc-first-run.mjs',
+  'scripts/rc-first-run-evidence.mjs',
   'scripts/rc-first-run.test.mjs',
+  'scripts/rc-first-run-evidence.test.mjs',
   'scripts/run-golden-matrix.ts',
   'infra/rc-workstation/Dockerfile',
   'infra/rc-workstation/compose.yml',
@@ -40,6 +43,7 @@ export const REQUIRED_FILES = Object.freeze([
   'docs/RC_DIAGNOSTIC_TRIAGE.md',
   'docs/RC_WORKSTATION.md',
   'docs/RC_FIRST_REAL_RUN.md',
+  'docs/RC_FIRST_RUN_EVIDENCE.md',
   'release/rc-manifest.json',
   'fixtures/golden-projects/manifest.json',
 ])
