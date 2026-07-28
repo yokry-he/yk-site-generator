@@ -4,6 +4,7 @@ import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { redactDependencyOutput, secretValuesFromEnvironment } from './lib/rc-dependencies.mjs'
+import { sealFirstRunEvidence } from './lib/rc-first-run-evidence.mjs'
 import {
   applyFirstRunStageResult,
   createFirstRunState,
@@ -58,6 +59,7 @@ function render(state) {
     `- Commit: \`${state.commit}\``,
     `- Branch: \`${state.branch || '(detached)'}\``,
     `- Status: **${state.status}**`,
+    `- Evidence: \`${state.evidence?.status || 'pending'}\``,
     '',
     '| Stage | Status | Attempts | Duration | Log |',
     '| --- | --- | ---: | ---: | --- |',
@@ -67,6 +69,7 @@ function render(state) {
     lines.push(`| ${stage.id} | ${stage.status} | ${stage.attempts.length} | ${latest ? `${(latest.durationMs / 1000).toFixed(1)}s` : '-'} | ${latest?.logPath ? `\`${latest.logPath}\`` : '-'} |`)
   }
   lines.push('')
+  if (state.evidence?.manifestPath) lines.push(`Evidence manifest: \`${state.evidence.manifestPath}\``, '')
   return `${lines.join('\n')}\n`
 }
 
@@ -94,7 +97,7 @@ function lineSink(path) {
       stream.write(text)
       process.stdout.write(text)
     },
-    end() { stream.end() },
+    end() { return new Promise((resolvePromise) => stream.end(resolvePromise)) },
   }
 }
 
@@ -119,7 +122,7 @@ async function executeStage(id, context, logPath) {
   clearTimeout(timeout)
   activeChild = undefined
   if (outcome.error) sink.write(`\n${outcome.error}\n`)
-  sink.end()
+  await sink.end()
   return {
     status: outcome.exitCode === 0 ? 'passed' : interrupted ? 'interrupted' : 'failed',
     startedAt,
@@ -143,6 +146,8 @@ if (gitIssues.length) {
   for (const finding of gitIssues) console.error(`${finding.code}: ${finding.message}`)
   process.exit(1)
 }
+workstationEnvironment.CI_COMMIT_SHA = context.commit
+process.env.CI_COMMIT_SHA = context.commit
 const stageIds = firstRunStageIds(plan, profile)
 const previewRunId = `${context.commit.slice(0, 12)}-YYYYMMDDTHHMMSS`
 console.log(`RC first real run · profile=${profile} · commit=${context.commit}`)
@@ -197,7 +202,8 @@ try {
       stage.status = 'skipped'
       continue
     }
-    const logPath = resolve(logDirectory, `${id.replace(/[^a-z0-9.-]+/gi, '_')}.log`)
+    const attempt = stage.attempts.length + 1
+    const logPath = resolve(logDirectory, `${id.replace(/[^a-z0-9.-]+/gi, '_')}.attempt-${attempt}.log`)
     const result = await executeStage(id, { runId: state.runId, profile, externalStatus: failed ? 'failure' : 'success' }, logPath)
     applyFirstRunStageResult(state, id, result)
     if (result.status !== 'passed' && !always) failed = true
@@ -207,6 +213,20 @@ try {
   const cleanupFailed = state.stages.some((stage) => plan.alwaysRun.includes(stage.id) && stage.status === 'failed')
   state.status = interrupted ? 'interrupted' : requiredFailed || cleanupFailed ? 'failed' : 'passed'
   state.finishedAt = new Date().toISOString()
+  state.evidence = { status: 'sealing' }
+  await persist(state, runDirectory)
+  try {
+    const sealed = await sealFirstRunEvidence({ root, runDirectory, state })
+    state.evidence = {
+      status: 'sealed',
+      manifestPath: sealed.manifestPath,
+      checksumsPath: sealed.checksumsPath,
+      manifestSha256: sealed.manifestSha256,
+    }
+  } catch (error) {
+    state.status = 'failed'
+    state.evidence = { status: 'failed', error: error instanceof Error ? error.message : String(error) }
+  }
   await persist(state, runDirectory)
   console.log(`RC first real run status: ${state.status}`)
   console.log(`Report: ${relativePath(resolve(runDirectory, 'summary.md'))}`)
