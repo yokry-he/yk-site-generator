@@ -42,12 +42,18 @@ test('Git context enforces clean exact-commit runs', () => {
   assert.ok(validateGitContext({ ...context, dirty: true }, {}).some((item) => item.code === 'FIRST_RUN_WORKTREE_DIRTY'))
 })
 
-test('release plan commands use Workstation services and configurable golden runtime', () => {
+test('release plan commands use Workstation services and configured runtime dependencies', () => {
   const fingerprint = firstRunStageCommand('workstation-fingerprint', { runId: 'test' })
   assert.match(fingerprint.args.join(' '), /workstation-image\.json/)
   const mysql = firstRunStageCommand('mysql', { runId: 'test' })
   assert.equal(mysql.executable, 'docker')
   assert.match(mysql.args.join(' '), /db:mysql:ci/)
+  const redis = firstRunStageCommand('redis', { runId: 'test' })
+  const redisCommand = redis.args.join(' ')
+  assert.match(redisCommand, /AUTH_DISTRIBUTED_LIMIT_DRIVER=redis/)
+  assert.match(redisCommand, /AUTH_RATE_LIMIT_FAIL_MODE=closed/)
+  assert.match(redisCommand, /AUTH_MAX_VERIFY_FAILURES=3/)
+  assert.match(redisCommand, /AUTH_RATE_LIMIT_HASH_KEY=first-run-redis-hash-secret-2026/)
   const golden = firstRunStageCommand('golden:nestjs-prisma-postgresql', { runId: 'test' })
   assert.match(golden.args.join(' '), /rc:matrix --project nestjs-prisma-postgresql/)
 })
