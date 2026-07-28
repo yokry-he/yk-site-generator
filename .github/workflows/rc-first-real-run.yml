@@ -13,6 +13,8 @@ on:
         description: Exact commit SHA; defaults to the dispatched commit
         required: false
         type: string
+  pull_request:
+    types: [labeled]
 
 permissions:
   contents: read
@@ -23,12 +25,14 @@ concurrency:
 
 jobs:
   first-real-run:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.label.name == 'rc-first-run' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: ./.github/actions/rc-node-bootstrap
         with:
           preflight-profile: core
@@ -36,8 +40,9 @@ jobs:
           artifact-name: rc-first-real-run-bootstrap
       - name: Execute commit-bound first real run
         env:
-          EXPECTED_COMMIT: ${{ inputs.expected_commit || github.sha }}
-        run: node scripts/rc-first-run.mjs --profile="${{ inputs.profile }}" --expected-commit="${EXPECTED_COMMIT}" --allow-detached
+          RUN_PROFILE: ${{ inputs.profile || 'release' }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit || github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/rc-first-run.mjs --profile="${RUN_PROFILE}" --expected-commit="${EXPECTED_COMMIT}" --allow-detached
       - uses: ./.github/actions/rc-diagnostic-triage
         if: always()
         with:
@@ -50,7 +55,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rc-first-real-run-${{ inputs.profile }}-${{ github.sha }}
+          name: rc-first-real-run-${{ inputs.profile || 'release' }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             artifacts/rc-first-run
             artifacts/rc-preflight
