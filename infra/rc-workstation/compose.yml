@@ -63,6 +63,7 @@ services:
       - mysql-data:/var/lib/mysql
     networks: [rc-internal]
     cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     security_opt: ["no-new-privileges:true"]
     pids_limit: 512
     healthcheck:
@@ -81,6 +82,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
     networks: [rc-internal]
     cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     security_opt: ["no-new-privileges:true"]
     pids_limit: 512
     healthcheck:
@@ -96,6 +98,7 @@ services:
       - redis-data:/data
     networks: [rc-internal]
     cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     security_opt: ["no-new-privileges:true"]
     pids_limit: 256
     healthcheck:
