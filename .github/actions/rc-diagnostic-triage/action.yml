@@ -16,6 +16,10 @@ inputs:
     description: Root directory containing downloaded or locally produced diagnostic artifacts.
     required: false
     default: artifacts
+  exclude:
+    description: Comma-separated relative paths below source-root that must not be scanned.
+    required: false
+    default: ''
   allow-missing:
     description: Treat missing diagnostic JSON as advisory rather than blocking.
     required: false
@@ -30,16 +34,27 @@ runs:
   steps:
     - name: Aggregate RC diagnostics
       shell: bash
+      env:
+        RC_TRIAGE_EXCLUDE: ${{ inputs.exclude }}
       run: |
         set -euo pipefail
         node --test scripts/rc-triage.test.mjs
+        exclude_args=()
+        IFS=',' read -ra excludes <<< "${RC_TRIAGE_EXCLUDE}"
+        for item in "${excludes[@]}"; do
+          item="${item// /}"
+          [[ -z "${item}" ]] && continue
+          [[ "${item}" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "Invalid triage exclude: ${item}" >&2; exit 1; }
+          exclude_args+=("--exclude=${item}")
+        done
         node scripts/rc-triage.mjs \
           --scope="${{ inputs.scope }}" \
           --source-root="${{ inputs.source-root }}" \
           --report-dir="artifacts/rc-triage/${{ inputs.scope }}" \
           --allow-missing="${{ inputs.allow-missing }}" \
           --external-status="${{ inputs.scope }}:${{ inputs.external-status }}" \
-          --fail-on="${{ inputs.fail-on }}"
+          --fail-on="${{ inputs.fail-on }}" \
+          "${exclude_args[@]}"
 
     - name: Upload RC triage report
       if: ${{ always() }}
