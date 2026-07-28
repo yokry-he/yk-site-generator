@@ -69,7 +69,7 @@ function provenanceIssues(provenance) {
   if (provenance.workflowPath && provenance.workflowPath !== FIRST_RUN_WORKFLOW_PATH) issues.push({ code: 'FIRST_RUN_EVIDENCE_WORKFLOW_PATH_INVALID', path: provenance.workflowPath })
   if (!/^\d+$/.test(String(provenance.workflowRunId ?? ''))) issues.push({ code: 'FIRST_RUN_EVIDENCE_WORKFLOW_RUN_ID_INVALID' })
   if (!Number.isInteger(provenance.workflowRunAttempt) || provenance.workflowRunAttempt < 1) issues.push({ code: 'FIRST_RUN_EVIDENCE_WORKFLOW_ATTEMPT_INVALID' })
-  if (!/^rc-first-real-run-(?:core|full|release)-[a-f0-9]{40}$/i.test(String(provenance.artifactName ?? ''))) issues.push({ code: 'FIRST_RUN_EVIDENCE_ARTIFACT_NAME_INVALID' })
+  if (!/^rc-first-real-run-(?:core|full|release)-[a-f0-9]{40}-attempt-[1-9][0-9]*$/i.test(String(provenance.artifactName ?? ''))) issues.push({ code: 'FIRST_RUN_EVIDENCE_ARTIFACT_NAME_INVALID' })
   return issues
 }
 
