@@ -1,0 +1,64 @@
+name: RC First Real Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: First-run profile
+        required: true
+        type: choice
+        options: [core, full, release]
+        default: release
+      expected_commit:
+        description: Exact commit SHA; defaults to the dispatched commit
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rc-first-real-run-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  first-real-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/rc-node-bootstrap
+        with:
+          preflight-profile: core
+          dependency-mode: none
+          artifact-name: rc-first-real-run-bootstrap
+      - name: Execute commit-bound first real run
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit || github.sha }}
+        run: node scripts/rc-first-run.mjs --profile="${{ inputs.profile }}" --expected-commit="${EXPECTED_COMMIT}" --allow-detached
+      - uses: ./.github/actions/rc-diagnostic-triage
+        if: always()
+        with:
+          source-root: artifacts
+          scope: rc-first-real-run
+          external-status: "rc-first-real-run:${{ job.status }}"
+          artifact-name: rc-first-real-run-triage
+          fail-on: never
+      - name: Upload first-run evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc-first-real-run-${{ inputs.profile }}-${{ github.sha }}
+          path: |
+            artifacts/rc-first-run
+            artifacts/rc-preflight
+            artifacts/rc-dependencies
+            artifacts/rc-gates
+            artifacts/rc-triage
+            artifacts/rc-matrix
+            apps/web/playwright-report
+            apps/web/test-results
+          if-no-files-found: warn
+          retention-days: 30
