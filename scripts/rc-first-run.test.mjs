@@ -19,11 +19,11 @@ const root = resolve(import.meta.dirname, '..')
 const plan = JSON.parse(readFileSync(resolve(root, 'release/rc-first-run-plan.json'), 'utf8'))
 const rcManifest = JSON.parse(readFileSync(resolve(root, 'release/rc-manifest.json'), 'utf8'))
 
-test('first-run plan matches the RC candidate and isolates evidence before services', () => {
+test('first-run plan matches the RC candidate and resets evidence plus service volumes before startup', () => {
   assert.deepEqual(validateFirstRunPlan(plan, rcManifest), [])
   for (const stages of Object.values(plan.profiles)) {
-    assert.equal(stages[stages.indexOf('workstation-fingerprint') + 1], 'evidence-reset')
-    assert.ok(stages.indexOf('evidence-reset') < stages.indexOf('services-up'))
+    const fingerprint = stages.indexOf('workstation-fingerprint')
+    assert.deepEqual(stages.slice(fingerprint + 1, fingerprint + 4), ['evidence-reset', 'services-reset', 'services-up'])
     assert.equal(stages.at(-2), 'triage')
     assert.equal(stages.at(-1), 'services-down')
   }
@@ -53,11 +53,13 @@ test('Workstation identity follows a non-root host and preserves explicit overri
   assert.equal(workstationIdentityEnvironment({}, 0, 0).RC_WORKSTATION_UID, '10001')
 })
 
-test('full gates are incremental and triage excludes first-run state', () => {
+test('full gates are incremental, triage excludes state, and service cleanup removes volumes', () => {
   const full = firstRunStageCommand('full-gates', { runId: 'test' })
   assert.match(full.args.join(' '), /--only=history,browser,visual/)
   const triage = firstRunStageCommand('triage', { runId: 'test' })
   assert.ok(triage.args.includes('--exclude=rc-first-run'))
+  assert.ok(firstRunStageCommand('services-reset', { runId: 'test' }).args.includes('--volumes'))
+  assert.ok(firstRunStageCommand('services-down', { runId: 'test' }).args.includes('--volumes'))
 })
 
 test('evidence reset preserves first-run state but removes shared diagnostics', () => {
@@ -83,23 +85,27 @@ test('configured runtime dependencies are isolated to the current run', () => {
 
 test('resume restarts from evidence reset without rebuilding the image', () => {
   const state = createFirstRunState({ plan, profile: 'core', commit: 'b'.repeat(40), branch: 'Feature-dev-v0.1.0', runId: 'run' })
-  for (const id of ['contract', 'workstation-build', 'workstation-fingerprint', 'evidence-reset', 'services-up', 'dependencies']) applyFirstRunStageResult(state, id, { status: 'passed' })
+  for (const id of ['contract', 'workstation-build', 'workstation-fingerprint', 'evidence-reset', 'services-reset', 'services-up', 'dependencies']) applyFirstRunStageResult(state, id, { status: 'passed' })
   applyFirstRunStageResult(state, 'core-gates', { status: 'failed' })
   applyFirstRunStageResult(state, 'services-down', { status: 'passed' })
+  state.evidence = { status: 'sealed' }
   prepareFirstRunResume(state)
   assert.equal(state.stages.find((item) => item.id === 'workstation-build').status, 'passed')
   assert.equal(state.stages.find((item) => item.id === 'workstation-fingerprint').status, 'passed')
   assert.equal(state.stages.find((item) => item.id === 'evidence-reset').status, 'pending')
+  assert.equal(state.stages.find((item) => item.id === 'services-reset').status, 'pending')
   assert.equal(state.stages.find((item) => item.id === 'services-down').status, 'pending')
+  assert.equal(state.evidence, undefined)
 })
 
-test('label trigger is restricted to the long-lived same-repository PR', () => {
+test('label trigger is restricted to the long-lived same-repository PR and verifies the seal', () => {
   const workflow = [
     "github.event.label.name == 'rc-first-run'",
     'github.event.pull_request.number == 44',
     'github.event.pull_request.head.repo.full_name == github.repository',
     "github.event.pull_request.head.ref == 'Feature-dev-v0.1.0'",
     'github.event.pull_request.head.sha || github.sha',
+    'node scripts/rc-first-run-evidence.mjs --run=latest',
     'timeout-minutes: 360',
   ].join('\n')
   assert.deepEqual(validateFirstRunWorkflowSource(workflow, plan), [])
