@@ -3,6 +3,8 @@ import { existsSync, lstatSync, readdirSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { relative, resolve, sep } from 'node:path'
 
+export const FIRST_RUN_WORKFLOW_PATH = '.github/workflows/rc-first-real-run.yml'
+
 const STATIC_EVIDENCE_PATHS = Object.freeze([
   'release/rc-first-run-plan.json',
   'release/rc-manifest.json',
@@ -30,6 +32,45 @@ function safeRelativePath(value) {
     throw new Error(`FIRST_RUN_EVIDENCE_PATH_UNSAFE:${value}`)
   }
   return normalized
+}
+
+function workflowPathFromRef(repository, workflowRef) {
+  const prefix = repository ? `${repository}/` : ''
+  const separator = workflowRef.lastIndexOf('@')
+  if (!prefix || !workflowRef.startsWith(prefix) || separator <= prefix.length) return ''
+  return workflowRef.slice(prefix.length, separator)
+}
+
+export function firstRunEvidenceProvenance(environment = process.env) {
+  if (environment.GITHUB_ACTIONS !== 'true') return { provider: 'local' }
+  const repository = String(environment.GITHUB_REPOSITORY ?? '')
+  const workflowRef = String(environment.GITHUB_WORKFLOW_REF ?? '')
+  const attempt = Number.parseInt(String(environment.GITHUB_RUN_ATTEMPT ?? ''), 10)
+  return {
+    provider: 'github-actions',
+    repository,
+    workflowName: String(environment.GITHUB_WORKFLOW ?? ''),
+    workflowPath: workflowPathFromRef(repository, workflowRef),
+    workflowRef,
+    workflowRunId: String(environment.GITHUB_RUN_ID ?? ''),
+    workflowRunAttempt: Number.isInteger(attempt) && attempt > 0 ? attempt : 0,
+    artifactName: String(environment.RC_FIRST_RUN_ARTIFACT_NAME ?? ''),
+  }
+}
+
+function provenanceIssues(provenance) {
+  const issues = []
+  if (!provenance || typeof provenance !== 'object') return [{ code: 'FIRST_RUN_EVIDENCE_PROVENANCE_MISSING' }]
+  if (provenance.provider === 'local') return issues
+  if (provenance.provider !== 'github-actions') return [{ code: 'FIRST_RUN_EVIDENCE_PROVENANCE_PROVIDER_INVALID' }]
+  for (const key of ['repository', 'workflowName', 'workflowPath', 'workflowRef', 'workflowRunId', 'artifactName']) {
+    if (!String(provenance[key] ?? '').trim()) issues.push({ code: 'FIRST_RUN_EVIDENCE_PROVENANCE_FIELD_MISSING', field: key })
+  }
+  if (provenance.workflowPath && provenance.workflowPath !== FIRST_RUN_WORKFLOW_PATH) issues.push({ code: 'FIRST_RUN_EVIDENCE_WORKFLOW_PATH_INVALID', path: provenance.workflowPath })
+  if (!/^\d+$/.test(String(provenance.workflowRunId ?? ''))) issues.push({ code: 'FIRST_RUN_EVIDENCE_WORKFLOW_RUN_ID_INVALID' })
+  if (!Number.isInteger(provenance.workflowRunAttempt) || provenance.workflowRunAttempt < 1) issues.push({ code: 'FIRST_RUN_EVIDENCE_WORKFLOW_ATTEMPT_INVALID' })
+  if (!/^rc-first-real-run-(?:core|full|release)-[a-f0-9]{40}$/i.test(String(provenance.artifactName ?? ''))) issues.push({ code: 'FIRST_RUN_EVIDENCE_ARTIFACT_NAME_INVALID' })
+  return issues
 }
 
 function walk(root, relativePath, output) {
@@ -73,11 +114,15 @@ function checksumText(manifestRelativePath, manifestSha256, files) {
   ].join('\n')}\n`
 }
 
-export async function sealFirstRunEvidence({ root = process.cwd(), runDirectory, state }) {
+export async function sealFirstRunEvidence({ root = process.cwd(), runDirectory, state, environment = process.env }) {
   if (!state || typeof state !== 'object') throw new Error('FIRST_RUN_EVIDENCE_STATE_INVALID')
   const resolvedRunDirectory = resolve(runDirectory)
   const expectedRunDirectory = resolve(root, 'artifacts/rc-first-run', state.runId)
   if (resolvedRunDirectory !== expectedRunDirectory) throw new Error('FIRST_RUN_EVIDENCE_RUN_DIRECTORY_MISMATCH')
+
+  const provenance = firstRunEvidenceProvenance(environment)
+  const invalidProvenance = provenanceIssues(provenance)
+  if (invalidProvenance.length) throw new Error(`FIRST_RUN_EVIDENCE_PROVENANCE_INVALID:${invalidProvenance.map((item) => item.field ?? item.code).join(',')}`)
 
   const sealedAt = new Date().toISOString()
   const sealedState = { ...state, evidence: { status: 'sealed', sealedAt } }
@@ -112,6 +157,7 @@ export async function sealFirstRunEvidence({ root = process.cwd(), runDirectory,
     commit: state.commit,
     status: state.status,
     sealedAt,
+    provenance,
     fileCount: files.length,
     files,
   }
@@ -129,7 +175,6 @@ export async function sealFirstRunEvidence({ root = process.cwd(), runDirectory,
 }
 
 export async function verifyFirstRunEvidence({ root = process.cwd(), runId }) {
-  const runDirectory = resolve(root, 'artifacts/rc-first-run', runId)
   const manifestRelativePath = `artifacts/rc-first-run/${runId}/evidence-manifest.json`
   const checksumsRelativePath = `artifacts/rc-first-run/${runId}/SHA256SUMS`
   const manifestPath = resolve(root, manifestRelativePath)
@@ -144,6 +189,7 @@ export async function verifyFirstRunEvidence({ root = process.cwd(), runId }) {
   }
   if (manifest.schemaVersion !== 1 || manifest.algorithm !== 'sha256') issues.push({ code: 'FIRST_RUN_EVIDENCE_SCHEMA_INVALID' })
   if (manifest.runId !== runId) issues.push({ code: 'FIRST_RUN_EVIDENCE_RUN_ID_MISMATCH' })
+  issues.push(...provenanceIssues(manifest.provenance))
   if (!Array.isArray(manifest.files)) issues.push({ code: 'FIRST_RUN_EVIDENCE_FILES_INVALID' })
   const files = Array.isArray(manifest.files) ? manifest.files : []
   if (manifest.fileCount !== files.length) issues.push({ code: 'FIRST_RUN_EVIDENCE_FILE_COUNT_MISMATCH' })
