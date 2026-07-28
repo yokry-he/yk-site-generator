@@ -38,7 +38,10 @@ Compose 同时启动内部服务：
 - 禁止 host network 和 host PID
 - 禁止挂载 Docker socket
 - 禁止数据库端口映射到宿主机
-- 所有服务 `cap_drop: [ALL]`
+- 所有服务首先执行 `cap_drop: [ALL]`
+- 非 root Workstation 不重新增加 Capability
+- MySQL、PostgreSQL 和 Redis 仅重新增加 `CHOWN`、`DAC_OVERRIDE`、`FOWNER`、`SETGID`、`SETUID`，用于初始化命名卷并从 root EntryPoint 降权到服务账号
+- 禁止 `ALL`、`SYS_ADMIN`、`NET_ADMIN`、`SYS_PTRACE` 等危险 Capability
 - 所有服务启用 `no-new-privileges`
 - 所有服务设置 PID 限制和健康检查
 - Workstation 以非 root 用户运行，默认 UID/GID 为 10001
@@ -107,6 +110,8 @@ export RC_WORKSTATION_GID="$(id -g)"
 pnpm rc:workstation:build
 ```
 
+`rc:first-run:*` 编排器会自动读取非 root 宿主进程的 UID/GID，并通过 Compose Build Args 传入容器；显式环境变量仍具有最高优先级。这样容器生成的 `0600` JSON、Markdown 和日志可以由宿主 Triage 与 Artifact 上传步骤读取。root 宿主进程会回退到 10001，避免与容器内已有 root 用户冲突。
+
 ### 缓存与数据
 
 以下内容使用命名卷：
@@ -167,7 +172,10 @@ The static gate requires:
 - no host networking or host PID namespace
 - no Docker socket mount
 - no database port publication to the host
-- `cap_drop: [ALL]` on every service
+- `cap_drop: [ALL]` before any minimal capability addition on every service
+- no added capabilities on the non-root Workstation
+- only `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `SETGID`, and `SETUID` added back to MySQL, PostgreSQL, and Redis so their official entrypoints can initialize named volumes and drop to service users
+- no dangerous additions such as `ALL`, `SYS_ADMIN`, `NET_ADMIN`, or `SYS_PTRACE`
 - `no-new-privileges` on every service
 - PID limits and health checks on every service
 - a non-root Workstation user, defaulting to UID/GID 10001
@@ -235,6 +243,8 @@ export RC_WORKSTATION_UID="$(id -u)"
 export RC_WORKSTATION_GID="$(id -g)"
 pnpm rc:workstation:build
 ```
+
+The `rc:first-run:*` orchestrator automatically reads the non-root host process UID/GID and passes them through Compose build arguments; explicit environment variables still take precedence. This keeps container-created `0600` JSON, Markdown, and logs readable by host-side triage and artifact upload steps. A root host process falls back to 10001 to avoid colliding with the container root account.
 
 ### Caches and data
 
