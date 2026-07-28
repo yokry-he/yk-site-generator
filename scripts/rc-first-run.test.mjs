@@ -11,6 +11,7 @@ import {
   validateFirstRunPlan,
   validateGitContext,
   validateRuntimeMatrixSource,
+  workstationIdentityEnvironment,
 } from './lib/rc-first-run.mjs'
 
 const root = resolve(import.meta.dirname, '..')
@@ -40,6 +41,18 @@ test('Git context enforces clean exact-commit runs', () => {
   const context = { available: true, commit: 'a'.repeat(40), branch: 'Feature-dev-v0.1.0', dirty: false, detail: '' }
   assert.deepEqual(validateGitContext(context, { expectedCommit: 'a'.repeat(40), requiredBranch: 'Feature-dev-v0.1.0' }), [])
   assert.ok(validateGitContext({ ...context, dirty: true }, {}).some((item) => item.code === 'FIRST_RUN_WORKTREE_DIRTY'))
+})
+
+test('Workstation identity follows a non-root host and preserves explicit overrides', () => {
+  assert.deepEqual(
+    workstationIdentityEnvironment({}, 1001, 121),
+    { RC_WORKSTATION_UID: '1001', RC_WORKSTATION_GID: '121' },
+  )
+  assert.deepEqual(
+    workstationIdentityEnvironment({ RC_WORKSTATION_UID: '2000', RC_WORKSTATION_GID: '2001' }, 1001, 121),
+    { RC_WORKSTATION_UID: '2000', RC_WORKSTATION_GID: '2001' },
+  )
+  assert.equal(workstationIdentityEnvironment({}, 0, 0).RC_WORKSTATION_UID, '10001')
 })
 
 test('release plan commands use Workstation services and configured runtime dependencies', () => {
