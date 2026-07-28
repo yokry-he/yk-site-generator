@@ -23,6 +23,7 @@
 - [`RC_WORKSTATION.md`](./RC_WORKSTATION.md)：可复现容器工具链、数据库与本地 RC 门禁
 - [`RC_FIRST_REAL_RUN.md`](./RC_FIRST_REAL_RUN.md)：Commit 绑定的首轮真实 RC 执行
 - [`RC_FIRST_RUN_HARDENING.md`](./RC_FIRST_RUN_HARDENING.md)：首轮证据隔离、增量门禁与触发边界
+- [`RC_FIRST_RUN_EVIDENCE.md`](./RC_FIRST_RUN_EVIDENCE.md)：干净数据卷、SHA-256 封存与离线校验
 
 行为变化必须同时更新完整中文和英文内容；示例只使用占位 Secret。
 
@@ -47,5 +48,6 @@ Existing product documentation remains available. v0.1.0 RC stabilization guides
 - [`RC_WORKSTATION.md`](./RC_WORKSTATION.md): reproducible container toolchains, databases, and local RC gates
 - [`RC_FIRST_REAL_RUN.md`](./RC_FIRST_REAL_RUN.md): commit-bound first real RC execution
 - [`RC_FIRST_RUN_HARDENING.md`](./RC_FIRST_RUN_HARDENING.md): first-run evidence isolation, incremental gates, and trigger boundaries
+- [`RC_FIRST_RUN_EVIDENCE.md`](./RC_FIRST_RUN_EVIDENCE.md): clean volumes, SHA-256 sealing, and offline verification
 
 Ship behavior changes with complete Chinese and English documentation; examples use placeholder secrets only.
