@@ -32,6 +32,7 @@ test('first-run evidence seals and verifies deterministic file hashes', async ()
   assert.ok(sealed.manifest.files.some((item) => item.path.endsWith('/sealed-state.json')))
   assert.equal((await verifyFirstRunEvidence({ root, runId: 'run' })).ok, true)
   const sums = await readFile(resolve(runDirectory, 'SHA256SUMS'), 'utf8')
+  assert.match(sums, /evidence-manifest\.json/)
   assert.match(sums, /contract\.attempt-1\.log/)
 })
 
@@ -42,6 +43,15 @@ test('verification detects modified evidence', async () => {
   const result = await verifyFirstRunEvidence({ root, runId: 'run' })
   assert.equal(result.ok, false)
   assert.ok(result.issues.some((item) => item.code === 'FIRST_RUN_EVIDENCE_DIGEST_MISMATCH'))
+})
+
+test('verification detects a modified checksum list', async () => {
+  const { root, state, runDirectory } = await fixture()
+  await sealFirstRunEvidence({ root, runDirectory, state })
+  await writeFile(resolve(runDirectory, 'SHA256SUMS'), 'tampered\n')
+  const result = await verifyFirstRunEvidence({ root, runId: 'run' })
+  assert.equal(result.ok, false)
+  assert.ok(result.issues.some((item) => item.code === 'FIRST_RUN_EVIDENCE_CHECKSUMS_MISMATCH'))
 })
 
 test('sealing rejects missing stage logs', async () => {
