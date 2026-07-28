@@ -49,6 +49,9 @@ jobs:
           RUN_PROFILE: ${{ inputs.profile || 'release' }}
           EXPECTED_COMMIT: ${{ inputs.expected_commit || github.event.pull_request.head.sha || github.sha }}
         run: node scripts/rc-first-run.mjs --profile="${RUN_PROFILE}" --expected-commit="${EXPECTED_COMMIT}" --allow-detached
+      - name: Verify sealed first-run evidence
+        if: always()
+        run: node scripts/rc-first-run-evidence.mjs --run=latest
       - uses: ./.github/actions/rc-diagnostic-triage
         if: always()
         with:
