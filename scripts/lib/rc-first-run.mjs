@@ -98,6 +98,19 @@ export function validateFirstRunRepository(root = process.cwd()) {
   return { schemaVersion: 1, ok: issues.length === 0, issues, plan, candidateVersion: plan?.candidateVersion }
 }
 
+function positiveIdentity(value, fallback = 10001) {
+  const parsed = Number.parseInt(String(value ?? ''), 10)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
+}
+
+export function workstationIdentityEnvironment(environment = process.env, uid = typeof process.getuid === 'function' ? process.getuid() : 10001, gid = typeof process.getgid === 'function' ? process.getgid() : 10001) {
+  return {
+    ...environment,
+    RC_WORKSTATION_UID: environment.RC_WORKSTATION_UID || String(positiveIdentity(uid)),
+    RC_WORKSTATION_GID: environment.RC_WORKSTATION_GID || String(positiveIdentity(gid)),
+  }
+}
+
 export function hostContext(root = process.cwd()) {
   const version = (command, args) => {
     const result = spawnSync(command, args, { cwd: root, encoding: 'utf8', timeout: 10_000, windowsHide: true })
@@ -109,6 +122,8 @@ export function hostContext(root = process.cwd()) {
     node: process.version,
     docker: version('docker', ['--version']),
     compose: version('docker', ['compose', 'version']),
+    workstationUid: process.env.RC_WORKSTATION_UID || '',
+    workstationGid: process.env.RC_WORKSTATION_GID || '',
   }
 }
 
