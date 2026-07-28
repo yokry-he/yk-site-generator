@@ -71,11 +71,12 @@ export function validateFirstRunWorkflowSource(source, plan) {
   const value = String(source ?? '')
   const issues = []
   const tokens = [
-    "github.event.label.name == '" + plan.triggerLabel + "'",
+    `github.event.label.name == '${plan.triggerLabel}'`,
     `github.event.pull_request.number == ${plan.pullRequestNumber}`,
     'github.event.pull_request.head.repo.full_name == github.repository',
-    "github.event.pull_request.head.ref == '" + plan.requiredBranch + "'",
+    `github.event.pull_request.head.ref == '${plan.requiredBranch}'`,
     'github.event.pull_request.head.sha || github.sha',
+    'node scripts/rc-first-run-evidence.mjs --run=latest',
   ]
   for (const token of tokens) {
     if (!value.includes(token)) issues.push(issue('FIRST_RUN_WORKFLOW_GUARD_MISSING', `First-run workflow is missing guard ${token}`, FIRST_RUN_WORKFLOW_PATH))
@@ -106,10 +107,11 @@ export function validateFirstRunPlan(plan, rcManifest) {
     if (stages.at(-1) !== 'services-down') issues.push(issue('FIRST_RUN_CLEANUP_ORDER', `Profile ${profile} must end with services-down`, FIRST_RUN_PLAN_PATH))
     if (stages.indexOf('triage') !== stages.length - 2) issues.push(issue('FIRST_RUN_TRIAGE_ORDER', `Profile ${profile} must run triage immediately before services-down`, FIRST_RUN_PLAN_PATH))
     const resetIndex = stages.indexOf('evidence-reset')
+    const volumeResetIndex = stages.indexOf('services-reset')
     const fingerprintIndex = stages.indexOf('workstation-fingerprint')
     const servicesIndex = stages.indexOf('services-up')
-    if (resetIndex === -1 || resetIndex !== fingerprintIndex + 1 || resetIndex >= servicesIndex) {
-      issues.push(issue('FIRST_RUN_EVIDENCE_RESET_ORDER', `Profile ${profile} must run evidence-reset after workstation-fingerprint and before services-up`, FIRST_RUN_PLAN_PATH))
+    if (resetIndex === -1 || resetIndex !== fingerprintIndex + 1 || volumeResetIndex !== resetIndex + 1 || servicesIndex !== volumeResetIndex + 1) {
+      issues.push(issue('FIRST_RUN_RESET_ORDER', `Profile ${profile} must run workstation-fingerprint → evidence-reset → services-reset → services-up`, FIRST_RUN_PLAN_PATH))
     }
     for (const id of stages) if (!knownStage(id)) issues.push(issue('FIRST_RUN_STAGE_UNKNOWN', `Profile ${profile} references unknown stage ${id}`, FIRST_RUN_PLAN_PATH))
   }
@@ -179,7 +181,7 @@ export function validateGitContext(context, { expectedCommit = '', requiredBranc
 }
 
 export function knownStage(id) {
-  return ['contract', 'workstation-build', 'workstation-fingerprint', 'evidence-reset', 'services-up', 'dependencies', 'core-gates', 'mysql', 'redis', 'full-gates', 'triage', 'services-down'].includes(id) || /^golden:[a-z0-9-]+$/.test(id)
+  return ['contract', 'workstation-build', 'workstation-fingerprint', 'evidence-reset', 'services-reset', 'services-up', 'dependencies', 'core-gates', 'mysql', 'redis', 'full-gates', 'triage', 'services-down'].includes(id) || /^golden:[a-z0-9-]+$/.test(id)
 }
 
 function shellLiteral(value) {
@@ -189,13 +191,13 @@ function compose(...args) {
   return { executable: 'docker', args: ['compose', '-f', COMPOSE_PATH, ...args] }
 }
 function workstationShell(script, runId) {
-  return compose('run', '--rm', '-e', `RC_FIRST_RUN_ID=${runId}`, 'workstation', 'bash', '-lc', script)
+  return compose('run', '--rm', '-e', `RC_FIRST_RUN_ID=${runId}`, '-e', 'CI_COMMIT_SHA', 'workstation', 'bash', '-lc', script)
 }
 
 export function firstRunStageCommand(id, { runId = 'plan', profile = 'release', externalStatus = 'unknown' } = {}) {
   const runtimeDirectory = 'artifacts/rc-first-run/${RC_FIRST_RUN_ID}/runtime'
   const common = `set -euo pipefail; mkdir -p "${runtimeDirectory}"`
-  if (id === 'contract') return { executable: 'node', args: ['--test', 'scripts/rc-first-run.test.mjs'], timeoutMinutes: 5 }
+  if (id === 'contract') return { executable: 'node', args: ['--test', 'scripts/rc-first-run.test.mjs', 'scripts/rc-first-run-evidence.test.mjs'], timeoutMinutes: 5 }
   if (id === 'workstation-build') return { ...compose('build', 'workstation'), timeoutMinutes: 45 }
   if (id === 'workstation-fingerprint') {
     const directory = `artifacts/rc-first-run/${runId}`
@@ -208,6 +210,7 @@ export function firstRunStageCommand(id, { runId = 'plan', profile = 'release', 
     const targets = EVIDENCE_RESET_PATHS.map(shellLiteral).join(' ')
     return { executable: 'bash', args: ['-lc', `set -euo pipefail; rm -rf ${targets}; mkdir -p artifacts`], timeoutMinutes: 5 }
   }
+  if (id === 'services-reset') return { ...compose('down', '--volumes', '--remove-orphans'), timeoutMinutes: 10 }
   if (id === 'services-up') return { ...compose('up', '-d', '--wait', 'mysql', 'postgres', 'redis'), timeoutMinutes: 10 }
   if (id === 'dependencies') return { ...workstationShell(`${common}; pnpm rc:deps`, runId), timeoutMinutes: 30 }
   if (id === 'core-gates') return { ...workstationShell(`${common}; pnpm rc:gates:core`, runId), timeoutMinutes: 60 }
@@ -224,7 +227,7 @@ export function firstRunStageCommand(id, { runId = 'plan', profile = 'release', 
     return { ...workstationShell(`${common}; pnpm rc:golden; pnpm rc:matrix --project ${project}`, runId), timeoutMinutes: 60 }
   }
   if (id === 'triage') return { executable: 'node', args: ['scripts/rc-triage.mjs', '--source-root=artifacts', `--report-dir=artifacts/rc-triage/first-run-${runId}`, `--scope=first-run-${profile}`, '--allow-missing', '--fail-on=never', '--exclude=rc-first-run', `--external-status=first-run:${externalStatus}`], timeoutMinutes: 5 }
-  if (id === 'services-down') return { ...compose('down', '--remove-orphans'), timeoutMinutes: 10 }
+  if (id === 'services-down') return { ...compose('down', '--volumes', '--remove-orphans'), timeoutMinutes: 10 }
   throw new Error(`UNKNOWN_FIRST_RUN_STAGE:${id}`)
 }
 
@@ -245,6 +248,7 @@ export function prepareFirstRunResume(state) {
   state.stages.forEach((stage, index) => { if (index >= resetFrom) stage.status = 'pending' })
   state.status = 'running'
   state.finishedAt = null
+  state.evidence = undefined
   return state
 }
 export function firstRunStageIds(plan, profile) {
