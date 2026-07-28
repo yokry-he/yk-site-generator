@@ -61,7 +61,7 @@ async function writeReport(report, reports, startedAt) {
   const metadata = {
     schemaVersion: 1,
     scope,
-    commit: process.env.GITHUB_SHA || process.env.CI_COMMIT_SHA || '',
+    commit: process.env.CI_COMMIT_SHA || process.env.GITHUB_SHA || '',
     workflowRunId: process.env.GITHUB_RUN_ID || '',
     startedAt,
     finishedAt,
