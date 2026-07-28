@@ -23,6 +23,9 @@ concurrency:
   group: rc-first-real-run-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  RC_FIRST_RUN_ARTIFACT_NAME: rc-first-real-run-${{ inputs.profile || 'release' }}-${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   first-real-run:
     if: >-
@@ -65,7 +68,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rc-first-real-run-${{ inputs.profile || 'release' }}-${{ github.event.pull_request.head.sha || github.sha }}
+          name: ${{ env.RC_FIRST_RUN_ARTIFACT_NAME }}
           path: |
             artifacts/rc-first-run
             artifacts/rc-preflight
