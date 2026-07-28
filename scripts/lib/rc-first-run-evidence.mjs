@@ -66,6 +66,13 @@ function evidencePaths(runId) {
   ]
 }
 
+function checksumText(manifestRelativePath, manifestSha256, files) {
+  return `${[
+    `${manifestSha256}  ${manifestRelativePath}`,
+    ...files.map((item) => `${item.sha256}  ${item.path}`),
+  ].join('\n')}\n`
+}
+
 export async function sealFirstRunEvidence({ root = process.cwd(), runDirectory, state }) {
   if (!state || typeof state !== 'object') throw new Error('FIRST_RUN_EVIDENCE_STATE_INVALID')
   const resolvedRunDirectory = resolve(runDirectory)
@@ -87,10 +94,9 @@ export async function sealFirstRunEvidence({ root = process.cwd(), runDirectory,
 
   const paths = []
   for (const path of evidencePaths(state.runId)) walk(root, path, paths)
-  const excluded = new Set([
-    `artifacts/rc-first-run/${state.runId}/evidence-manifest.json`,
-    `artifacts/rc-first-run/${state.runId}/SHA256SUMS`,
-  ])
+  const manifestRelativePath = `artifacts/rc-first-run/${state.runId}/evidence-manifest.json`
+  const checksumsRelativePath = `artifacts/rc-first-run/${state.runId}/SHA256SUMS`
+  const excluded = new Set([manifestRelativePath, checksumsRelativePath])
   const unique = [...new Set(paths.filter((path) => !excluded.has(path)))].sort()
   if (!unique.includes(`artifacts/rc-first-run/${state.runId}/sealed-state.json`)) throw new Error('FIRST_RUN_EVIDENCE_SEALED_STATE_MISSING')
   if (unique.length > 20_000) throw new Error(`FIRST_RUN_EVIDENCE_FILE_LIMIT:${unique.length}`)
@@ -109,11 +115,11 @@ export async function sealFirstRunEvidence({ root = process.cwd(), runDirectory,
     fileCount: files.length,
     files,
   }
-  const manifestPath = resolve(resolvedRunDirectory, 'evidence-manifest.json')
-  const checksumsPath = resolve(resolvedRunDirectory, 'SHA256SUMS')
+  const manifestPath = resolve(root, manifestRelativePath)
+  const checksumsPath = resolve(root, checksumsRelativePath)
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 })
-  await writeFile(checksumsPath, `${files.map((item) => `${item.sha256}  ${item.path}`).join('\n')}\n`, { mode: 0o600 })
   const manifestSha256 = createHash('sha256').update(await readFile(manifestPath)).digest('hex')
+  await writeFile(checksumsPath, checksumText(manifestRelativePath, manifestSha256, files), { mode: 0o600 })
   return {
     manifest,
     manifestPath: relative(root, manifestPath).split(sep).join('/'),
@@ -124,7 +130,10 @@ export async function sealFirstRunEvidence({ root = process.cwd(), runDirectory,
 
 export async function verifyFirstRunEvidence({ root = process.cwd(), runId }) {
   const runDirectory = resolve(root, 'artifacts/rc-first-run', runId)
-  const manifestPath = resolve(runDirectory, 'evidence-manifest.json')
+  const manifestRelativePath = `artifacts/rc-first-run/${runId}/evidence-manifest.json`
+  const checksumsRelativePath = `artifacts/rc-first-run/${runId}/SHA256SUMS`
+  const manifestPath = resolve(root, manifestRelativePath)
+  const checksumsPath = resolve(root, checksumsRelativePath)
   const issues = []
   if (!existsSync(manifestPath)) return { ok: false, issues: [{ code: 'FIRST_RUN_EVIDENCE_MANIFEST_MISSING', path: manifestPath }] }
   let manifest
@@ -135,8 +144,14 @@ export async function verifyFirstRunEvidence({ root = process.cwd(), runId }) {
   }
   if (manifest.schemaVersion !== 1 || manifest.algorithm !== 'sha256') issues.push({ code: 'FIRST_RUN_EVIDENCE_SCHEMA_INVALID' })
   if (manifest.runId !== runId) issues.push({ code: 'FIRST_RUN_EVIDENCE_RUN_ID_MISMATCH' })
+  if (!Array.isArray(manifest.files)) issues.push({ code: 'FIRST_RUN_EVIDENCE_FILES_INVALID' })
+  const files = Array.isArray(manifest.files) ? manifest.files : []
+  if (manifest.fileCount !== files.length) issues.push({ code: 'FIRST_RUN_EVIDENCE_FILE_COUNT_MISMATCH' })
+  const listedPaths = files.map((item) => item.path)
+  if (listedPaths.join('\n') !== [...listedPaths].sort().join('\n')) issues.push({ code: 'FIRST_RUN_EVIDENCE_FILES_UNSORTED' })
+
   const seen = new Set()
-  for (const item of manifest.files ?? []) {
+  for (const item of files) {
     let path
     try { path = safeRelativePath(item.path) } catch (error) {
       issues.push({ code: 'FIRST_RUN_EVIDENCE_PATH_INVALID', message: error instanceof Error ? error.message : String(error) })
@@ -155,6 +170,15 @@ export async function verifyFirstRunEvidence({ root = process.cwd(), runId }) {
     const actual = await digestFile(root, path)
     if (actual.sha256 !== item.sha256 || actual.bytes !== item.bytes) issues.push({ code: 'FIRST_RUN_EVIDENCE_DIGEST_MISMATCH', path })
   }
+
+  const manifestSha256 = createHash('sha256').update(await readFile(manifestPath)).digest('hex')
+  if (!existsSync(checksumsPath)) issues.push({ code: 'FIRST_RUN_EVIDENCE_CHECKSUMS_MISSING', path: checksumsRelativePath })
+  else {
+    const expectedChecksums = checksumText(manifestRelativePath, manifestSha256, files)
+    const actualChecksums = await readFile(checksumsPath, 'utf8')
+    if (actualChecksums !== expectedChecksums) issues.push({ code: 'FIRST_RUN_EVIDENCE_CHECKSUMS_MISMATCH', path: checksumsRelativePath })
+  }
+
   const sealedStatePath = `artifacts/rc-first-run/${runId}/sealed-state.json`
   if (!seen.has(sealedStatePath)) issues.push({ code: 'FIRST_RUN_EVIDENCE_SEALED_STATE_UNLISTED', path: sealedStatePath })
   else {
@@ -167,5 +191,5 @@ export async function verifyFirstRunEvidence({ root = process.cwd(), runId }) {
       issues.push({ code: 'FIRST_RUN_EVIDENCE_STATE_INVALID', path: sealedStatePath, message: error instanceof Error ? error.message : String(error) })
     }
   }
-  return { ok: issues.length === 0, issues, manifest }
+  return { ok: issues.length === 0, issues, manifest, manifestSha256 }
 }
