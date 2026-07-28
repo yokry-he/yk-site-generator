@@ -25,15 +25,57 @@ async function fixture() {
   return { root, state, runDirectory: resolve(root, 'artifacts/rc-first-run/run') }
 }
 
+function githubEnvironment(commit = 'a'.repeat(40)) {
+  return {
+    GITHUB_ACTIONS: 'true',
+    GITHUB_REPOSITORY: 'yokry-he/yk-site-generator',
+    GITHUB_WORKFLOW: 'RC First Real Run',
+    GITHUB_WORKFLOW_REF: 'yokry-he/yk-site-generator/.github/workflows/rc-first-real-run.yml@refs/heads/Feature-dev-v0.1.0',
+    GITHUB_RUN_ID: '123456',
+    GITHUB_RUN_ATTEMPT: '2',
+    RC_FIRST_RUN_ARTIFACT_NAME: `rc-first-real-run-release-${commit}`,
+  }
+}
+
 test('first-run evidence seals and verifies deterministic file hashes', async () => {
   const { root, state, runDirectory } = await fixture()
   const sealed = await sealFirstRunEvidence({ root, runDirectory, state })
   assert.equal(sealed.manifest.commit, 'a'.repeat(40))
+  assert.equal(sealed.manifest.provenance.provider, 'local')
   assert.ok(sealed.manifest.files.some((item) => item.path.endsWith('/sealed-state.json')))
   assert.equal((await verifyFirstRunEvidence({ root, runId: 'run' })).ok, true)
   const sums = await readFile(resolve(runDirectory, 'SHA256SUMS'), 'utf8')
   assert.match(sums, /evidence-manifest\.json/)
   assert.match(sums, /contract\.attempt-1\.log/)
+})
+
+test('GitHub evidence binds workflow run and artifact provenance', async () => {
+  const { root, state, runDirectory } = await fixture()
+  state.profile = 'release'
+  const sealed = await sealFirstRunEvidence({ root, runDirectory, state, environment: githubEnvironment(state.commit) })
+  assert.deepEqual(sealed.manifest.provenance, {
+    provider: 'github-actions',
+    repository: 'yokry-he/yk-site-generator',
+    workflowName: 'RC First Real Run',
+    workflowPath: '.github/workflows/rc-first-real-run.yml',
+    workflowRef: 'yokry-he/yk-site-generator/.github/workflows/rc-first-real-run.yml@refs/heads/Feature-dev-v0.1.0',
+    workflowRunId: '123456',
+    workflowRunAttempt: 2,
+    artifactName: `rc-first-real-run-release-${state.commit}`,
+  })
+  assert.equal((await verifyFirstRunEvidence({ root, runId: 'run' })).ok, true)
+})
+
+test('GitHub sealing rejects incomplete provenance', async () => {
+  const { root, state, runDirectory } = await fixture()
+  await assert.rejects(sealFirstRunEvidence({ root, runDirectory, state, environment: { GITHUB_ACTIONS: 'true' } }), /FIRST_RUN_EVIDENCE_PROVENANCE_INVALID/)
+})
+
+
+test('first-run workflow exports the exact artifact identity before sealing', async () => {
+  const workflow = await readFile(resolve(import.meta.dirname, '../.github/workflows/rc-first-real-run.yml'), 'utf8')
+  assert.match(workflow, /RC_FIRST_RUN_ARTIFACT_NAME:/)
+  assert.match(workflow, /name: \$\{\{ env\.RC_FIRST_RUN_ARTIFACT_NAME \}\}/)
 })
 
 test('verification detects modified evidence', async () => {
