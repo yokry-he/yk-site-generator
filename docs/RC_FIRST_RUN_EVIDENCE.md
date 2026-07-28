@@ -101,6 +101,8 @@ artifacts/rc-first-run/<run-id>/SHA256SUMS
 - 文件数量
 - 每个文件的相对路径、字节数和 SHA-256
 
+`SHA256SUMS` 的第一行记录 Manifest 自身的 SHA-256，其余行与 Manifest 中排序后的文件列表完全一致。
+
 ### 验证
 
 验证最近一次运行：
@@ -113,9 +115,11 @@ pnpm rc:first-run:verify
 
 - Manifest Schema 和算法
 - Run ID
+- 文件计数和路径排序
 - 重复或不安全路径
 - 缺失文件
 - Digest 或字节数变化
+- `SHA256SUMS` 与 Manifest 完全一致
 - `sealed-state.json` 与 Manifest 的 Commit、Profile 和状态一致
 
 GitHub 首轮 Workflow 在 Artifact 上传前无条件执行同一验证。如果编排过程未产生封存文件，或任一文件已变化，Job 会保持失败。
@@ -220,6 +224,8 @@ artifacts/rc-first-run/<run-id>/SHA256SUMS
 
 The manifest records the run ID, candidate version, profile, full commit SHA, final status, sealing time, file count, and each file's relative path, byte count, and SHA-256.
 
+The first `SHA256SUMS` line records the manifest's own SHA-256. Remaining lines exactly match the manifest's sorted file list.
+
 ### Verification
 
 Verify the latest run with:
@@ -228,7 +234,7 @@ Verify the latest run with:
 pnpm rc:first-run:verify
 ```
 
-The verifier recalculates sizes and digests and checks the schema, algorithm, run ID, duplicate or unsafe paths, missing files, digest changes, and consistency between `sealed-state.json` and the manifest.
+The verifier recalculates sizes and digests and checks the schema, algorithm, run ID, file count, path ordering, duplicate or unsafe paths, missing files, digest changes, exact `SHA256SUMS` consistency, and consistency between `sealed-state.json` and the manifest.
 
 The GitHub first-run workflow always performs the same verification before artifact upload. A missing seal or changed file keeps the job failed.
 
