@@ -25,7 +25,13 @@ concurrency:
 
 jobs:
   first-real-run:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.label.name == 'rc-first-run' }}
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' ||
+          (github.event_name == 'pull_request' &&
+           github.event.label.name == 'rc-first-run' &&
+           github.event.pull_request.number == 44 &&
+           github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.head.ref == 'Feature-dev-v0.1.0') }}
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
