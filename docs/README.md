@@ -14,7 +14,7 @@
 - [`RC_REDIS_MULTI_INSTANCE.md`](./RC_REDIS_MULTI_INSTANCE.md)：Redis 多实例登录保护
 - [`RC_SECURITY_AUDIT.md`](./RC_SECURITY_AUDIT.md)：安全审计与签名证据
 - [`RC_OBSERVABILITY.md`](./RC_OBSERVABILITY.md)：健康、依赖与指标
-- [`RC_RELEASE_PROCESS.md`](./RC_RELEASE_PROCESS.md)：签名门禁与 RC Bundle
+- [`RC_RELEASE_PROCESS.md`](./RC_RELEASE_PROCESS.md)：首轮结果准入、签名门禁与 RC Bundle
 - [`RC_GATE_RUNNER.md`](./RC_GATE_RUNNER.md)：全仓门禁执行与统一诊断
 - [`RC_ENVIRONMENT_PREFLIGHT.md`](./RC_ENVIRONMENT_PREFLIGHT.md)：安装前环境与仓库配置预检
 - [`RC_DEPENDENCY_BOOTSTRAP.md`](./RC_DEPENDENCY_BOOTSTRAP.md)：依赖获取、离线安装与失败分类
@@ -39,7 +39,7 @@ Existing product documentation remains available. v0.1.0 RC stabilization guides
 - [`RC_REDIS_MULTI_INSTANCE.md`](./RC_REDIS_MULTI_INSTANCE.md): Redis multi-instance login protection
 - [`RC_SECURITY_AUDIT.md`](./RC_SECURITY_AUDIT.md): security audit and signed evidence
 - [`RC_OBSERVABILITY.md`](./RC_OBSERVABILITY.md): health, dependencies, and metrics
-- [`RC_RELEASE_PROCESS.md`](./RC_RELEASE_PROCESS.md): signed gates and RC bundles
+- [`RC_RELEASE_PROCESS.md`](./RC_RELEASE_PROCESS.md): first-run admission, signed gates, and RC bundles
 - [`RC_GATE_RUNNER.md`](./RC_GATE_RUNNER.md): repository-wide gate execution and unified diagnostics
 - [`RC_ENVIRONMENT_PREFLIGHT.md`](./RC_ENVIRONMENT_PREFLIGHT.md): pre-install environment and repository configuration checks
 - [`RC_DEPENDENCY_BOOTSTRAP.md`](./RC_DEPENDENCY_BOOTSTRAP.md): dependency fetching, offline installation, and failure classification
