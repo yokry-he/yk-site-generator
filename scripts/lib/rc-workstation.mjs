@@ -9,12 +9,14 @@ export const WORKSTATION_PATHS = Object.freeze({
 
 const REQUIRED_SERVICES = Object.freeze(['workstation', 'mysql', 'postgres', 'redis'])
 const REQUIRED_VOLUMES = Object.freeze(['pnpm-store', 'maven-cache', 'go-cache', 'uv-cache', 'mysql-data', 'postgres-data', 'redis-data'])
+const MINIMAL_DATABASE_CAPABILITIES = 'cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]'
 const FORBIDDEN_COMPOSE = Object.freeze([
   ['WORKSTATION_PRIVILEGED', /privileged:\s*true/i],
   ['WORKSTATION_HOST_NETWORK', /network_mode:\s*host/i],
   ['WORKSTATION_HOST_PID', /pid:\s*host/i],
   ['WORKSTATION_DOCKER_SOCKET', /\/var\/run\/docker\.sock/i],
   ['WORKSTATION_PUBLISHED_PORT', /^\s*ports:\s*$/im],
+  ['WORKSTATION_DANGEROUS_CAPABILITY', /cap_add:\s*\[[^\]]*(?:ALL|SYS_ADMIN|NET_ADMIN|SYS_PTRACE)[^\]]*\]/i],
 ])
 
 function finding(code, path, message) {
@@ -59,7 +61,10 @@ export function validateWorkstationText({ dockerfile, compose, lock }) {
   if (!/^  rc-internal:\s*\n    internal:\s*true\s*$/m.test(String(compose))) {
     issues.push(finding('WORKSTATION_INTERNAL_NETWORK_MISSING', WORKSTATION_PATHS.compose, 'rc-internal must be an internal network'))
   }
-  if (count(compose, /cap_drop:\s*\[ALL\]/g) < 4) issues.push(finding('WORKSTATION_CAP_DROP_MISSING', WORKSTATION_PATHS.compose, 'Every service must drop all Linux capabilities'))
+  if (count(compose, /cap_drop:\s*\[ALL\]/g) < 4) issues.push(finding('WORKSTATION_CAP_DROP_MISSING', WORKSTATION_PATHS.compose, 'Every service must drop all Linux capabilities before any minimal additions'))
+  if (count(compose, new RegExp(MINIMAL_DATABASE_CAPABILITIES.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) !== 3) {
+    issues.push(finding('WORKSTATION_DATABASE_CAPABILITIES_INVALID', WORKSTATION_PATHS.compose, 'MySQL, PostgreSQL, and Redis must add only CHOWN, DAC_OVERRIDE, FOWNER, SETGID, and SETUID'))
+  }
   if (count(compose, /no-new-privileges:true/g) < 4) issues.push(finding('WORKSTATION_NO_NEW_PRIVILEGES_MISSING', WORKSTATION_PATHS.compose, 'Every service must enable no-new-privileges'))
   if (count(compose, /^    healthcheck:\s*$/gm) < 4) issues.push(finding('WORKSTATION_HEALTHCHECK_MISSING', WORKSTATION_PATHS.compose, 'Every service must define a healthcheck'))
   if (count(compose, /^    pids_limit:\s*\d+/gm) < 4) issues.push(finding('WORKSTATION_PID_LIMIT_MISSING', WORKSTATION_PATHS.compose, 'Every service must define pids_limit'))
