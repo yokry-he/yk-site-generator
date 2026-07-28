@@ -1,12 +1,114 @@
 import { createHash } from 'node:crypto'
-import { mkdir,readdir,readFile,writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { verifyRcEvidence,type SignedRcEvidence } from './lib/rc-evidence'
-interface RcManifest{schemaVersion:1;candidateVersion:string;maximumEvidenceAgeHours:number;allowedSources:string[];requiredGates:string[]}
-function arg(name:string,fallback=''){const index=process.argv.indexOf(`--${name}`);return index>=0?process.argv[index+1]??fallback:fallback}
-async function files(root:string):Promise<string[]>{const result:string[]=[];for(const entry of await readdir(root,{withFileTypes:true})){const target=path.join(root,entry.name);if(entry.isDirectory())result.push(...await files(target));else if(entry.isFile()&&entry.name.endsWith('.json'))result.push(target)}return result}
-const manifest=JSON.parse(await readFile(arg('manifest','release/rc-manifest.json'),'utf8')) as RcManifest;const version=arg('version',process.env.RC_CANDIDATE_VERSION||manifest.candidateVersion);const commit=arg('commit',process.env.GITHUB_SHA||process.env.RC_COMMIT||'');if(!/^[a-f0-9]{40}$/i.test(commit))throw new Error('A full candidate commit SHA is required');if(version!==manifest.candidateVersion)throw new Error(`Candidate version mismatch: ${version} != ${manifest.candidateVersion}`)
-const key=process.env.RC_EVIDENCE_SIGNING_KEY||'';const evidenceRoot=path.resolve(arg('evidence','artifacts/rc-evidence'));const rows=new Map<string,SignedRcEvidence>();const issues:string[]=[];const now=Date.now();const maximumAge=manifest.maximumEvidenceAgeHours*3_600_000
-for(const file of await files(evidenceRoot)){let row:SignedRcEvidence;try{row=JSON.parse(await readFile(file,'utf8')) as SignedRcEvidence}catch{issues.push(`${file}: invalid JSON`);continue}if(rows.has(row.gate)){issues.push(`${row.gate}: duplicate evidence`);continue}if(!verifyRcEvidence(row,key)){issues.push(`${row.gate}: invalid signature`);continue}if(row.candidateVersion!==version)issues.push(`${row.gate}: candidate mismatch`);if(row.commit!==commit)issues.push(`${row.gate}: commit mismatch`);if(row.status!=='passed')issues.push(`${row.gate}: status ${row.status}`);if(!row.trusted||!manifest.allowedSources.includes(row.source))issues.push(`${row.gate}: untrusted source`);const observed=Date.parse(row.observedAt);if(!Number.isFinite(observed)||observed>now+300_000||now-observed>maximumAge)issues.push(`${row.gate}: stale or future evidence`);rows.set(row.gate,row)}
-for(const gate of manifest.requiredGates)if(!rows.has(gate))issues.push(`${gate}: missing evidence`)
-if(issues.length){console.error(`RC preparation blocked by ${issues.length} issue(s):`);for(const issue of issues)console.error(`- ${issue}`);process.exitCode=1}else{const output=path.resolve(arg('output','artifacts/rc-release'));await mkdir(output,{recursive:true});const evidence=manifest.requiredGates.map((gate)=>rows.get(gate)!);const digest=createHash('sha256');for(const row of evidence)digest.update(row.gate).update('\0').update(row.signature).update('\0');const release={schemaVersion:1,candidateVersion:version,commit,status:'ready-for-human-approval',assembledAt:new Date().toISOString(),evidenceDigest:digest.digest('hex'),gates:evidence.map(({signature,...row})=>({...row,signatureSha256:createHash('sha256').update(signature).digest('hex')}))};const manifestPath=path.join(output,'manifest.json');await writeFile(manifestPath,`${JSON.stringify(release,null,2)}\n`,'utf8');const manifestBytes=await readFile(manifestPath);await writeFile(path.join(output,'SHA256SUMS'),`${createHash('sha256').update(manifestBytes).digest('hex')}  manifest.json\n`,'utf8');await writeFile(path.join(output,'RELEASE_NOTES.md'),`# SiteForge ${version}\n\nCandidate commit: \`${commit}\`\n\nAll required signed RC evidence is present. This bundle is ready for human approval; it does not create a tag, merge a branch, or deploy Production.\n`,'utf8');console.log(`RC bundle ready: ${output}`)}
+import { verifyRcEvidence, type SignedRcEvidence } from './lib/rc-evidence'
+import { verifyRcFirstRunAdmission } from './lib/rc-release-admission.mjs'
+
+interface RcManifest {
+  schemaVersion: 1
+  candidateVersion: string
+  maximumEvidenceAgeHours: number
+  allowedSources: string[]
+  requiredGates: string[]
+}
+
+function arg(name: string, fallback = '') {
+  const inline = process.argv.find((item) => item.startsWith(`--${name}=`))
+  if (inline) return inline.slice(name.length + 3)
+  const index = process.argv.indexOf(`--${name}`)
+  return index >= 0 ? process.argv[index + 1] ?? fallback : fallback
+}
+
+async function files(root: string): Promise<string[]> {
+  const result: string[] = []
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const target = path.join(root, entry.name)
+    if (entry.isDirectory()) result.push(...await files(target))
+    else if (entry.isFile() && entry.name.endsWith('.json')) result.push(target)
+  }
+  return result
+}
+
+const manifest = JSON.parse(await readFile(arg('manifest', 'release/rc-manifest.json'), 'utf8')) as RcManifest
+const version = arg('version', process.env.RC_CANDIDATE_VERSION || manifest.candidateVersion)
+const commit = arg('commit', process.env.GITHUB_SHA || process.env.RC_COMMIT || '')
+if (!/^[a-f0-9]{40}$/i.test(commit)) throw new Error('A full candidate commit SHA is required')
+if (version !== manifest.candidateVersion) throw new Error(`Candidate version mismatch: ${version} != ${manifest.candidateVersion}`)
+
+const firstRun = await verifyRcFirstRunAdmission({
+  root: process.cwd(),
+  run: arg('first-run', 'latest'),
+  candidateVersion: version,
+  commit,
+  workflowRunId: arg('first-run-workflow-run-id', process.env.RC_FIRST_RUN_WORKFLOW_RUN_ID || ''),
+  repository: arg('first-run-repository', process.env.GITHUB_REPOSITORY || ''),
+  artifactName: arg('first-run-artifact', process.env.RC_FIRST_RUN_ARTIFACT_NAME || ''),
+  workflowPath: arg('first-run-workflow-path', '.github/workflows/rc-first-real-run.yml'),
+})
+
+const key = process.env.RC_EVIDENCE_SIGNING_KEY || ''
+const evidenceRoot = path.resolve(arg('evidence', 'artifacts/rc-evidence'))
+const rows = new Map<string, SignedRcEvidence>()
+const issues = firstRun.issues.map((finding) => `first-run ${finding.code}: ${finding.message}`)
+const now = Date.now()
+const maximumAge = manifest.maximumEvidenceAgeHours * 3_600_000
+
+for (const file of await files(evidenceRoot)) {
+  let row: SignedRcEvidence
+  try {
+    row = JSON.parse(await readFile(file, 'utf8')) as SignedRcEvidence
+  } catch {
+    issues.push(`${file}: invalid JSON`)
+    continue
+  }
+  if (rows.has(row.gate)) {
+    issues.push(`${row.gate}: duplicate evidence`)
+    continue
+  }
+  if (!verifyRcEvidence(row, key)) {
+    issues.push(`${row.gate}: invalid signature`)
+    continue
+  }
+  if (row.candidateVersion !== version) issues.push(`${row.gate}: candidate mismatch`)
+  if (row.commit !== commit) issues.push(`${row.gate}: commit mismatch`)
+  if (row.status !== 'passed') issues.push(`${row.gate}: status ${row.status}`)
+  if (!row.trusted || !manifest.allowedSources.includes(row.source)) issues.push(`${row.gate}: untrusted source`)
+  const observed = Date.parse(row.observedAt)
+  if (!Number.isFinite(observed) || observed > now + 300_000 || now - observed > maximumAge) issues.push(`${row.gate}: stale or future evidence`)
+  rows.set(row.gate, row)
+}
+for (const gate of manifest.requiredGates) if (!rows.has(gate)) issues.push(`${gate}: missing evidence`)
+
+if (issues.length) {
+  console.error(`RC preparation blocked by ${issues.length} issue(s):`)
+  for (const issue of issues) console.error(`- ${issue}`)
+  process.exitCode = 1
+} else {
+  const output = path.resolve(arg('output', 'artifacts/rc-release'))
+  await mkdir(output, { recursive: true })
+  const evidence = manifest.requiredGates.map((gate) => rows.get(gate)!)
+  const digest = createHash('sha256')
+  for (const row of evidence) digest.update(row.gate).update('\0').update(row.signature).update('\0')
+  const evidenceDigest = digest.digest('hex')
+  const release = {
+    schemaVersion: 1,
+    candidateVersion: version,
+    commit,
+    status: 'ready-for-human-approval',
+    assembledAt: new Date().toISOString(),
+    firstRunAdmission: firstRun.admission,
+    signedGateEvidence: {
+      signatureAlgorithm: 'hmac-sha256',
+      evidenceDigest,
+      gateCount: evidence.length,
+    },
+    evidenceDigest,
+    gates: evidence.map(({ signature, ...row }) => ({ ...row, signatureSha256: createHash('sha256').update(signature).digest('hex') })),
+  }
+  const manifestPath = path.join(output, 'manifest.json')
+  await writeFile(manifestPath, `${JSON.stringify(release, null, 2)}\n`, 'utf8')
+  const manifestBytes = await readFile(manifestPath)
+  await writeFile(path.join(output, 'SHA256SUMS'), `${createHash('sha256').update(manifestBytes).digest('hex')}  manifest.json\n`, 'utf8')
+  await writeFile(path.join(output, 'RELEASE_NOTES.md'), `# SiteForge ${version}\n\nCandidate commit: \`${commit}\`\n\nThe commit-bound release first run was admitted from GitHub Actions workflow run \`${firstRun.admission!.workflowRunId}\` and artifact \`${firstRun.admission!.artifactName}\`. Its SHA-256 seal provides integrity checking only. All required RC gate evidence was independently verified with HMAC-SHA-256 before this bundle was assembled.\n\nThis bundle is ready for human approval; it does not create a tag, merge a branch, or deploy Production.\n`, 'utf8')
+  console.log(`RC bundle ready: ${output}`)
+}
