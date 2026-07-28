@@ -4,16 +4,116 @@
 
 ## 中文
 
-手动 Workflow `RC Release Candidate` 在同一候选 Commit 上执行核心门禁、MySQL、浏览器／无障碍／视觉测试、Redis 双实例和五套 Golden Runtime Matrix。每个成功 Job 使用独立的 `RC_EVIDENCE_SIGNING_KEY` 生成 HMAC 证据。
+### 两层发布证据
 
-最终汇总 Job 验证：候选版本、完整 Commit SHA、允许的来源、最大证据年龄、签名和所有必需 Gate。通过后只生成 `manifest.json`、`SHA256SUMS` 和 Release Notes Artifact，状态为 `ready-for-human-approval`。
+SiteForge v0.1.0 RC 使用两层证据，二者不能互相替代：
+
+1. **首轮真实运行证据**：`RC First Real Run` 的 Release Profile 在干净数据卷中执行完整首轮矩阵，并生成 `evidence-manifest.json` 与 `SHA256SUMS`。SHA-256 只证明下载后的 Artifact 内部一致性和篡改检测，不是数字签名。
+2. **签名 Gate 证据**：`RC Release Candidate` 的各个 Job 使用 `RC_EVIDENCE_SIGNING_KEY` 生成 HMAC-SHA-256 证据，绑定候选版本、完整 Commit SHA、Gate、Workflow Run、来源和观察时间。
+
+`rc:prepare` 不会把首轮 Manifest 当作签名 Gate，也不会使用首轮 Manifest 的 SHA-256 代替 HMAC 验证。
+
+### 首轮结果准入
+
+手动启动 `RC Release Candidate` 时必须提供成功的 `RC First Real Run` Workflow Run ID。汇总 Job 在下载前通过 GitHub Actions API 验证：
+
+- 来源 Workflow 路径为 `.github/workflows/rc-first-real-run.yml`
+- Workflow 名称为 `RC First Real Run`
+- Head 仓库为当前仓库
+- Head 分支为 `Feature-dev-v0.1.0`
+- Head SHA 等于当前候选 Commit
+- Run 已完成且结论为 `success`
+- Artifact 名称严格等于 `rc-first-real-run-release-<full-commit-sha>`
+- Artifact 未过期且同名 Artifact 唯一
+
+下载后，`rc:prepare` 再执行离线交叉校验：
+
+- 首轮 Manifest 和 `SHA256SUMS` 完整通过复验
+- 首轮最终状态为 `passed`
+- Profile 为 `release`
+- Candidate Version 和完整 Commit SHA 与当前候选一致
+- Manifest 中的 Repository、Workflow 路径、Workflow Run ID 和 Artifact 名称与 GitHub API 的可信结果一致
+- 被封存的 `artifacts/rc-triage/first-run-<run-id>/latest.json` 不包含 P0 或 P1，且没有 Blocking Finding
+
+任何一项失败都会阻止 RC Bundle 生成。
+
+### 签名 RC Bundle
+
+首轮准入通过后，汇总 Job继续验证所有必需的 HMAC Gate：核心门禁、MySQL、浏览器／无障碍／视觉测试、Redis 双实例和五套 Golden Runtime Matrix。每份证据必须满足：
+
+- 候选版本和完整 Commit SHA 一致
+- 来源在允许清单中
+- 状态为 `passed`
+- 观察时间未过期且不在未来
+- HMAC-SHA-256 签名有效
+- `release/rc-manifest.json` 中的所有必需 Gate 均存在且没有重复
+
+成功后只生成：
+
+```text
+artifacts/rc-release/manifest.json
+artifacts/rc-release/SHA256SUMS
+artifacts/rc-release/RELEASE_NOTES.md
+```
+
+Bundle 状态为 `ready-for-human-approval`。Manifest 会分别记录首轮 Artifact 的 SHA-256 准入摘要和 HMAC Gate 证据摘要，保持两种信任机制的边界。
 
 该 Workflow 不创建 Git Tag、不发布 GitHub Release、不合并 PR、不启用 Production 部署。人工批准前仍需检查已知问题、数据库备份／回滚、Runner 镜像 Digest 和部署配置。
 
 ## English
 
-The manually dispatched `RC Release Candidate` workflow runs core gates, MySQL, browser/accessibility/visual checks, Redis multi-instance verification, and the five Golden Runtime Matrix jobs against the same candidate commit. Every successful job creates HMAC evidence with the dedicated `RC_EVIDENCE_SIGNING_KEY`.
+### Two evidence layers
 
-The assembly job validates candidate version, full commit SHA, allowed source, maximum evidence age, signatures, and every required gate. Success produces only a `manifest.json`, `SHA256SUMS`, and release-notes artifact with status `ready-for-human-approval`.
+SiteForge v0.1.0 RC uses two evidence layers that cannot replace each other:
+
+1. **First real run evidence**: the `RC First Real Run` Release Profile executes the complete first-run matrix on clean data volumes and produces `evidence-manifest.json` plus `SHA256SUMS`. SHA-256 provides artifact-internal consistency and tamper detection after download; it is not a digital signature.
+2. **Signed gate evidence**: every `RC Release Candidate` job creates HMAC-SHA-256 evidence with `RC_EVIDENCE_SIGNING_KEY`, binding the candidate version, full commit SHA, gate, workflow run, source, and observation time.
+
+`rc:prepare` never treats the first-run manifest as a signed gate and never substitutes the first-run SHA-256 value for HMAC verification.
+
+### First-run admission
+
+A manual `RC Release Candidate` dispatch must provide the successful `RC First Real Run` workflow run ID. Before download, the assembly job verifies through the GitHub Actions API that:
+
+- the source workflow path is `.github/workflows/rc-first-real-run.yml`
+- the workflow name is `RC First Real Run`
+- the head repository is the current repository
+- the head branch is `Feature-dev-v0.1.0`
+- the head SHA equals the current candidate commit
+- the run is completed with conclusion `success`
+- the artifact name exactly equals `rc-first-real-run-release-<full-commit-sha>`
+- the artifact is unexpired and the matching name is unique
+
+After download, `rc:prepare` performs a second offline cross-check:
+
+- the first-run manifest and `SHA256SUMS` verify completely
+- the final first-run status is `passed`
+- the profile is `release`
+- the candidate version and full commit SHA match the current candidate
+- the repository, workflow path, workflow run ID, and artifact name embedded in the manifest match the trusted GitHub API result
+- the sealed `artifacts/rc-triage/first-run-<run-id>/latest.json` contains no P0 or P1 findings and no blocking findings
+
+Any failure blocks RC bundle generation.
+
+### Signed RC bundle
+
+After first-run admission, the assembly job continues to validate every required HMAC gate: core gates, MySQL, browser/accessibility/visual checks, Redis multi-instance verification, and the five Golden Runtime Matrix jobs. Every evidence document must have:
+
+- the matching candidate version and full commit SHA
+- an allowed source
+- status `passed`
+- a non-stale, non-future observation time
+- a valid HMAC-SHA-256 signature
+- complete, non-duplicated coverage of `release/rc-manifest.json`
+
+Success produces only:
+
+```text
+artifacts/rc-release/manifest.json
+artifacts/rc-release/SHA256SUMS
+artifacts/rc-release/RELEASE_NOTES.md
+```
+
+The bundle status is `ready-for-human-approval`. Its manifest records the SHA-256 first-run admission summary separately from the HMAC gate evidence summary so the two trust mechanisms remain distinct.
 
 The workflow does not create a Git tag, publish a GitHub Release, merge the PR, or enable Production deployment. Human approval must still review known issues, backup/rollback readiness, Runner image digests, and deployment configuration.
