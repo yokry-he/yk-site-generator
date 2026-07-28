@@ -14,6 +14,7 @@ import {
   prepareFirstRunResume,
   validateFirstRunRepository,
   validateGitContext,
+  workstationIdentityEnvironment,
 } from './lib/rc-first-run.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -29,7 +30,10 @@ const resume = valueOf('resume')
 const allowStaleResume = booleanOf('allow-stale-resume')
 const forceUnlock = booleanOf('force-unlock')
 const reportRoot = resolve(root, valueOf('report-dir', 'artifacts/rc-first-run'))
-const secrets = secretValuesFromEnvironment(process.env)
+const workstationEnvironment = workstationIdentityEnvironment(process.env)
+process.env.RC_WORKSTATION_UID = workstationEnvironment.RC_WORKSTATION_UID
+process.env.RC_WORKSTATION_GID = workstationEnvironment.RC_WORKSTATION_GID
+const secrets = secretValuesFromEnvironment(workstationEnvironment)
 let interrupted = false
 let activeChild
 
@@ -105,7 +109,7 @@ async function executeStage(id, context, logPath) {
     setTimeout(() => activeChild?.kill('SIGKILL'), 5_000).unref()
   }, command.timeoutMinutes * 60_000)
   const outcome = await new Promise((resolvePromise) => {
-    const child = spawn(command.executable, command.args, { cwd: root, env: process.env, shell: false, windowsHide: true })
+    const child = spawn(command.executable, command.args, { cwd: root, env: workstationEnvironment, shell: false, windowsHide: true })
     activeChild = child
     child.stdout?.on('data', (chunk) => sink.write(chunk))
     child.stderr?.on('data', (chunk) => sink.write(chunk))
@@ -142,6 +146,7 @@ if (gitIssues.length) {
 const stageIds = firstRunStageIds(plan, profile)
 const previewRunId = `${context.commit.slice(0, 12)}-YYYYMMDDTHHMMSS`
 console.log(`RC first real run · profile=${profile} · commit=${context.commit}`)
+console.log(`Workstation identity: ${workstationEnvironment.RC_WORKSTATION_UID}:${workstationEnvironment.RC_WORKSTATION_GID}`)
 for (const id of stageIds) {
   const command = firstRunStageCommand(id, { runId: previewRunId, profile, externalStatus: 'unknown' })
   console.log(`- ${id}: ${command.executable} ${command.args.map((part) => JSON.stringify(part)).join(' ')}`)
@@ -172,6 +177,7 @@ try {
     const ageHours = (Date.now() - Date.parse(state.startedAt)) / 3_600_000
     if (!allowStaleResume && ageHours > plan.maximumRunAgeHours) throw new Error(`FIRST_RUN_RESUME_EXPIRED:${ageHours.toFixed(1)}h`)
     prepareFirstRunResume(state)
+    state.host = hostContext(root)
     runDirectory = resolve(reportRoot, state.runId)
   } else {
     const timestamp = new Date().toISOString().replace(/[-:.]/g, '').replace('Z', 'Z')
