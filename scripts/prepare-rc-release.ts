@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { verifyRcEvidence, type SignedRcEvidence } from './lib/rc-evidence'
 import { validateRcSignedGateMetadata, verifyRcFirstRunAdmission } from './lib/rc-release-admission.mjs'
+import { verifyRcReleaseBundle, writeRcReleaseBundleChecksums } from './lib/rc-release-bundle.mjs'
 
 interface RcManifest {
   schemaVersion: 1
@@ -102,21 +103,33 @@ if (issues.length) {
   process.exitCode = 1
 } else {
   const output = path.resolve(arg('output', 'artifacts/rc-release'))
+  await rm(output, { recursive: true, force: true })
   await mkdir(output, { recursive: true })
-  const evidence = manifest.requiredGates.map((gate) => gateMetadata.rowsByGate[gate] as SignedRcEvidence)
-  const digest = createHash('sha256')
-  for (const row of evidence) digest.update(row.gate).update('\0').update(row.signature).update('\0')
-  const evidenceDigest = digest.digest('hex')
+  const evidence = manifest.requiredGates
+    .map((gate) => gateMetadata.rowsByGate[gate] as SignedRcEvidence)
+    .sort((left, right) => left.gate < right.gate ? -1 : left.gate > right.gate ? 1 : 0)
+  const evidenceDigestValue = createHash('sha256')
+  for (const row of evidence) evidenceDigestValue.update(row.gate).update('\0').update(row.signature).update('\0')
+  const evidenceDigest = evidenceDigestValue.digest('hex')
+  const gates = evidence.map(({ signature, ...row }) => ({
+    ...row,
+    signatureSha256: createHash('sha256').update(signature).digest('hex'),
+  }))
+  const receiptDigestValue = createHash('sha256')
+  for (const row of gates) receiptDigestValue.update(row.gate).update('\0').update(row.signatureSha256).update('\0')
+  const receiptDigest = receiptDigestValue.digest('hex')
   const release = {
     schemaVersion: 2,
     candidateVersion: version,
     commit,
     status: 'ready-for-human-approval',
+    maximumEvidenceAgeHours: manifest.maximumEvidenceAgeHours,
     assembledAt: new Date().toISOString(),
     firstRunAdmission: firstRun.admission,
     signedGateEvidence: {
       signatureAlgorithm: 'hmac-sha256',
       evidenceDigest,
+      receiptDigest,
       gateCount: evidence.length,
       source: releaseSource,
       repository: releaseRepository,
@@ -125,12 +138,22 @@ if (issues.length) {
       workflowRunAttempt: Number.parseInt(releaseWorkflowRunAttempt, 10),
     },
     evidenceDigest,
-    gates: evidence.map(({ signature, ...row }) => ({ ...row, signatureSha256: createHash('sha256').update(signature).digest('hex') })),
+    gates,
   }
   const manifestPath = path.join(output, 'manifest.json')
-  await writeFile(manifestPath, `${JSON.stringify(release, null, 2)}\n`, 'utf8')
-  const manifestBytes = await readFile(manifestPath)
-  await writeFile(path.join(output, 'SHA256SUMS'), `${createHash('sha256').update(manifestBytes).digest('hex')}  manifest.json\n`, 'utf8')
-  await writeFile(path.join(output, 'RELEASE_NOTES.md'), `# SiteForge ${version}\n\nCandidate commit: \`${commit}\`\n\nThe commit-bound release first run was admitted from GitHub Actions workflow run \`${firstRun.admission!.workflowRunId}\`, attempt \`${firstRun.admission!.workflowRunAttempt}\`, artifact ID \`${firstRun.admission!.artifactId}\`, and artifact digest \`${firstRun.admission!.artifactDigest}\`. Its SHA-256 seal and GitHub artifact digest provide integrity and source identity; they do not replace signed gate evidence.\n\nAll required RC gates were independently verified with HMAC-SHA-256 and bound to release workflow run \`${releaseWorkflowRunId}\`, attempt \`${releaseWorkflowRunAttempt}\`.\n\nThis bundle is ready for human approval; it does not create a tag, merge a branch, or deploy Production.\n`, 'utf8')
-  console.log(`RC bundle ready: ${output}`)
+  const releaseNotesPath = path.join(output, 'RELEASE_NOTES.md')
+  await writeFile(manifestPath, `${JSON.stringify(release, null, 2)}\n`, { mode: 0o600 })
+  await writeFile(releaseNotesPath, `# SiteForge ${version}\n\nCandidate commit: \`${commit}\`\n\nThe commit-bound release first run was admitted from GitHub Actions workflow run \`${firstRun.admission!.workflowRunId}\`, attempt \`${firstRun.admission!.workflowRunAttempt}\`, artifact ID \`${firstRun.admission!.artifactId}\`, and artifact digest \`${firstRun.admission!.artifactDigest}\`. Its SHA-256 seal and GitHub artifact digest provide integrity and source identity; they do not replace signed gate evidence.\n\nAll required RC gates were independently verified with HMAC-SHA-256 and bound to release workflow run \`${releaseWorkflowRunId}\`, attempt \`${releaseWorkflowRunAttempt}\`.\n\nThis bundle is ready for human approval; it does not create a tag, merge a branch, or deploy Production.\n`, { mode: 0o600 })
+  await writeRcReleaseBundleChecksums({ bundleDirectory: output })
+  const verification = await verifyRcReleaseBundle({
+    bundleDirectory: output,
+    expectedVersion: version,
+    expectedCommit: commit,
+    expectedReleaseWorkflowRunId: releaseWorkflowRunId,
+    expectedReleaseWorkflowRunAttempt: releaseWorkflowRunAttempt,
+    expectedRepository: releaseRepository,
+    expectedWorkflowPath: releaseWorkflowPath,
+  })
+  if (!verification.ok) throw new Error(`RC_RELEASE_BUNDLE_SELF_VERIFICATION_FAILED:${verification.issues.map((finding) => finding.code).join(',')}`)
+  console.log(`RC bundle ready and verified: ${output}`)
 }
