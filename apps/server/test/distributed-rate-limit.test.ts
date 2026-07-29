@@ -1,0 +1,5 @@
+import { afterEach,describe,expect,it } from 'vitest'
+import { createApp } from '../src/app'
+import { resetDistributedRateLimitForTests } from '../src/lib/distributed-rate-limit'
+afterEach(()=>{delete process.env.AUTH_DISTRIBUTED_LIMIT_DRIVER;delete process.env.AUTH_MAX_VERIFY_FAILURES;resetDistributedRateLimitForTests()})
+describe('distributed auth rate limit',()=>{it('locks verification attempts in memory fallback',async()=>{process.env.AUTH_DISTRIBUTED_LIMIT_DRIVER='memory';process.env.AUTH_MAX_VERIFY_FAILURES='2';const app=createApp();const body=JSON.stringify({email:'limit@example.com',code:'000000'});expect((await app.request('/api/auth/verify',{method:'POST',headers:{'content-type':'application/json'},body})).status).toBe(400);expect((await app.request('/api/auth/verify',{method:'POST',headers:{'content-type':'application/json'},body})).status).toBe(400);const limited=await app.request('/api/auth/verify',{method:'POST',headers:{'content-type':'application/json'},body});expect(limited.status).toBe(429);expect(limited.headers.get('retry-after')).toBeTruthy()})})

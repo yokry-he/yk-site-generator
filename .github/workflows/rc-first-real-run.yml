@@ -1,0 +1,82 @@
+name: RC First Real Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: First-run profile
+        required: true
+        type: choice
+        options: [core, full, release]
+        default: release
+      expected_commit:
+        description: Exact commit SHA; defaults to the dispatched commit
+        required: false
+        type: string
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rc-first-real-run-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RC_FIRST_RUN_ARTIFACT_NAME: rc-first-real-run-${{ inputs.profile || 'release' }}-${{ github.event.pull_request.head.sha || github.sha }}-attempt-${{ github.run_attempt }}
+
+jobs:
+  first-real-run:
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' ||
+          (github.event_name == 'pull_request' &&
+           github.event.label.name == 'rc-first-run' &&
+           github.event.pull_request.number == 44 &&
+           github.event.pull_request.head.repo.full_name == github.repository &&
+           github.event.pull_request.head.ref == 'Feature-dev-v0.1.0') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: ./.github/actions/rc-node-bootstrap
+        with:
+          preflight-profile: core
+          dependency-mode: none
+          artifact-name: rc-first-real-run-bootstrap-attempt-${{ github.run_attempt }}
+      - name: Execute commit-bound first real run
+        env:
+          RUN_PROFILE: ${{ inputs.profile || 'release' }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit || github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/rc-first-run.mjs --profile="${RUN_PROFILE}" --expected-commit="${EXPECTED_COMMIT}" --allow-detached
+      - name: Verify sealed first-run evidence
+        if: always()
+        run: node scripts/rc-first-run-evidence.mjs --run=latest
+      - uses: ./.github/actions/rc-diagnostic-triage
+        if: always()
+        with:
+          source-root: artifacts
+          exclude: rc-first-run
+          scope: rc-first-real-run
+          external-status: "rc-first-real-run:${{ job.status }}"
+          artifact-name: rc-first-real-run-triage-attempt-${{ github.run_attempt }}
+          fail-on: never
+      - name: Upload first-run evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.RC_FIRST_RUN_ARTIFACT_NAME }}
+          path: |
+            artifacts/rc-first-run
+            artifacts/rc-preflight
+            artifacts/rc-dependencies
+            artifacts/rc-gates
+            artifacts/rc-triage
+            artifacts/rc-matrix
+            apps/web/playwright-report
+            apps/web/test-results
+          if-no-files-found: warn
+          retention-days: 30

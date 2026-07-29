@@ -162,17 +162,24 @@ async function applyToProject(kit: BrandKit) {
   actionBusy.value = `apply:${kit.id}`
   try {
     const version = await getProjectVersion(contextProjectId.value, contextVersionId.value)
-    const html = applyBrandKitToHtml(version.html, kit)
+    const pages = version.pages.map((page) => ({
+      ...page,
+      html: applyBrandKitToHtml(page.html, kit),
+    }))
     const created = await addProjectVersion(contextProjectId.value, {
-      html,
+      pages,
+      homePageId: version.homePageId,
       source: 'editor',
-      instruction: `应用品牌套件「${kit.name}」`,
+      parentVersionId: version.id,
+      instruction: `向全部 ${pages.length} 个页面应用品牌套件「${kit.name}」`,
+      name: `应用品牌 · ${kit.name}`,
+      changeSummary: [`向全部 ${pages.length} 个页面应用品牌套件「${kit.name}」`],
     })
-    toast.success('品牌套件已应用', `已创建第 ${created.version} 版，原版本保持不变。`)
+    toast.success('品牌套件已应用到整站', `已创建第 ${created.version} 版，共更新 ${created.pageCount} 个页面；原版本保持不变。`)
     await router.push({
       name: 'project-detail',
       params: { id: contextProjectId.value },
-      query: { version: created.id },
+      query: { version: created.id, tab: 'pages' },
     })
   } catch (err) {
     toast.error('应用失败', messageOf(err))
@@ -211,9 +218,9 @@ onMounted(load)
         </button>
         <div class="min-w-0 flex-1">
           <p class="text-xs font-semibold text-brand1">正在为项目选择品牌套件</p>
-          <p class="mt-0.5 text-[11px] text-mut">应用后会创建新版本，不会覆盖当前页面。</p>
+          <p class="mt-0.5 text-[11px] text-mut">应用后会为整站所有页面创建新版本，不会覆盖当前版本。</p>
         </div>
-        <span class="rounded-full bg-brand1/10 px-3 py-1 text-[10px] font-medium text-brand1">安全版本化</span>
+        <span class="rounded-full bg-brand1/10 px-3 py-1 text-[10px] font-medium text-brand1">整站安全版本化</span>
       </div>
 
       <header class="relative overflow-hidden rounded-[28px] border border-line/10 bg-soft/65 px-5 py-7 sm:px-8 sm:py-9">
@@ -329,7 +336,7 @@ onMounted(load)
                   @click="applyToProject(kit)"
                 >
                   <Loader2 v-if="actionBusy === `apply:${kit.id}`" class="h-3.5 w-3.5 animate-spin" />
-                  <WandSparkles v-else class="h-3.5 w-3.5" />应用到项目
+                  <WandSparkles v-else class="h-3.5 w-3.5" />应用到整站
                 </button>
                 <button class="flex items-center justify-center gap-2 rounded-xl border border-line/12 bg-app/45 px-3 py-2.5 text-xs font-medium text-sub hover:border-brand1/25 hover:text-brand1" @click="edit(kit)">
                   <Pencil class="h-3.5 w-3.5" />编辑

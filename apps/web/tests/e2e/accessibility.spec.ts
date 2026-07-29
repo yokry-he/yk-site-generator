@@ -15,22 +15,22 @@ const PUBLIC_ROUTES = [
   '/templates',
   '/templates/aurora-saas',
   '/generator',
+  '/projects/new',
 ]
 
-test('public pages mount and have no serious accessibility violations', async ({ page }) => {
-  await mockPublicApi(page)
-  const pageErrors: string[] = []
-  page.on('pageerror', (error) => pageErrors.push(error.message))
+for (const path of PUBLIC_ROUTES) {
+  test(`public page ${path} mounts without serious accessibility violations`, async ({ page }) => {
+    await mockPublicApi(page)
+    const pageErrors: string[] = []
+    page.on('pageerror', (error) => pageErrors.push(error.message))
 
-  for (const path of PUBLIC_ROUTES) {
     await page.goto(path)
     await expect(page.locator('#main-content')).toBeVisible()
     await expect(page.locator('#main-content')).not.toBeEmpty()
     await expectNoSeriousViolations(page)
-  }
-
-  expect(pageErrors, pageErrors.join('\n')).toEqual([])
-})
+    expect(pageErrors, pageErrors.join('\n')).toEqual([])
+  })
+}
 
 test('skip link and shortcut dialog work from keyboard', async ({ page }) => {
   await mockPublicApi(page)

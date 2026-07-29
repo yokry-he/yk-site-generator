@@ -1,0 +1,53 @@
+name: RC Redis Multi-instance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  redis-lockout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      redis:
+        image: redis:8-alpine
+        ports: [6379:6379]
+        options: >-
+          --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rc-node-bootstrap
+        with:
+          preflight-profile: release
+          dependency-mode: all
+          artifact-name: rc-bootstrap-redis-matrix
+      - run: pnpm --filter server build
+      - name: Start two API instances sharing Redis
+        env:
+          NODE_ENV: development
+          AUTH_DISTRIBUTED_LIMIT_DRIVER: redis
+          REDIS_URL: redis://127.0.0.1:6379/0
+          AUTH_RATE_LIMIT_FAIL_MODE: closed
+          AUTH_MAX_VERIFY_FAILURES: 3
+          AUTH_JWT_SECRET: redis-matrix-jwt-secret-change-me-2026
+          AUTH_RATE_LIMIT_HASH_KEY: redis-matrix-hash-secret-change-me-2026
+        run: |
+          PORT=8787 DATA_STORAGE_FILE=.data/redis-a.json node apps/server/dist/index.js > redis-a.log 2>&1 &
+          PORT=8788 DATA_STORAGE_FILE=.data/redis-b.json node apps/server/dist/index.js > redis-b.log 2>&1 &
+          for port in 8787 8788; do for attempt in {1..30}; do curl -fsS "http://127.0.0.1:$port/api/health/live" && break || sleep 1; done; done
+          pnpm --filter web exec tsx ../../scripts/redis-multi-instance-smoke.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rc-redis-logs
+          path: redis-*.log
+          retention-days: 14
+      - name: Aggregate Redis diagnostics
+        if: always()
+        uses: ./.github/actions/rc-diagnostic-triage
+        with:
+          scope: redis-multi-instance
+          artifact-name: rc-triage-redis-multi-instance
+          external-status: ${{ job.status }}

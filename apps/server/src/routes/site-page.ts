@@ -1,10 +1,15 @@
 import { Hono, type Context } from 'hono'
+import {
+  normalizeSiteProject,
+  siteProjectHomePage,
+  siteProjectPageForPath,
+} from 'shared'
 import { readData } from '../lib/data-store'
 
 const sites = new Hono()
 
-function offlinePage(): string {
-  return '<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>站点暂不可用 · SiteForge</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#09090b;color:#fafafa;font-family:system-ui}.card{padding:32px;border:1px solid #ffffff1a;border-radius:20px;background:#ffffff0d;text-align:center}.card p{color:#a1a1aa}</style></head><body><main class="card"><h1>站点暂不可用</h1><p>该站点不存在、已下线或正在重新发布。</p></main></body></html>'
+function offlinePage(title = '站点暂不可用', message = '该站点不存在、已下线或正在重新发布。'): string {
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · SiteForge</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#09090b;color:#fafafa;font-family:system-ui}.card{padding:32px;border:1px solid #ffffff1a;border-radius:20px;background:#ffffff0d;text-align:center}.card p{color:#a1a1aa}</style></head><body><main class="card"><h1>${title}</h1><p>${message}</p></main></body></html>`
 }
 
 function applySiteSecurityHeaders(c: Context): void {
@@ -17,7 +22,7 @@ function applySiteSecurityHeaders(c: Context): void {
   )
 }
 
-async function renderPublishedSite(c: Context, slug: string) {
+async function renderPublishedSite(c: Context, slug: string, requestPath = '/') {
   const data = await readData()
   const record = data.publications.find(
     (item) => item.slug === slug && item.status === 'published',
@@ -27,16 +32,30 @@ async function renderPublishedSite(c: Context, slug: string) {
     c.header('Cache-Control', 'private, no-store')
     return c.html(offlinePage(), 404)
   }
+
+  const document = normalizeSiteProject(record, '首页')
+  // Legacy one-page publications historically behaved like an SPA and returned the
+  // entry document for every GET path. Preserve that behavior while multi-page sites
+  // use strict route matching so broken links are visible instead of masking errors.
+  const page = siteProjectPageForPath(document, requestPath)
+    ?? (document.pages.length === 1 ? siteProjectHomePage(document) : undefined)
+  if (!page) {
+    c.header('Cache-Control', 'private, no-store')
+    return c.html(offlinePage('页面不存在', '当前站点中没有这个页面，请返回首页继续浏览。'), 404)
+  }
+
   c.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
-  c.header('ETag', `W/"${record.id}-${Date.parse(record.updatedAt)}"`)
-  return c.html(record.html)
+  c.header('ETag', `W/"${record.id}-${page.id}-${Date.parse(record.updatedAt)}"`)
+  c.header('X-SiteForge-Page', page.path)
+  return c.html(page.html)
 }
 
-/** `/site/:slug` 兼容路径,用于本地开发与无泛域名环境。 */
-sites.get('/:slug', (c) => renderPublishedSite(c, c.req.param('slug')))
+/** `/site/:slug` 兼容路径，用于本地开发与无泛域名环境。 */
+sites.get('/:slug', (c) => renderPublishedSite(c, c.req.param('slug'), '/'))
+sites.get('/:slug/*', (c) => renderPublishedSite(c, c.req.param('slug'), `/${c.req.param('*') ?? ''}`))
 
 /**
- * 从 Host 提取一级站点子域名。只接受 `<slug>.<baseDomain>`:
+ * 从 Host 提取一级站点子域名。只接受 `<slug>.<baseDomain>`：
  * - 主域名不会命中
  * - 多级嵌套子域名不会命中
  * - 自动剥离端口并统一为小写
@@ -52,12 +71,12 @@ export function siteSlugFromHost(host: string | undefined, baseDomain = 'sitefor
   return /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(slug) ? slug : null
 }
 
-/** 平台通配 GET 的末级处理器:命中站点子域名时返回发布入口,否则交给 404。 */
+/** 平台通配 GET 的末级处理器：命中站点子域名时返回对应页面，否则交给 404。 */
 export async function serveSiteFromHost(c: Context) {
   const baseDomain = process.env.SITE_BASE_DOMAIN?.trim() || 'siteforge.local'
   const slug = siteSlugFromHost(c.req.header('host'), baseDomain)
   if (!slug) return null
-  return renderPublishedSite(c, slug)
+  return renderPublishedSite(c, slug, c.req.path || '/')
 }
 
 export default sites

@@ -2,58 +2,54 @@
 
 [中文](#中文) · [English](#english)
 
----
-
 ## 中文
 
-本目录集中记录 SiteForge 的开发、部署、质量、安全和产品约束。所有面向贡献者与部署人员的 Markdown 文档都应同时提供中文和英文内容。
+核心产品文档保留现有入口。v0.1.0 RC 稳定化文档：
 
-### 快速导航
+- [`RC_INTEGRITY_AUDIT.md`](./RC_INTEGRITY_AUDIT.md)：生成链路完整性
+- [`RC_GOLDEN_PROJECTS.md`](./RC_GOLDEN_PROJECTS.md)：五套 Golden Project
+- [`RC_RUNTIME_MATRIX.md`](./RC_RUNTIME_MATRIX.md)：真实数据库与运行矩阵
+- [`RC_ENGINEERING_WORKSPACE.md`](./RC_ENGINEERING_WORKSPACE.md)：统一工程工作区
+- [`RC_RUNNER_IMAGES.md`](./RC_RUNNER_IMAGES.md)：固定 Runner 镜像与隔离
+- [`RC_REDIS_MULTI_INSTANCE.md`](./RC_REDIS_MULTI_INSTANCE.md)：Redis 多实例登录保护
+- [`RC_SECURITY_AUDIT.md`](./RC_SECURITY_AUDIT.md)：安全审计与签名证据
+- [`RC_OBSERVABILITY.md`](./RC_OBSERVABILITY.md)：健康、依赖与指标
+- [`RC_RELEASE_PROCESS.md`](./RC_RELEASE_PROCESS.md)：首轮结果准入、签名门禁与 RC Bundle
+- [`RC_BUNDLE_VERIFICATION.md`](./RC_BUNDLE_VERIFICATION.md)：最终 RC Bundle 自检、下载后离线复验与信任边界
+- [`RC_GATE_RUNNER.md`](./RC_GATE_RUNNER.md)：全仓门禁执行与统一诊断
+- [`RC_ENVIRONMENT_PREFLIGHT.md`](./RC_ENVIRONMENT_PREFLIGHT.md)：安装前环境与仓库配置预检
+- [`RC_DEPENDENCY_BOOTSTRAP.md`](./RC_DEPENDENCY_BOOTSTRAP.md)：依赖获取、离线安装与失败分类
+- [`RC_WORKFLOW_BOOTSTRAP.md`](./RC_WORKFLOW_BOOTSTRAP.md)：共享 Node/pnpm Workflow Bootstrap 与漂移门禁
+- [`RC_DIAGNOSTIC_TRIAGE.md`](./RC_DIAGNOSTIC_TRIAGE.md)：跨 Gate 诊断聚合与修复优先级
+- [`RC_WORKSTATION.md`](./RC_WORKSTATION.md)：可复现容器工具链、数据库与本地 RC 门禁
+- [`RC_FIRST_REAL_RUN.md`](./RC_FIRST_REAL_RUN.md)：Commit 绑定的首轮真实 RC 执行
+- [`RC_FIRST_RUN_HARDENING.md`](./RC_FIRST_RUN_HARDENING.md)：首轮证据隔离、增量门禁与触发边界
+- [`RC_FIRST_RUN_EVIDENCE.md`](./RC_FIRST_RUN_EVIDENCE.md)：干净数据卷、SHA-256 封存与离线校验
 
-| 文档 | 内容 |
-| --- | --- |
-| [`DEVELOPMENT.md`](./DEVELOPMENT.md) | 本地环境、项目结构、环境变量、数据库、调试、测试和贡献流程 |
-| [`DEPLOYMENT.md`](./DEPLOYMENT.md) | 生产构建、前后端分离、Nginx、MySQL、对象存储、健康检查、监控、备份与回滚 |
-| [`MODEL_PROVIDERS.md`](./MODEL_PROVIDERS.md) | 演示模式与真实生成切换、模型厂商、实时模型目录和自定义模型 ID |
-| [`BUILTIN_PROJECTS.md`](./BUILTIN_PROJECTS.md) | 无需模型与登录即可使用的内置成品项目 |
-| [`GENERATION_QUALITY.md`](./GENERATION_QUALITY.md) | 极速、平衡、精致三档生成策略及性能指标 |
-| [`BETA_READINESS.md`](./BETA_READINESS.md) | Beta 阶段质量、性能、安全和 CI 门槛 |
-| [`SECURITY_ABUSE.md`](./SECURITY_ABUSE.md) | SSRF、资源上传、账号隔离及后续安全边界 |
-| [`../apps/web/tests/e2e/README.md`](../apps/web/tests/e2e/README.md) | Playwright、Axe 与视觉回归说明 |
-| [`../deploy/README.md`](../deploy/README.md) | PR Preview 与部署目录入口 |
-
-### 文档维护规则
-
-- 新增或修改开发者文档时，中文和英文必须在同一个 PR 中同步更新。
-- 命令、路径、环境变量和配置键保持原样，不翻译标识符。
-- 两种语言应表达相同的约束和验收标准，不能只给另一种语言提供摘要。
-- 发生行为变化时优先更新 `DEVELOPMENT.md` 或 `DEPLOYMENT.md`，再从 README 链接过去，避免多个位置出现互相冲突的步骤。
-- 文档中的示例密钥、域名和密码只能使用占位值，不能提交真实凭据。
-
----
+行为变化必须同时更新完整中文和英文内容；示例只使用占位 Secret。
 
 ## English
 
-This directory is the canonical home for SiteForge development, deployment, quality, security, and product-constraint documentation. Every Markdown document intended for contributors or operators must include both Chinese and English content.
+Existing product documentation remains available. v0.1.0 RC stabilization guides:
 
-### Quick navigation
+- [`RC_INTEGRITY_AUDIT.md`](./RC_INTEGRITY_AUDIT.md): generation-pipeline integrity
+- [`RC_GOLDEN_PROJECTS.md`](./RC_GOLDEN_PROJECTS.md): five Golden Projects
+- [`RC_RUNTIME_MATRIX.md`](./RC_RUNTIME_MATRIX.md): real database and runtime matrix
+- [`RC_ENGINEERING_WORKSPACE.md`](./RC_ENGINEERING_WORKSPACE.md): unified engineering workspace
+- [`RC_RUNNER_IMAGES.md`](./RC_RUNNER_IMAGES.md): fixed Runner images and isolation
+- [`RC_REDIS_MULTI_INSTANCE.md`](./RC_REDIS_MULTI_INSTANCE.md): Redis multi-instance login protection
+- [`RC_SECURITY_AUDIT.md`](./RC_SECURITY_AUDIT.md): security audit and signed evidence
+- [`RC_OBSERVABILITY.md`](./RC_OBSERVABILITY.md): health, dependencies, and metrics
+- [`RC_RELEASE_PROCESS.md`](./RC_RELEASE_PROCESS.md): first-run admission, signed gates, and RC bundles
+- [`RC_BUNDLE_VERIFICATION.md`](./RC_BUNDLE_VERIFICATION.md): final RC bundle self-checks, offline post-download verification, and trust boundary
+- [`RC_GATE_RUNNER.md`](./RC_GATE_RUNNER.md): repository-wide gate execution and unified diagnostics
+- [`RC_ENVIRONMENT_PREFLIGHT.md`](./RC_ENVIRONMENT_PREFLIGHT.md): pre-install environment and repository configuration checks
+- [`RC_DEPENDENCY_BOOTSTRAP.md`](./RC_DEPENDENCY_BOOTSTRAP.md): dependency fetching, offline installation, and failure classification
+- [`RC_WORKFLOW_BOOTSTRAP.md`](./RC_WORKFLOW_BOOTSTRAP.md): shared Node/pnpm Workflow Bootstrap and drift enforcement
+- [`RC_DIAGNOSTIC_TRIAGE.md`](./RC_DIAGNOSTIC_TRIAGE.md): cross-gate diagnostic aggregation and remediation priority
+- [`RC_WORKSTATION.md`](./RC_WORKSTATION.md): reproducible container toolchains, databases, and local RC gates
+- [`RC_FIRST_REAL_RUN.md`](./RC_FIRST_REAL_RUN.md): commit-bound first real RC execution
+- [`RC_FIRST_RUN_HARDENING.md`](./RC_FIRST_RUN_HARDENING.md): first-run evidence isolation, incremental gates, and trigger boundaries
+- [`RC_FIRST_RUN_EVIDENCE.md`](./RC_FIRST_RUN_EVIDENCE.md): clean volumes, SHA-256 sealing, and offline verification
 
-| Document | Scope |
-| --- | --- |
-| [`DEVELOPMENT.md`](./DEVELOPMENT.md) | Local setup, repository structure, environment variables, databases, debugging, testing, and contribution workflow |
-| [`DEPLOYMENT.md`](./DEPLOYMENT.md) | Production builds, split frontend/backend deployment, Nginx, MySQL, object storage, health checks, monitoring, backups, and rollback |
-| [`MODEL_PROVIDERS.md`](./MODEL_PROVIDERS.md) | Demo versus real generation, providers, live model catalogs, and custom model IDs |
-| [`BUILTIN_PROJECTS.md`](./BUILTIN_PROJECTS.md) | Ready-to-use projects that require neither a model nor authentication |
-| [`GENERATION_QUALITY.md`](./GENERATION_QUALITY.md) | Fast, balanced, and quality generation modes plus performance signals |
-| [`BETA_READINESS.md`](./BETA_READINESS.md) | Beta quality, performance, security, and CI gates |
-| [`SECURITY_ABUSE.md`](./SECURITY_ABUSE.md) | SSRF, uploaded assets, tenant isolation, and remaining security boundaries |
-| [`../apps/web/tests/e2e/README.md`](../apps/web/tests/e2e/README.md) | Playwright, Axe, and visual-regression guidance |
-| [`../deploy/README.md`](../deploy/README.md) | PR Preview and deployment-directory entry point |
-
-### Documentation maintenance rules
-
-- Update the Chinese and English sections in the same pull request whenever contributor-facing documentation changes.
-- Keep commands, paths, environment variables, and configuration keys unchanged; identifiers are not translated.
-- Both languages must describe the same constraints and acceptance criteria. One language must not be reduced to a summary.
-- When runtime behavior changes, update `DEVELOPMENT.md` or `DEPLOYMENT.md` first and link from the root README to avoid conflicting procedures.
-- Examples must use placeholder secrets, domains, and passwords. Never commit real credentials.
+Ship behavior changes with complete Chinese and English documentation; examples use placeholder secrets only.

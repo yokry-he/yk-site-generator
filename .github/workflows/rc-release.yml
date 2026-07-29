@@ -1,0 +1,369 @@
+name: RC Release Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_version:
+        description: Candidate version from release/rc-manifest.json
+        required: true
+        default: 0.1.0-rc.1
+      first_run_workflow_run_id:
+        description: Successful RC First Real Run workflow run ID for this exact commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: rc-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RC_CANDIDATE_VERSION: ${{ inputs.candidate_version }}
+  RC_EVIDENCE_SIGNING_KEY: ${{ secrets.RC_EVIDENCE_SIGNING_KEY }}
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rc-node-bootstrap
+        with:
+          preflight-profile: core
+          dependency-mode: all
+          artifact-name: rc-release-bootstrap-core-attempt-${{ github.run_attempt }}
+      - run: pnpm docs:check
+      - run: pnpm rc:evidence --gate docs --details "Bilingual documentation gate"
+      - run: pnpm rc:audit
+      - run: pnpm rc:evidence --gate integrity --details "Deterministic scaffold integrity"
+      - run: pnpm rc:security
+      - run: pnpm rc:evidence --gate security --details "RC attack-surface audit" --artifacts artifacts/security-audit.json
+      - run: pnpm runner:images:validate
+      - run: pnpm rc:evidence --gate runner-images --details "Runner Dockerfile and digest policy"
+      - run: pnpm typecheck
+      - run: pnpm rc:evidence --gate typecheck
+      - run: pnpm build
+      - run: pnpm rc:evidence --gate build
+      - run: pnpm test
+      - run: pnpm rc:evidence --gate unit
+      - run: pnpm --filter web check:bundle-budget
+      - run: pnpm rc:evidence --gate bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rc-evidence-attempt-${{ github.run_attempt }}-core
+          path: |
+            artifacts/rc-evidence
+            artifacts/security-audit.json
+          retention-days: 14
+      - name: Aggregate core diagnostics
+        if: always()
+        uses: ./.github/actions/rc-diagnostic-triage
+        with:
+          scope: release-core
+          artifact-name: rc-triage-release-core-attempt-${{ github.run_attempt }}
+          external-status: ${{ job.status }}
+
+  mysql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root-password
+          MYSQL_DATABASE: siteforge
+          MYSQL_USER: siteforge
+          MYSQL_PASSWORD: siteforge-password
+        ports: [3306:3306]
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot-password"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rc-node-bootstrap
+        with:
+          preflight-profile: core
+          dependency-mode: all
+          artifact-name: rc-release-bootstrap-mysql-attempt-${{ github.run_attempt }}
+      - name: MySQL migration, concurrency and rollback
+        working-directory: apps/server
+        env:
+          NODE_ENV: development
+          DATA_STORAGE_DRIVER: mysql
+          MYSQL_URL: mysql://siteforge:siteforge-password@127.0.0.1:3306/siteforge
+          MYSQL_SSL_MODE: disabled
+          AUTH_JWT_SECRET: mysql-rc-secret-change-before-production-2026
+        run: pnpm db:mysql:ci
+      - run: pnpm rc:evidence --gate mysql
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rc-evidence-attempt-${{ github.run_attempt }}-mysql
+          path: artifacts/rc-evidence
+          retention-days: 14
+      - name: Aggregate MySQL diagnostics
+        if: always()
+        uses: ./.github/actions/rc-diagnostic-triage
+        with:
+          scope: release-mysql
+          artifact-name: rc-triage-release-mysql-attempt-${{ github.run_attempt }}
+          external-status: ${{ job.status }}
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rc-node-bootstrap
+        with:
+          preflight-profile: full
+          dependency-mode: all
+          artifact-name: rc-release-bootstrap-browser-attempt-${{ github.run_attempt }}
+      - run: pnpm --filter web exec playwright install --with-deps chromium
+      - run: pnpm --filter web e2e:browser
+      - run: pnpm rc:evidence --gate browser --details "Playwright interaction suite"
+      - run: pnpm rc:evidence --gate accessibility --details "Axe checks are part of browser suite"
+      - run: pnpm --filter web e2e:visual
+      - run: pnpm rc:evidence --gate visual --details "Visual regression"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rc-evidence-attempt-${{ github.run_attempt }}-browser
+          path: |
+            artifacts/rc-evidence
+            apps/web/playwright-report
+            apps/web/test-results
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Aggregate browser diagnostics
+        if: always()
+        uses: ./.github/actions/rc-diagnostic-triage
+        with:
+          scope: release-browser
+          artifact-name: rc-triage-release-browser-attempt-${{ github.run_attempt }}
+          external-status: ${{ job.status }}
+
+  redis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      redis:
+        image: redis:8-alpine
+        ports: [6379:6379]
+        options: >-
+          --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rc-node-bootstrap
+        with:
+          preflight-profile: core
+          dependency-mode: all
+          artifact-name: rc-release-bootstrap-redis-attempt-${{ github.run_attempt }}
+      - run: pnpm --filter server build
+      - name: Two API instances sharing Redis
+        env:
+          NODE_ENV: development
+          AUTH_DISTRIBUTED_LIMIT_DRIVER: redis
+          REDIS_URL: redis://127.0.0.1:6379/0
+          AUTH_RATE_LIMIT_FAIL_MODE: closed
+          AUTH_MAX_VERIFY_FAILURES: 3
+          AUTH_JWT_SECRET: redis-rc-jwt-secret-change-me-2026
+          AUTH_RATE_LIMIT_HASH_KEY: redis-rc-hash-secret-change-me-2026
+        run: |
+          PORT=8787 DATA_STORAGE_FILE=.data/redis-a.json node apps/server/dist/index.js > redis-a.log 2>&1 &
+          PORT=8788 DATA_STORAGE_FILE=.data/redis-b.json node apps/server/dist/index.js > redis-b.log 2>&1 &
+          for port in 8787 8788; do for attempt in {1..30}; do curl -fsS "http://127.0.0.1:$port/api/health/live" && break || sleep 1; done; done
+          pnpm rc:redis
+      - run: pnpm rc:evidence --gate redis-multi-instance
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rc-evidence-attempt-${{ github.run_attempt }}-redis
+          path: |
+            artifacts/rc-evidence
+            redis-*.log
+          retention-days: 14
+      - name: Aggregate Redis diagnostics
+        if: always()
+        uses: ./.github/actions/rc-diagnostic-triage
+        with:
+          scope: release-redis
+          artifact-name: rc-triage-release-redis-attempt-${{ github.run_attempt }}
+          external-status: ${{ job.status }}
+
+  golden-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - hono-drizzle-sqlite
+          - nestjs-prisma-postgresql
+          - fastapi-sqlalchemy-postgresql
+          - spring-boot-jpa-postgresql
+          - gin-gorm-postgresql
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: siteforge
+          POSTGRES_PASSWORD: siteforge
+          POSTGRES_DB: postgres
+        ports: [5432:5432]
+        options: >-
+          --health-cmd="pg_isready -U siteforge -d postgres"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.14' }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21', cache: maven }
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.25.x', cache: false }
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client && python -m pip install uv
+      - uses: ./.github/actions/rc-node-bootstrap
+        with:
+          preflight-profile: release
+          dependency-mode: all
+          artifact-name: "rc-release-bootstrap-golden-${{ matrix.project }}-attempt-${{ github.run_attempt }}"
+      - run: pnpm rc:golden
+      - run: pnpm rc:matrix --project ${{ matrix.project }}
+      - run: pnpm rc:evidence --gate "golden-runtime:${{ matrix.project }}" --details "Real install/migrate/build/test/start/auth smoke"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rc-evidence-attempt-${{ github.run_attempt }}-golden-${{ matrix.project }}
+          path: |
+            artifacts/rc-evidence
+            artifacts/rc-matrix
+          retention-days: 14
+      - name: Aggregate Golden runtime diagnostics
+        if: always()
+        uses: ./.github/actions/rc-diagnostic-triage
+        with:
+          scope: release-golden-${{ matrix.project }}
+          artifact-name: rc-triage-release-golden-${{ matrix.project }}-attempt-${{ github.run_attempt }}
+          external-status: ${{ job.status }}
+
+  assemble:
+    needs: [core, mysql, browser, redis, golden-runtime]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rc-node-bootstrap
+        with:
+          preflight-profile: core
+          dependency-mode: all
+          artifact-name: rc-release-bootstrap-assemble-attempt-${{ github.run_attempt }}
+      - name: Verify first-run workflow and artifact source
+        id: first-run-source
+        uses: actions/github-script@v7
+        env:
+          SOURCE_RUN_ID: ${{ inputs.first_run_workflow_run_id }}
+        with:
+          script: |
+            const fs = require('node:fs')
+            const runId = Number.parseInt(process.env.SOURCE_RUN_ID || '', 10)
+            if (!Number.isSafeInteger(runId) || runId <= 0) throw new Error('FIRST_RUN_SOURCE_RUN_ID_INVALID')
+            const manifest = JSON.parse(fs.readFileSync('release/rc-manifest.json', 'utf8'))
+            const maximumAgeMs = Number(manifest.maximumEvidenceAgeHours) * 60 * 60 * 1000
+            if (!Number.isFinite(maximumAgeMs) || maximumAgeMs <= 0) throw new Error('FIRST_RUN_SOURCE_MAXIMUM_AGE_INVALID')
+            const now = Date.now()
+            const maximumClockSkewMs = 5 * 60 * 1000
+            const { owner, repo } = context.repo
+            const expectedRepository = `${owner}/${repo}`
+            const expectedWorkflowName = 'RC First Real Run'
+            const expectedWorkflowPath = '.github/workflows/rc-first-real-run.yml'
+            const { data: run } = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: runId })
+            const runPath = String(run.path || '').split('@')[0]
+            const runAttempt = Number(run.run_attempt)
+            const runCreatedAt = Date.parse(run.created_at || '')
+            if (runPath !== expectedWorkflowPath) throw new Error(`FIRST_RUN_SOURCE_WORKFLOW_MISMATCH:${run.path}`)
+            if (run.name !== expectedWorkflowName) throw new Error(`FIRST_RUN_SOURCE_WORKFLOW_NAME_MISMATCH:${run.name}`)
+            if (run.head_sha !== context.sha) throw new Error(`FIRST_RUN_SOURCE_COMMIT_MISMATCH:${run.head_sha}:${context.sha}`)
+            if (run.head_repository?.full_name !== expectedRepository) throw new Error(`FIRST_RUN_SOURCE_REPOSITORY_MISMATCH:${run.head_repository?.full_name}`)
+            if (run.head_branch !== 'Feature-dev-v0.1.0') throw new Error(`FIRST_RUN_SOURCE_BRANCH_MISMATCH:${run.head_branch}`)
+            if (run.status !== 'completed' || run.conclusion !== 'success') throw new Error(`FIRST_RUN_SOURCE_STATUS_INVALID:${run.status}:${run.conclusion}`)
+            if (!['workflow_dispatch', 'pull_request'].includes(run.event)) throw new Error(`FIRST_RUN_SOURCE_EVENT_INVALID:${run.event}`)
+            if (!Number.isSafeInteger(runAttempt) || runAttempt <= 0) throw new Error(`FIRST_RUN_SOURCE_ATTEMPT_INVALID:${run.run_attempt}`)
+            if (!Number.isFinite(runCreatedAt) || runCreatedAt > now + maximumClockSkewMs || now - runCreatedAt > maximumAgeMs) throw new Error(`FIRST_RUN_SOURCE_RUN_STALE:${run.created_at}`)
+            const expectedArtifactName = `rc-first-real-run-release-${context.sha}-attempt-${runAttempt}`
+            const { data } = await github.rest.actions.listWorkflowRunArtifacts({ owner, repo, run_id: runId, per_page: 100 })
+            const matches = data.artifacts.filter((artifact) => artifact.name === expectedArtifactName && !artifact.expired)
+            if (matches.length !== 1) throw new Error(`FIRST_RUN_SOURCE_ARTIFACT_INVALID:${matches.length}:${expectedArtifactName}`)
+            const artifact = matches[0]
+            const artifactId = Number(artifact.id)
+            const artifactSize = Number(artifact.size_in_bytes)
+            const artifactCreatedAt = Date.parse(artifact.created_at || '')
+            const artifactExpiresAt = Date.parse(artifact.expires_at || '')
+            if (!Number.isSafeInteger(artifactId) || artifactId <= 0) throw new Error(`FIRST_RUN_SOURCE_ARTIFACT_ID_INVALID:${artifact.id}`)
+            if (!/^sha256:[a-f0-9]{64}$/i.test(String(artifact.digest || ''))) throw new Error(`FIRST_RUN_SOURCE_ARTIFACT_DIGEST_INVALID:${artifact.digest}`)
+            if (!Number.isSafeInteger(artifactSize) || artifactSize <= 0) throw new Error(`FIRST_RUN_SOURCE_ARTIFACT_SIZE_INVALID:${artifact.size_in_bytes}`)
+            if (!Number.isFinite(artifactCreatedAt) || artifactCreatedAt > now + maximumClockSkewMs || now - artifactCreatedAt > maximumAgeMs) throw new Error(`FIRST_RUN_SOURCE_ARTIFACT_STALE:${artifact.created_at}`)
+            if (!Number.isFinite(artifactExpiresAt) || artifactExpiresAt <= now || artifactExpiresAt <= artifactCreatedAt) throw new Error(`FIRST_RUN_SOURCE_ARTIFACT_EXPIRED:${artifact.expires_at}`)
+            if (Number(artifact.workflow_run?.id) !== runId) throw new Error(`FIRST_RUN_SOURCE_ARTIFACT_RUN_MISMATCH:${artifact.workflow_run?.id}:${runId}`)
+            if (artifact.workflow_run?.head_sha !== context.sha) throw new Error(`FIRST_RUN_SOURCE_ARTIFACT_COMMIT_MISMATCH:${artifact.workflow_run?.head_sha}:${context.sha}`)
+            core.setOutput('run-id', String(runId))
+            core.setOutput('run-attempt', String(runAttempt))
+            core.setOutput('run-created-at', run.created_at)
+            core.setOutput('repository', expectedRepository)
+            core.setOutput('workflow-name', expectedWorkflowName)
+            core.setOutput('workflow-path', expectedWorkflowPath)
+            core.setOutput('artifact-name', expectedArtifactName)
+            core.setOutput('artifact-id', String(artifactId))
+            core.setOutput('artifact-digest', artifact.digest)
+            core.setOutput('artifact-size', String(artifactSize))
+            core.setOutput('artifact-created-at', artifact.created_at)
+            core.setOutput('artifact-expires-at', artifact.expires_at)
+      - name: Download verified first-run artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.first-run-source.outputs.artifact-name }}
+          path: .
+          repository: ${{ steps.first-run-source.outputs.repository }}
+          run-id: ${{ steps.first-run-source.outputs.run-id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: rc-evidence-attempt-${{ github.run_attempt }}-*
+          path: artifacts/rc-evidence
+          merge-multiple: true
+      - name: Assemble admitted RC bundle
+        run: >-
+          pnpm rc:prepare
+          --commit "${GITHUB_SHA}"
+          --version "${{ inputs.candidate_version }}"
+          --first-run latest
+          --first-run-workflow-run-id "${{ steps.first-run-source.outputs.run-id }}"
+          --first-run-workflow-run-attempt "${{ steps.first-run-source.outputs.run-attempt }}"
+          --first-run-workflow-created-at "${{ steps.first-run-source.outputs.run-created-at }}"
+          --first-run-workflow-name "${{ steps.first-run-source.outputs.workflow-name }}"
+          --first-run-artifact "${{ steps.first-run-source.outputs.artifact-name }}"
+          --first-run-artifact-id "${{ steps.first-run-source.outputs.artifact-id }}"
+          --first-run-artifact-digest "${{ steps.first-run-source.outputs.artifact-digest }}"
+          --first-run-artifact-size "${{ steps.first-run-source.outputs.artifact-size }}"
+          --first-run-artifact-created-at "${{ steps.first-run-source.outputs.artifact-created-at }}"
+          --first-run-artifact-expires-at "${{ steps.first-run-source.outputs.artifact-expires-at }}"
+          --first-run-repository "${{ steps.first-run-source.outputs.repository }}"
+          --first-run-workflow-path "${{ steps.first-run-source.outputs.workflow-path }}"
+          --release-source github-actions
+          --release-workflow-run-id "${GITHUB_RUN_ID}"
+          --release-workflow-run-attempt "${GITHUB_RUN_ATTEMPT}"
+          --release-repository "${GITHUB_REPOSITORY}"
+          --release-workflow-path ".github/workflows/rc-release.yml"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: siteforge-${{ inputs.candidate_version }}-bundle-attempt-${{ github.run_attempt }}
+          path: artifacts/rc-release
+          retention-days: 30
+      - name: Aggregate assemble diagnostics
+        if: always()
+        uses: ./.github/actions/rc-diagnostic-triage
+        with:
+          scope: release-assemble
+          artifact-name: rc-triage-release-assemble-attempt-${{ github.run_attempt }}
+          external-status: ${{ job.status }}

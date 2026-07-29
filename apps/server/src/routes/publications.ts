@@ -1,6 +1,10 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { Hono } from 'hono'
 import { z } from 'zod'
+import {
+  siteProjectByteLength,
+  siteProjectHomePage,
+} from 'shared'
 import { env } from '../env'
 import { authMiddleware, type AuthEnv } from '../lib/auth'
 import { mutateData, readData, type PublicationRecord } from '../lib/data-store'
@@ -12,6 +16,12 @@ import {
   writePublishedArtifact,
 } from '../lib/publication-store'
 import { recordPublishUsage } from '../lib/quota'
+import {
+  siteDocumentFromInput,
+  siteDocumentFromVersion,
+  siteDocumentInputShape,
+  validateHomePage,
+} from '../lib/site-project-policy'
 import { errorBody } from '../types'
 
 const createSchema = z.object({
@@ -19,19 +29,27 @@ const createSchema = z.object({
   slug: z.string().trim().max(48).optional(),
   projectId: z.string().uuid().optional(),
   versionId: z.string().uuid().optional(),
-  html: z.string().min(20).optional(),
-}).refine((value) => Boolean(value.html || value.versionId), {
-  message: '必须提供 html 或 versionId',
+  ...siteDocumentInputShape,
+}).superRefine((value, context) => {
+  if (!value.versionId && !value.html && !value.pages?.length) {
+    context.addIssue({ code: 'custom', message: '必须提供 html、pages 或 versionId' })
+  }
+  validateHomePage(value, context)
 })
+
 const updateSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
   status: z.enum(['published', 'offline']).optional(),
 })
+
 const republishSchema = z.object({
   versionId: z.string().uuid().optional(),
-  html: z.string().min(20).optional(),
-}).refine((value) => Boolean(value.html || value.versionId), {
-  message: '必须提供 html 或 versionId',
+  ...siteDocumentInputShape,
+}).superRefine((value, context) => {
+  if (!value.versionId && !value.html && !value.pages?.length) {
+    context.addIssue({ code: 'custom', message: '必须提供 html、pages 或 versionId' })
+  }
+  validateHomePage(value, context)
 })
 
 const publications = new Hono<AuthEnv>()
@@ -42,10 +60,12 @@ async function publishingEnabled(c: { get(key: 'auth'): import('../lib/auth').Ac
 }
 
 function publicRecord(record: PublicationRecord) {
-  const { html: _html, ...meta } = record
+  const { html: _html, pages: _pages, ...meta } = record
+  const document = siteDocumentFromInput(record)
   return {
     ...meta,
-    sizeBytes: Buffer.byteLength(record.html, 'utf8'),
+    pageCount: document.pages.length,
+    sizeBytes: siteProjectByteLength(document),
     url: publicationUrl(record.slug),
     host: `${record.slug}.${env.PUBLISH_BASE_DOMAIN}`,
   }
@@ -84,23 +104,24 @@ publications.post('/', async (c) => {
   }
   const userId = c.get('auth').sub
   const result = await mutateData<{ record?: PublicationRecord; error?: string }>((data) => {
-    let html = input.html
+    let document = input.html || input.pages?.length ? siteDocumentFromInput(input) : undefined
     let projectId = input.projectId
     let versionId = input.versionId
     if (versionId) {
       const version = data.projectVersions.find((item) => item.id === versionId && item.userId === userId)
       if (!version) return { error: 'VERSION_NOT_FOUND' }
-      html = version.html
+      document = siteDocumentFromVersion(version)
       projectId = version.projectId
     }
     if (projectId && !data.projects.some((item) => item.id === projectId && item.userId === userId)) {
       return { error: 'PROJECT_NOT_FOUND' }
     }
-    if (!html) return { error: 'HTML_REQUIRED' }
-    if (Buffer.byteLength(html, 'utf8') > env.MAX_PROJECT_BYTES) return { error: 'PUBLICATION_TOO_LARGE' }
+    if (!document) return { error: 'HTML_REQUIRED' }
+    if (siteProjectByteLength(document) > env.MAX_PROJECT_BYTES) return { error: 'PUBLICATION_TOO_LARGE' }
 
     const now = new Date().toISOString()
     const slug = uniqueSlug(input.slug || input.title, new Set(data.publications.map((item) => item.slug)))
+    const home = siteProjectHomePage(document)
     const record: PublicationRecord = {
       id: randomUUID(),
       userId,
@@ -108,7 +129,9 @@ publications.post('/', async (c) => {
       versionId,
       slug,
       title: input.title,
-      html,
+      html: home.html,
+      pages: document.pages,
+      homePageId: document.homePageId,
       status: 'published',
       createdAt: now,
       updatedAt: now,
@@ -122,14 +145,14 @@ publications.post('/', async (c) => {
     return c.json(
       errorBody(
         result.error ?? 'PUBLISH_FAILED',
-        result.error === 'PUBLICATION_TOO_LARGE' ? '发布产物超过大小上限' : '项目或版本不存在',
+        result.error === 'PUBLICATION_TOO_LARGE' ? '发布整站超过大小上限' : '项目或版本不存在',
       ),
       status,
     )
   }
 
   try {
-    await writePublishedArtifact(result.record.slug, result.record.html)
+    await writePublishedArtifact(result.record.slug, result.record.pages ?? result.record.html)
   } catch (err) {
     await mutateData((data) => {
       data.publications = data.publications.filter((item) => item.id !== result.record!.id)
@@ -157,9 +180,8 @@ publications.patch('/:id', async (c) => {
   )
   if (!current) return c.json(errorBody('PUBLICATION_NOT_FOUND', '发布记录不存在'), 404)
 
-  // 对外存储先成功,再提交元数据状态,避免“数据库显示在线但对象不存在”。
-  if (input.status === 'offline') await removePublishedArtifact(current.slug)
-  if (input.status === 'published') await writePublishedArtifact(current.slug, current.html)
+  if (input.status === 'offline') await removePublishedArtifact(current.slug, current.pages)
+  if (input.status === 'published') await writePublishedArtifact(current.slug, current.pages ?? current.html)
 
   const updated = await mutateData<PublicationRecord | null>((data) => {
     const row = data.publications.find((item) => item.id === current.id && item.userId === userId)
@@ -191,27 +213,29 @@ publications.post('/:id/republish', async (c) => {
   )
   if (!current) return c.json(errorBody('PUBLICATION_NOT_FOUND', '发布记录不存在'), 404)
 
-  let html = input.html
+  let document = input.html || input.pages?.length ? siteDocumentFromInput(input) : undefined
   const versionId = input.versionId
   if (versionId) {
     const version = data.projectVersions.find((item) => item.id === versionId && item.userId === userId)
     if (!version || (current.projectId && version.projectId !== current.projectId)) {
       return c.json(errorBody('VERSION_NOT_FOUND', '项目版本不存在或不属于当前项目'), 404)
     }
-    html = version.html
+    document = siteDocumentFromVersion(version)
   }
-  if (!html) return c.json(errorBody('HTML_REQUIRED', '缺少可发布产物'), 400)
-  if (Buffer.byteLength(html, 'utf8') > env.MAX_PROJECT_BYTES) {
-    return c.json(errorBody('PUBLICATION_TOO_LARGE', '发布产物超过大小上限'), 413)
+  if (!document) return c.json(errorBody('HTML_REQUIRED', '缺少可发布产物'), 400)
+  if (siteProjectByteLength(document) > env.MAX_PROJECT_BYTES) {
+    return c.json(errorBody('PUBLICATION_TOO_LARGE', '发布整站超过大小上限'), 413)
   }
 
-  // 先写对象存储;失败时数据库仍指向上一版,线上不会进入半提交状态。
-  await writePublishedArtifact(current.slug, html)
+  await writePublishedArtifact(current.slug, document.pages)
   const now = new Date().toISOString()
+  const home = siteProjectHomePage(document)
   const updated = await mutateData<PublicationRecord | null>((draft) => {
     const row = draft.publications.find((item) => item.id === current.id && item.userId === userId)
     if (!row) return null
-    row.html = html
+    row.html = home.html
+    row.pages = document.pages
+    row.homePageId = document.homePageId
     row.versionId = versionId ?? row.versionId
     row.status = 'published'
     row.updatedAt = now
@@ -219,8 +243,7 @@ publications.post('/:id/republish', async (c) => {
     return structuredClone(row)
   })
   if (!updated) {
-    // 极小概率下记录在对象写入后被并发删除;移除对象避免孤儿。
-    await removePublishedArtifact(current.slug)
+    await removePublishedArtifact(current.slug, document.pages)
     return c.json(errorBody('PUBLICATION_NOT_FOUND', '发布记录已被删除'), 404)
   }
   await recordPublishUsage({ userId })
@@ -234,8 +257,7 @@ publications.delete('/:id', async (c) => {
   )
   if (!current) return c.json(errorBody('PUBLICATION_NOT_FOUND', '发布记录不存在'), 404)
 
-  // 先清理对外对象,再删除可追踪的元数据。
-  await removePublishedArtifact(current.slug)
+  await removePublishedArtifact(current.slug, current.pages)
   const removed = await mutateData((data) => {
     const before = data.publications.length
     data.publications = data.publications.filter(

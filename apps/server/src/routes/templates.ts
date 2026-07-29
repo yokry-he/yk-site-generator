@@ -5,7 +5,10 @@ import {
   OFFICIAL_TEMPLATES,
   applyBrandKitToHtml,
   getOfficialTemplate,
+  legacyHtmlSiteProject,
   renderOfficialTemplate,
+  sitePageSummaries,
+  siteProjectByteLength,
 } from 'shared'
 import { env } from '../env'
 import { authenticateBearerHeader, authMiddleware, type AuthEnv } from '../lib/auth'
@@ -153,13 +156,13 @@ templates.post('/:id/use', authMiddleware, async (c) => {
   const userId = claims.sub
   const now = new Date().toISOString()
   const baseHtml = renderOfficialTemplate(definition, input.variables)
-  if (Buffer.byteLength(baseHtml, 'utf8') > env.MAX_PROJECT_BYTES) {
+  if (siteProjectByteLength(legacyHtmlSiteProject(baseHtml)) > env.MAX_PROJECT_BYTES) {
     return c.json(errorBody('PROJECT_TOO_LARGE', '模板产物超过项目大小上限'), 413)
   }
 
   const result = await mutateData<
     | { ok: true; project: ProjectRecord; version: ProjectVersionRecord }
-    | { ok: false; code: 'BRAND_KIT_NOT_FOUND' | 'TEMPLATE_NOT_AVAILABLE' }
+    | { ok: false; code: 'BRAND_KIT_NOT_FOUND' | 'TEMPLATE_NOT_AVAILABLE' | 'PROJECT_TOO_LARGE' }
   >((draft) => {
     const currentTemplate = operatedTemplate(draft, definition)
     if (currentTemplate.status !== 'published') return { ok: false, code: 'TEMPLATE_NOT_AVAILABLE' }
@@ -169,6 +172,8 @@ templates.post('/:id/use', authMiddleware, async (c) => {
     if (input.brandKitId && !brandKit) return { ok: false, code: 'BRAND_KIT_NOT_FOUND' }
 
     const html = brandKit ? applyBrandKitToHtml(baseHtml, brandKit) : baseHtml
+    const document = legacyHtmlSiteProject(html)
+    if (siteProjectByteLength(document) > env.MAX_PROJECT_BYTES) return { ok: false, code: 'PROJECT_TOO_LARGE' }
     const project: ProjectRecord = {
       id: randomUUID(),
       userId,
@@ -189,6 +194,8 @@ templates.post('/:id/use', authMiddleware, async (c) => {
       userId,
       version: 1,
       html,
+      pages: document.pages,
+      homePageId: document.homePageId,
       source: 'import',
       instruction: brandKit
         ? `使用官方模板「${definition.name}」并应用品牌套件「${brandKit.name}」`
@@ -207,8 +214,16 @@ templates.post('/:id/use', authMiddleware, async (c) => {
     if (result.code === 'TEMPLATE_NOT_AVAILABLE') {
       return c.json(errorBody('TEMPLATE_NOT_FOUND', '官方模板不存在'), 404)
     }
+    if (result.code === 'PROJECT_TOO_LARGE') {
+      return c.json(errorBody(result.code, '模板产物超过项目大小上限'), 413)
+    }
     return c.json(errorBody(result.code, '品牌套件不存在'), 404)
   }
+  const pages = sitePageSummaries({
+    schemaVersion: 1,
+    homePageId: result.version.homePageId ?? 'home',
+    pages: result.version.pages ?? legacyHtmlSiteProject(result.version.html).pages,
+  })
   return c.json(
     {
       project: {
@@ -226,7 +241,10 @@ templates.post('/:id/use', authMiddleware, async (c) => {
           starred: result.version.starred ?? false,
           changeSummary: result.version.changeSummary ?? [],
           createdAt: result.version.createdAt,
-          sizeBytes: Buffer.byteLength(result.version.html, 'utf8'),
+          homePageId: result.version.homePageId ?? 'home',
+          pages,
+          pageCount: pages.length,
+          sizeBytes: siteProjectByteLength({ schemaVersion: 1, homePageId: result.version.homePageId ?? 'home', pages: result.version.pages ?? legacyHtmlSiteProject(result.version.html).pages }),
         },
       },
     },

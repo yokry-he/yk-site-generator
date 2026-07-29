@@ -12,6 +12,27 @@ test('command palette supports keyboard navigation', async ({ page }) => {
   await expect(page).toHaveURL(/\/templates$/)
 })
 
+test('manual project wizard exposes supported backend and database combinations', async ({ page }) => {
+  await mockPublicApi(page)
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.goto('/projects/new')
+
+  await expect(page.getByRole('heading', { name: '手动创建全栈项目' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Hono \+ Drizzle/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /NestJS \+ Prisma/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /FastAPI \+ SQLAlchemy/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Spring Boot \+ JPA/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Gin \+ GORM/ })).toBeVisible()
+
+  await page.getByRole('button', { name: /Spring Boot \+ JPA/ }).click()
+  await expect(page.getByRole('button', { name: /^PostgreSQL/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^SQLite/ })).toHaveCount(0)
+  await expect(page.getByText(/Spring Data JPA · Flyway/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /生成并下载工程 ZIP/ })).toBeEnabled()
+  expect(pageErrors).toEqual([])
+})
+
 test('model settings distinguish demo mode from verified real generation', async ({ page, isMobile }) => {
   test.skip(isMobile, 'desktop navigation exposes the model settings trigger')
   await mockPublicApi(page)
@@ -85,7 +106,7 @@ test('project workspace opens editor and preserves draft operations', async ({ p
   await mockAuthenticatedApi(page)
   await page.goto(`/projects/${project.id}`)
   await expect(page.getByRole('heading', { name: project.title })).toBeVisible()
-  await page.getByRole('button', { name: '可视化编辑', exact: true }).click()
+  await page.getByRole('button', { name: '编辑首页', exact: true }).click()
   const editor = page.getByRole('dialog').filter({ has: page.getByRole('button', { name: '关闭编辑器' }) })
   await expect(editor).toBeVisible()
   await expect(editor.getByRole('heading', { name: new RegExp(project.title) })).toBeVisible()
@@ -96,6 +117,26 @@ test('project workspace opens editor and preserves draft operations', async ({ p
   await expect(editor.getByText(/有未保存修改|草稿已自动保存/)).toBeVisible()
   await editor.getByRole('button', { name: /保存为新版本/ }).click()
   await expect(editor.getByText(/已保存/)).toBeVisible()
+})
+
+test('multi-page workspace adds and versions a page without replacing existing pages', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'dense page-management controls are covered at desktop width')
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await mockAuthenticatedApi(page)
+  await page.goto(`/projects/${project.id}?tab=pages`)
+
+  await expect(page.getByRole('heading', { name: '页面管理' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^关于 2 \/about/ })).toBeVisible()
+  await page.getByRole('button', { name: '新增' }).click()
+  await page.getByLabel('页面名称').fill('联系我们')
+  await page.getByLabel('访问路径').fill('/contact')
+  await page.getByLabel('访问路径').blur()
+  await expect(page.getByLabel('访问路径')).toHaveValue('/contact')
+  await expect(page.getByRole('button', { name: /^联系我们 3 \/contact/ })).toBeVisible()
+  await page.getByRole('button', { name: /保存整站版本/ }).click()
+  await expect(page.getByText(/整站版本已保存/)).toBeVisible()
+  expect(pageErrors).toEqual([])
 })
 
 test('mobile project exposes version history as bottom drawer', async ({ page, isMobile }) => {

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "policy": {
+    "committedSource": "descriptors-and-generator",
+    "materializedOutput": "artifacts/golden-projects",
+    "deterministic": true
+  },
+  "projects": [
+    { "id": "hono-drizzle-sqlite", "stack": "hono-drizzle", "database": "sqlite" },
+    { "id": "nestjs-prisma-postgresql", "stack": "nestjs-prisma", "database": "postgresql" },
+    { "id": "fastapi-sqlalchemy-postgresql", "stack": "fastapi-sqlalchemy", "database": "postgresql" },
+    { "id": "spring-boot-jpa-postgresql", "stack": "spring-boot-jpa", "database": "postgresql" },
+    { "id": "gin-gorm-postgresql", "stack": "gin-gorm", "database": "postgresql" }
+  ]
+}

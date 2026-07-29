@@ -1,0 +1,5 @@
+import { afterEach,describe,expect,it } from 'vitest'
+import { createApp } from '../src/app'
+import { resetRuntimeMetricsForTests } from '../src/lib/runtime-metrics'
+afterEach(()=>{delete process.env.METRICS_ENABLED;delete process.env.METRICS_TOKEN;resetRuntimeMetricsForTests()})
+describe('runtime health and metrics',()=>{it('separates live and ready endpoints',async()=>{const app=createApp();expect((await app.request('/api/health/live')).status).toBe(200);expect([200,503]).toContain((await app.request('/api/health/ready')).status)});it('protects prometheus output',async()=>{process.env.METRICS_ENABLED='true';process.env.METRICS_TOKEN='metrics-secret-2026-change-me-123456';const app=createApp();await app.request('/api/health/live');expect((await app.request('/api/health/metrics')).status).toBe(404);const response=await app.request('/api/health/metrics',{headers:{authorization:`Bearer ${process.env.METRICS_TOKEN}`}});expect(response.status).toBe(200);expect(await response.text()).toContain('siteforge_http_requests_total')})})

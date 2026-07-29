@@ -1,0 +1,74 @@
+import { expect, test } from '@playwright/test'
+import { mockPublicApi } from './fixtures'
+
+test('manual data model designer configures relations and paginated CRUD resources', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'dense field editing is covered at desktop width; mobile layout remains in accessibility coverage')
+  await mockPublicApi(page)
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.goto('/projects/new')
+
+  await expect(page.getByRole('heading', { name: '4. 数据模型、关系与 CRUD' })).toBeVisible()
+  await expect(page.getByText(/数据模型有效：1 个实体/)).toBeVisible()
+  await page.getByRole('button', { name: '新增实体' }).click()
+  await expect(page.getByRole('tab', { name: /资源2/ })).toBeVisible()
+
+  await page.getByLabel('代码名称（PascalCase）').fill('Article')
+  await page.getByLabel('单数显示名').fill('文章')
+  await page.getByLabel('模块显示名').fill('内容管理')
+  await page.getByLabel('API 路由').fill('/articles')
+  await page.getByLabel('每页数量').fill('25')
+  await page.getByRole('button', { name: '添加字段' }).click()
+
+  const fieldNames = page.getByLabel('字段名（camelCase）')
+  const fieldLabels = page.getByLabel('显示名')
+  const fieldTypes = page.getByLabel('类型')
+  await fieldNames.last().fill('status')
+  await fieldLabels.nth(1).fill('状态')
+  await fieldTypes.last().selectOption('enum')
+  await page.getByLabel('枚举值（逗号分隔）').fill('draft, published')
+
+  await page.getByRole('button', { name: '添加关系' }).click()
+  await page.getByLabel('关系名（camelCase）').fill('task')
+  await page.getByLabel('目标实体').selectOption('Task')
+  await page.getByLabel('删除策略').selectOption('cascade')
+  await page.getByLabel('默认排序').selectOption('taskId')
+
+  await expect(page.getByText(/数据模型有效：2 个实体.+1 个外键关系/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /生成并下载工程 ZIP/ })).toBeEnabled()
+  await expect(page.getByText('CRUD 模块').locator('..').getByText('2')).toBeVisible()
+  await expect(page.getByText('外键关系').locator('..').getByText('1')).toBeVisible()
+  expect(pageErrors).toEqual([])
+})
+
+test('manual role designer configures a custom resource permission matrix', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'the permission matrix is covered at desktop width; mobile accessibility remains in the shared matrix')
+  await mockPublicApi(page)
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.goto('/projects/new')
+
+  await expect(page.getByRole('heading', { name: '5. 认证与角色权限' })).toBeVisible()
+  await expect(page.getByText(/权限配置有效：3 个角色/)).toBeVisible()
+  await page.getByRole('button', { name: '新增角色' }).click()
+  await page.getByLabel('角色标识').fill('auditor')
+  await page.getByLabel('角色名称').fill('审计员')
+  await page.getByRole('button', { name: '只读预设' }).click()
+
+  await expect(page.getByRole('tab', { name: /审计员/ })).toBeVisible()
+  await expect(page.getByText(/权限配置有效：4 个角色/)).toBeVisible()
+  await expect(page.getByLabel('审计员 任务 列表')).toBeChecked()
+  await expect(page.getByLabel('审计员 任务 详情')).toBeChecked()
+  await expect(page.getByLabel('审计员 任务 修改')).not.toBeChecked()
+  await expect(page.getByText('访问角色').locator('..').getByText('4')).toBeVisible()
+  await expect(page.getByRole('button', { name: /生成并下载工程 ZIP/ })).toBeEnabled()
+  expect(pageErrors).toEqual([])
+})
+
+test('manual data model validation prevents invalid downloads', async ({ page }) => {
+  await mockPublicApi(page)
+  await page.goto('/projects/new')
+  await page.getByLabel('API 路由').fill('/Invalid Route')
+  await expect(page.getByRole('alert')).toContainText(/路由不合法/)
+  await expect(page.getByRole('button', { name: /生成并下载工程 ZIP/ })).toBeDisabled()
+})

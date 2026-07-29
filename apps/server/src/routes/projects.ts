@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { env } from '../env'
 import { authMiddleware, type AuthEnv } from '../lib/auth'
 import {
   mutateData,
@@ -12,6 +11,16 @@ import {
 } from '../lib/data-store'
 import { authenticatedFeatureEnabled, featureName } from '../lib/feature-flags'
 import { removePublishedArtifact } from '../lib/publication-store'
+import {
+  applyDocumentToVersion,
+  siteDocumentChangeSummary,
+  siteDocumentFromInput,
+  siteDocumentFromVersion,
+  siteDocumentInputShape,
+  siteDocumentWithinLimit,
+  validateHomePage,
+  versionDocumentSummary,
+} from '../lib/site-project-policy'
 import { errorBody } from '../types'
 
 const optionalImage = z.string().max(700_000).refine(
@@ -23,12 +32,13 @@ const createSchema = z.object({
   title: z.string().trim().min(1).max(120),
   siteType: z.string().trim().min(1).max(40),
   requirement: z.string().trim().max(10_000).default(''),
-  html: z.string().optional(),
+  ...siteDocumentInputShape,
   source: z.enum(['generate', 'iterate', 'editor', 'import']).default('import'),
   instruction: z.string().max(10_000).optional(),
   model: z.string().max(120).optional(),
   brandKitId: z.string().uuid().optional(),
-})
+}).superRefine(validateHomePage)
+
 const updateSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
   siteType: z.string().trim().min(1).max(40).optional(),
@@ -39,11 +49,13 @@ const updateSchema = z.object({
   coverDataUrl: optionalImage.nullable().optional(),
   openedAt: z.string().datetime().optional(),
 }).refine((input) => Object.keys(input).length > 0, '至少提交一个修改字段')
+
 const listQuerySchema = z.object({
   status: z.enum(['active', 'archived', 'trashed', 'all']).default('active'),
 })
+
 const versionSchema = z.object({
-  html: z.string().min(20),
+  ...siteDocumentInputShape,
   source: z.enum(['generate', 'iterate', 'editor', 'import']),
   instruction: z.string().max(10_000).optional(),
   model: z.string().max(120).optional(),
@@ -51,7 +63,13 @@ const versionSchema = z.object({
   note: z.string().trim().max(500).optional(),
   parentVersionId: z.string().uuid().optional(),
   changeSummary: z.array(z.string().trim().min(1).max(160)).max(12).optional(),
+}).superRefine((input, context) => {
+  if (!input.html && !input.pages?.length) {
+    context.addIssue({ code: 'custom', message: '必须提供 html 或 pages' })
+  }
+  validateHomePage(input, context)
 })
+
 const versionMetaSchema = z.object({
   name: z.string().trim().max(80).nullable().optional(),
   note: z.string().trim().max(500).nullable().optional(),
@@ -76,37 +94,13 @@ function publicProject(project: ProjectRecord, latest?: ProjectVersionRecord) {
 }
 
 function versionSummary(version: ProjectVersionRecord) {
-  const { html: _html, ...rest } = version
+  const { html: _html, pages: _pages, homePageId: _homePageId, ...rest } = version
   return {
     ...rest,
+    ...versionDocumentSummary(version),
     starred: version.starred ?? false,
     changeSummary: version.changeSummary ?? [],
-    sizeBytes: Buffer.byteLength(version.html, 'utf8'),
   }
-}
-
-function ensureHtmlSize(html?: string): boolean {
-  return html === undefined || Buffer.byteLength(html, 'utf8') <= env.MAX_PROJECT_BYTES
-}
-
-function changeSummary(previous: string | undefined, next: string): string[] {
-  if (!previous) return ['创建初始页面版本']
-  const parser = (value: string) => ({
-    text: value.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>|<[^>]+>/gi, ' ').replace(/\s+/g, ' ').trim(),
-    sections: (value.match(/<(?:section|header|footer|main|article)\b/gi) ?? []).length,
-    images: (value.match(/<img\b/gi) ?? []).length,
-    links: (value.match(/<a\b/gi) ?? []).length,
-  })
-  const before = parser(previous)
-  const after = parser(next)
-  const output: string[] = []
-  const textDelta = after.text.length - before.text.length
-  if (Math.abs(textDelta) > 20) output.push(textDelta > 0 ? `新增约 ${textDelta} 个文字字符` : `精简约 ${Math.abs(textDelta)} 个文字字符`)
-  if (after.sections !== before.sections) output.push(`页面区块 ${before.sections} → ${after.sections}`)
-  if (after.images !== before.images) output.push(`图片数量 ${before.images} → ${after.images}`)
-  if (after.links !== before.links) output.push(`链接数量 ${before.links} → ${after.links}`)
-  if (!output.length) output.push('调整页面内容或样式')
-  return output.slice(0, 6)
 }
 
 projects.get('/', async (c) => {
@@ -144,7 +138,10 @@ projects.post('/', async (c) => {
   if (input.source === 'editor' && !(await authenticatedFeatureEnabled('visual-editor', c.get('auth')))) {
     return c.json(errorBody('FEATURE_DISABLED', `${featureName('visual-editor')}当前未开放`), 503)
   }
-  if (!ensureHtmlSize(input.html)) return c.json(errorBody('PROJECT_TOO_LARGE', '单个项目版本超过大小上限'), 413)
+  const initialDocument = input.html || input.pages?.length ? siteDocumentFromInput(input) : undefined
+  if (initialDocument && !siteDocumentWithinLimit(initialDocument)) {
+    return c.json(errorBody('PROJECT_TOO_LARGE', '整站项目版本超过大小上限'), 413)
+  }
 
   const userId = c.get('auth').sub
   const now = new Date().toISOString()
@@ -167,21 +164,21 @@ projects.post('/', async (c) => {
     }
     data.projects.push(project)
     let version: ProjectVersionRecord | undefined
-    if (input.html) {
-      version = {
+    if (initialDocument) {
+      version = applyDocumentToVersion({
         id: randomUUID(),
         projectId: project.id,
         userId,
         version: 1,
-        html: input.html,
+        html: '',
         source: input.source,
         instruction: input.instruction,
         model: input.model,
         name: '初始版本',
         starred: true,
-        changeSummary: ['创建初始页面版本'],
+        changeSummary: siteDocumentChangeSummary(undefined, initialDocument),
         createdAt: now,
-      }
+      }, initialDocument)
       data.projectVersions.push(version)
     }
     return { project, version }
@@ -290,7 +287,7 @@ projects.delete('/:id', async (c) => {
   const publications = (await readData()).publications.filter(
     (item) => item.projectId === projectId && item.userId === userId,
   )
-  for (const publication of publications) await removePublishedArtifact(publication.slug)
+  for (const publication of publications) await removePublishedArtifact(publication.slug, publication.pages)
 
   const deleted = await mutateData((data) => {
     const before = data.projects.length
@@ -320,24 +317,39 @@ projects.post('/:id/versions', async (c) => {
   if (input.source === 'editor' && !(await authenticatedFeatureEnabled('visual-editor', c.get('auth')))) {
     return c.json(errorBody('FEATURE_DISABLED', `${featureName('visual-editor')}当前未开放`), 503)
   }
-  if (!ensureHtmlSize(input.html)) return c.json(errorBody('PROJECT_TOO_LARGE', '单个项目版本超过大小上限'), 413)
   const userId = c.get('auth').sub
   const now = new Date().toISOString()
-  const version = await mutateData<ProjectVersionRecord | null>((data) => {
+  const result = await mutateData<{ version?: ProjectVersionRecord; error?: 'PROJECT_NOT_FOUND' | 'PROJECT_TOO_LARGE' }>((data) => {
     const project = data.projects.find((item) => item.id === c.req.param('id') && item.userId === userId)
-    if (!project) return null
+    if (!project) return { error: 'PROJECT_NOT_FOUND' }
     const existingVersions = data.projectVersions.filter((item) => item.projectId === project.id && item.userId === userId)
-    const latest = existingVersions.sort((a, b) => b.version - a.version)[0]
+    const latest = [...existingVersions].sort((a, b) => b.version - a.version)[0]
     const parent = input.parentVersionId
       ? existingVersions.find((item) => item.id === input.parentVersionId)
       : latest
+
+    // Older clients submit only `html`. On a multi-page project this means “replace
+    // the home page”, not “discard every other page”. This server-side fallback keeps
+    // the whole-site invariant even if a caller has not yet adopted the pages payload.
+    let document = siteDocumentFromInput(input)
+    if (!input.pages?.length && input.html && parent) {
+      const parentDocument = siteDocumentFromVersion(parent)
+      document = {
+        ...parentDocument,
+        pages: parentDocument.pages.map((page) => (
+          page.id === parentDocument.homePageId ? { ...page, html: input.html! } : { ...page }
+        )),
+      }
+    }
+    if (!siteDocumentWithinLimit(document)) return { error: 'PROJECT_TOO_LARGE' }
+
     const next = Math.max(0, ...existingVersions.map((item) => item.version)) + 1
-    const row: ProjectVersionRecord = {
+    const row = applyDocumentToVersion<ProjectVersionRecord>({
       id: randomUUID(),
       projectId: project.id,
       userId,
       version: next,
-      html: input.html,
+      html: '',
       source: input.source as ProjectVersionSource,
       instruction: input.instruction,
       model: input.model,
@@ -345,16 +357,19 @@ projects.post('/:id/versions', async (c) => {
       note: input.note,
       parentVersionId: parent?.id,
       starred: false,
-      changeSummary: input.changeSummary ?? changeSummary(parent?.html, input.html),
+      changeSummary: input.changeSummary ?? siteDocumentChangeSummary(parent, document),
       createdAt: now,
-    }
+    }, document)
     data.projectVersions.push(row)
     project.updatedAt = now
     project.openedAt = now
-    return structuredClone(row)
+    return { version: structuredClone(row) }
   })
-  if (!version) return c.json(errorBody('PROJECT_NOT_FOUND', '项目不存在'), 404)
-  return c.json({ version: versionSummary(version) }, 201)
+  if (!result.version) {
+    if (result.error === 'PROJECT_TOO_LARGE') return c.json(errorBody(result.error, '整站项目版本超过大小上限'), 413)
+    return c.json(errorBody('PROJECT_NOT_FOUND', '项目不存在'), 404)
+  }
+  return c.json({ version: versionSummary(result.version) }, 201)
 })
 
 projects.patch('/:id/versions/:versionId', async (c) => {
@@ -389,7 +404,17 @@ projects.get('/:id/versions/:versionId', async (c) => {
     (item) => item.id === c.req.param('versionId') && item.projectId === project.id && item.userId === userId,
   )
   if (!version) return c.json(errorBody('VERSION_NOT_FOUND', '项目版本不存在'), 404)
-  return c.json({ version: { ...version, starred: version.starred ?? false, changeSummary: version.changeSummary ?? [] } })
+  const document = siteDocumentFromVersion(version)
+  return c.json({
+    version: {
+      ...version,
+      ...versionDocumentSummary(version),
+      pages: document.pages,
+      homePageId: document.homePageId,
+      starred: version.starred ?? false,
+      changeSummary: version.changeSummary ?? [],
+    },
+  })
 })
 
 projects.post('/:id/rollback', async (c) => {
@@ -411,7 +436,7 @@ projects.post('/:id/rollback', async (c) => {
     if (!target) return null
     const next = Math.max(0, ...data.projectVersions.filter((item) => item.projectId === project.id).map((item) => item.version)) + 1
     const row: ProjectVersionRecord = {
-      ...target,
+      ...structuredClone(target),
       id: randomUUID(),
       version: next,
       source: 'editor',

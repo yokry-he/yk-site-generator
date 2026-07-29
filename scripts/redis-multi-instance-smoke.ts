@@ -1,0 +1,3 @@
+const bases=(process.env.RC_REDIS_INSTANCES||'http://127.0.0.1:8787,http://127.0.0.1:8788').split(',');const email=`redis-${Date.now()}@example.com`;const body=JSON.stringify({email,code:'000000'});const statuses:number[]=[]
+for(let index=0;index<4;index++){const response=await fetch(`${bases[index%bases.length]}/api/auth/verify`,{method:'POST',headers:{'content-type':'application/json'},body});statuses.push(response.status)}
+if(statuses.at(-1)!==429)throw new Error(`Expected shared 429 lockout, got ${statuses.join(',')}`);console.log(`Redis multi-instance lockout passed: ${statuses.join(' → ')}`)

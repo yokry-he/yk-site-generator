@@ -2,6 +2,10 @@
 node_modules/
 dist/
 *.tsbuildinfo
+artifacts/
+.data/
+apps/web/playwright-report/
+apps/web/test-results/
 
 # 环境变量
 .env

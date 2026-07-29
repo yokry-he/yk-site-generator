@@ -1,0 +1,40 @@
+import {
+  type ArtifactFile,
+  type BackendDatabaseId,
+  type BackendStackId,
+  type ManualAccessDefinition,
+  type ManualEntityDefinition,
+} from 'shared'
+import { applyManualAuthorization } from './manualAuthScaffold'
+import { ginCrudFiles } from './manualCrudGoBackend'
+import { applyManualErrorHandling } from './manualErrorScaffold'
+import { manualCrudFrontendFiles } from './manualCrudFrontend'
+import { springCrudFiles } from './manualCrudJavaBackend'
+import { honoCrudFiles, nestCrudFiles } from './manualCrudNodeBackends'
+import { openApiFile } from './manualCrudOpenApi'
+import { fastApiCrudFiles } from './manualCrudPythonBackend'
+
+export function manualCrudFiles(
+  projectName: string,
+  stack: BackendStackId,
+  database: BackendDatabaseId,
+  entities: readonly ManualEntityDefinition[],
+  access?: ManualAccessDefinition,
+): ArtifactFile[] {
+  const backend = stack === 'hono-drizzle'
+    ? honoCrudFiles(database, entities)
+    : stack === 'nestjs-prisma'
+      ? nestCrudFiles(database, entities)
+      : stack === 'fastapi-sqlalchemy'
+        ? fastApiCrudFiles(entities)
+        : stack === 'spring-boot-jpa'
+          ? springCrudFiles(entities)
+          : ginCrudFiles(database, entities)
+
+  const authorized = applyManualAuthorization([
+    ...manualCrudFrontendFiles(projectName, entities),
+    ...backend,
+    openApiFile(projectName, entities),
+  ], stack, database, entities, access)
+  return applyManualErrorHandling(authorized, stack)
+}
